@@ -550,7 +550,7 @@ export async function saveAudioFileToLocalDirectory(input: {
         fileHash: input.fileHash,
         artworkUrl,
         retention: "library",
-        provider: artworkProvider === "netease" || artworkProvider === "qqmusic"
+        provider: artworkProvider === "netease" || artworkProvider === "qqmusic" || artworkProvider === "bilibili" || artworkProvider === "alist"
           ? artworkProvider
           : "local_upload"
       }) ?? existingTrack?.artworkPath ?? null

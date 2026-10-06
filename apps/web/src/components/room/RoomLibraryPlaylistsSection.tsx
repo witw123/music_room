@@ -22,6 +22,8 @@ import {
   TrashIcon
 } from "@/components/icons/DiscoverIcons";
 import { importTaskStore, useVisibleImportTasks, isCandidateImporting } from "@/features/upload/import-task-store";
+import { listLocalPlaylistTracks, type LocalPlaylistTrackRecord } from "@/features/library/indexeddb";
+import { toCachedProviderTrack } from "@/features/playlist/local-playlist-mappers";
 
 type ProviderTrack = ProviderTrackCandidate;
 
@@ -77,24 +79,39 @@ function getRoomPlaylistSource(playlist: Playlist): RoomPlaylistSource | null {
     if (provider === "bilibili") return { type: "bilibili", bvid: id };
     if (provider === "netease" || provider === "qqmusic") return { type: "playlist", provider, playlistId: id };
   }
+
+  const directTag = playlist.tags?.find((tag) =>
+    tag.startsWith("netease:") || tag.startsWith("qqmusic:") || tag.startsWith("bilibili:")
+  );
+  if (directTag) {
+    const [provider, ...idParts] = directTag.split(":");
+    const id = idParts.join(":");
+    if (provider === "bilibili") return { type: "bilibili", bvid: id };
+    if (provider === "netease" || provider === "qqmusic") return { type: "playlist", provider, playlistId: id };
+  }
+
   return null;
 }
 
 async function fetchSourceTracks(source: RoomPlaylistSource): Promise<ProviderTrack[]> {
-  if (source.type === "bilibili") {
-    const detail = await musicRoomApi.getBilibiliVideoParts(source.bvid);
-    return detail.parts;
-  }
-  if (source.type === "album") {
+  try {
+    if (source.type === "bilibili") {
+      const detail = await musicRoomApi.getBilibiliVideoParts(source.bvid);
+      return detail.parts;
+    }
+    if (source.type === "album") {
+      const detail = source.provider === "netease"
+        ? await musicRoomApi.getNeteaseAlbum(source.albumId)
+        : await musicRoomApi.getQqMusicAlbum(source.albumId);
+      return detail.tracks;
+    }
     const detail = source.provider === "netease"
-      ? await musicRoomApi.getNeteaseAlbum(source.albumId)
-      : await musicRoomApi.getQqMusicAlbum(source.albumId);
+      ? await musicRoomApi.getNeteasePlaylist(source.playlistId)
+      : await musicRoomApi.getQqMusicPlaylist(source.playlistId);
     return detail.tracks;
+  } catch {
+    return [];
   }
-  const detail = source.provider === "netease"
-    ? await musicRoomApi.getNeteasePlaylist(source.playlistId)
-    : await musicRoomApi.getQqMusicPlaylist(source.playlistId);
-  return detail.tracks;
 }
 
 export function RoomLibraryPlaylistsSection({
@@ -132,6 +149,15 @@ export function RoomLibraryPlaylistsSection({
         if (t.sourceRef) {
           keys.push(`${t.sourceRef.provider}:${t.sourceRef.trackId}`);
           keys.push(`provider:${t.sourceRef.provider}:${t.sourceRef.trackId}`);
+          keys.push(t.sourceRef.trackId);
+          if (t.sourceRef.provider === "bilibili") {
+            const bvid = t.sourceRef.trackId.split(":")[0];
+            if (bvid) {
+              keys.push(bvid);
+              keys.push(`bilibili:${bvid}`);
+              keys.push(`provider:bilibili:${bvid}`);
+            }
+          }
         }
         if (t.fileHash) keys.push(t.fileHash);
         return keys;
@@ -143,7 +169,16 @@ export function RoomLibraryPlaylistsSection({
     const map = new Map<string, { total: number; imported: number; isAllImported: boolean }>();
     for (const playlist of roomPlaylists) {
       const total = playlist.trackIds.length;
-      const imported = playlist.trackIds.filter((id) => roomTrackKeySet.has(id)).length;
+      const imported = playlist.trackIds.filter((id) => {
+        if (roomTrackKeySet.has(id)) return true;
+        const normalized = id.startsWith("provider:") ? id.slice("provider:".length) : id;
+        if (roomTrackKeySet.has(normalized)) return true;
+        if (normalized.startsWith("bilibili:")) {
+          const bvid = normalized.split(":")[1];
+          if (bvid && (roomTrackKeySet.has(bvid) || roomTrackKeySet.has(`bilibili:${bvid}`))) return true;
+        }
+        return false;
+      }).length;
       map.set(playlist.id, { total, imported, isAllImported: total > 0 && imported >= total });
     }
     return map;
@@ -161,15 +196,71 @@ export function RoomLibraryPlaylistsSection({
           remoteTracks = await fetchSourceTracks(source);
         }
 
+        if (remoteTracks.length === 0) {
+          const localTracks = await listLocalPlaylistTracks().catch(() => []);
+          const localMap = new Map<string, LocalPlaylistTrackRecord>();
+          for (const r of localTracks) {
+            localMap.set(r.id, r);
+            if (r.providerTrackId) {
+              localMap.set(`${r.provider}:${r.providerTrackId}`, r);
+              localMap.set(`provider:${r.provider}:${r.providerTrackId}`, r);
+              localMap.set(r.providerTrackId, r);
+            }
+          }
+          for (const rawId of playlist.trackIds) {
+            const foundRecord = localMap.get(rawId) || localMap.get(rawId.replace(/^provider:/, ""));
+            if (foundRecord) {
+              const candidate = toCachedProviderTrack(foundRecord);
+              if (candidate) remoteTracks.push(candidate);
+              continue;
+            }
+            const cleanId = rawId.startsWith("provider:") ? rawId.slice("provider:".length) : rawId;
+            const parts = cleanId.split(":");
+            if (parts.length >= 2 && (parts[0] === "netease" || parts[0] === "qqmusic" || parts[0] === "bilibili")) {
+              const provider = parts[0] as "netease" | "qqmusic" | "bilibili";
+              const trackId = parts.slice(1).join(":");
+              remoteTracks.push({
+                provider,
+                providerTrackId: trackId,
+                access: "unknown",
+                quality: null,
+                bvid: provider === "bilibili" ? trackId.split(":")[0] : undefined,
+                title: provider === "bilibili" ? `B站音频 ${trackId}` : `网络歌曲 ${trackId}`,
+                artist: provider === "bilibili" ? "哔哩哔哩" : "网络音乐",
+                album: null,
+                durationMs: 0,
+                artworkUrl: null
+              });
+            } else if (/^BV[a-zA-Z0-9]+/.test(cleanId)) {
+              remoteTracks.push({
+                provider: "bilibili",
+                providerTrackId: cleanId,
+                access: "unknown",
+                quality: null,
+                bvid: cleanId.split(":")[0],
+                title: `B站音频 ${cleanId}`,
+                artist: "哔哩哔哩",
+                album: null,
+                durationMs: 0,
+                artworkUrl: null
+              });
+            }
+          }
+        }
+
         const missingNetease: NeteaseTrackCandidate[] = [];
         const missingQqMusic: QqMusicTrackCandidate[] = [];
         const missingBilibili: BilibiliTrackCandidate[] = [];
 
         for (const track of remoteTracks) {
+          const bvid = track.provider === "bilibili" ? (track.bvid || track.providerTrackId.split(":")[0]) : null;
           const inRoom = tracks.some(
             (t) =>
-              t.sourceRef?.provider === track.provider &&
-              t.sourceRef?.trackId === track.providerTrackId
+              (t.sourceRef?.provider === track.provider && t.sourceRef?.trackId === track.providerTrackId) ||
+              (track.provider === "bilibili" && t.sourceRef?.provider === "bilibili" && (
+                t.sourceRef?.trackId === bvid ||
+                t.sourceRef?.trackId?.split(":")[0] === bvid
+              ))
           );
           if (!inRoom) {
             if (track.provider === "netease") missingNetease.push(track as NeteaseTrackCandidate);
@@ -410,6 +501,7 @@ function RoomLibraryPlaylistDetail({
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
   const [pendingTrackIds, setPendingTrackIds] = useState<Set<string>>(() => new Set());
   const [isImportingSelected, setIsImportingSelected] = useState(false);
+  const [detailStatus, setDetailStatus] = useState<string | null>(null);
   const pendingTrackIdsRef = useRef<Set<string>>(new Set());
 
   const isQueueBusyComputed =
@@ -421,33 +513,99 @@ function RoomLibraryPlaylistDetail({
 
   useEffect(() => {
     let cancelled = false;
-    if (!source) {
-      setRemoteLoading(false);
-      return;
-    }
-    setRemoteLoading(true);
-    void fetchSourceTracks(source)
-      .then((tracks) => {
-        if (!cancelled) setRemoteTracks(tracks);
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        if (!cancelled) setRemoteLoading(false);
-      });
+    async function loadTracks() {
+      setRemoteLoading(true);
+      let tracks: ProviderTrack[] = [];
+      if (source) {
+        try {
+          tracks = await fetchSourceTracks(source);
+        } catch {
+          tracks = [];
+        }
+      }
 
+      if (tracks.length === 0) {
+        const localTracks = await listLocalPlaylistTracks().catch(() => []);
+        const localMap = new Map<string, LocalPlaylistTrackRecord>();
+        for (const r of localTracks) {
+          localMap.set(r.id, r);
+          if (r.providerTrackId) {
+            localMap.set(`${r.provider}:${r.providerTrackId}`, r);
+            localMap.set(`provider:${r.provider}:${r.providerTrackId}`, r);
+            localMap.set(r.providerTrackId, r);
+          }
+        }
+        for (const rawId of playlist.trackIds) {
+          const found = localMap.get(rawId) || localMap.get(rawId.replace(/^provider:/, ""));
+          if (found) {
+            const candidate = toCachedProviderTrack(found);
+            if (candidate) {
+              tracks.push(candidate);
+              continue;
+            }
+          }
+          const cleanId = rawId.startsWith("provider:") ? rawId.slice("provider:".length) : rawId;
+          const parts = cleanId.split(":");
+          if (parts.length >= 2 && (parts[0] === "netease" || parts[0] === "qqmusic" || parts[0] === "bilibili")) {
+            const provider = parts[0] as "netease" | "qqmusic" | "bilibili";
+            const trackId = parts.slice(1).join(":");
+            tracks.push({
+              provider,
+              providerTrackId: trackId,
+              access: "unknown",
+              quality: null,
+              bvid: provider === "bilibili" ? trackId.split(":")[0] : undefined,
+              title: provider === "bilibili" ? `B站音频 ${trackId}` : `网络歌曲 ${trackId}`,
+              artist: provider === "bilibili" ? "哔哩哔哩" : "网络音乐",
+              album: null,
+              durationMs: 0,
+              artworkUrl: null
+            });
+          } else if (/^BV[a-zA-Z0-9]+/.test(cleanId)) {
+            tracks.push({
+              provider: "bilibili",
+              providerTrackId: cleanId,
+              access: "unknown",
+              quality: null,
+              bvid: cleanId.split(":")[0],
+              title: `B站音频 ${cleanId}`,
+              artist: "哔哩哔哩",
+              album: null,
+              durationMs: 0,
+              artworkUrl: null
+            });
+          }
+        }
+      }
+
+      if (!cancelled) {
+        setRemoteTracks(tracks);
+        setRemoteLoading(false);
+      }
+    }
+
+    void loadTracks();
     return () => {
       cancelled = true;
     };
-  }, [source]);
+  }, [playlist.trackIds, source]);
 
   const roomProviderTrackKeys = useMemo(() => {
     return new Set(
       roomTracks.flatMap((track) => {
         const keys = [track.id];
+        if (track.fileHash) keys.push(track.fileHash);
         const s = track.sourceRef;
         if (s) {
           keys.push(`${s.provider}:${s.trackId}`);
           keys.push(`provider:${s.provider}:${s.trackId}`);
+          keys.push(s.trackId);
+          if (s.provider === "bilibili") {
+            const bvid = s.trackId.split(":")[0];
+            keys.push(bvid);
+            keys.push(`bilibili:${bvid}`);
+            keys.push(`provider:bilibili:${bvid}`);
+          }
         }
         return keys;
       })
@@ -458,10 +616,12 @@ function RoomLibraryPlaylistDetail({
     if (remoteTracks.length > 0) {
       return remoteTracks.map((t) => {
         const key = `${t.provider}:${t.providerTrackId}`;
+        const bvid = t.provider === "bilibili" ? (t.bvid || t.providerTrackId.split(":")[0]) : null;
         const inRoom =
           roomProviderTrackKeys.has(key) ||
           roomProviderTrackKeys.has(`provider:${key}`) ||
-          roomProviderTrackKeys.has(t.providerTrackId);
+          roomProviderTrackKeys.has(t.providerTrackId) ||
+          (bvid ? roomProviderTrackKeys.has(bvid) || roomProviderTrackKeys.has(`bilibili:${bvid}`) : false);
         return {
           id: key,
           title: t.title,
@@ -532,6 +692,7 @@ function RoomLibraryPlaylistDetail({
       if (!canManageLibrary || !item.providerTrack || item.isInRoom || pendingTrackIdsRef.current.has(item.id)) return;
       pendingTrackIdsRef.current.add(item.id);
       setPendingTrackIds((c) => new Set(c).add(item.id));
+      setDetailStatus(`正在导入《${item.title}》…`);
       try {
         if (item.providerTrack.provider === "netease" && onImportNeteaseTrack) {
           await onImportNeteaseTrack(item.providerTrack as NeteaseTrackCandidate);
@@ -541,6 +702,9 @@ function RoomLibraryPlaylistDetail({
           await onImportBilibiliTrack(item.providerTrack as BilibiliTrackCandidate);
         }
         setSelectedKeys((c) => c.filter((k) => k !== item.id));
+        setDetailStatus(`《${item.title}》导入完成。`);
+      } catch (error) {
+        setDetailStatus(error instanceof Error ? error.message : `导入《${item.title}》失败。`);
       } finally {
         pendingTrackIdsRef.current.delete(item.id);
         setPendingTrackIds((c) => {
@@ -567,6 +731,7 @@ function RoomLibraryPlaylistDetail({
       .filter((t) => t.providerTrack?.provider === "bilibili")
       .map((t) => t.providerTrack) as BilibiliTrackCandidate[];
 
+    setDetailStatus(`正在批量导入 ${selectedItems.length} 首歌曲…`);
     try {
       if (netease.length > 0 && onImportNeteaseTracks) {
         await onImportNeteaseTracks(netease);
@@ -578,6 +743,9 @@ function RoomLibraryPlaylistDetail({
         await onImportBilibiliTracks(bilibili);
       }
       setSelectedKeys([]);
+      setDetailStatus("批量导入完成。");
+    } catch (error) {
+      setDetailStatus(error instanceof Error ? error.message : "批量导入失败。");
     } finally {
       setIsImportingSelected(false);
     }
@@ -585,6 +753,14 @@ function RoomLibraryPlaylistDetail({
 
   return (
     <div className="flex w-full flex-col gap-3" data-testid="room-library-playlist-detail">
+      {detailStatus ? (
+        <div className="flex items-center justify-end">
+          <p className="truncate text-xs text-accent" role="status">
+            {detailStatus}
+          </p>
+        </div>
+      ) : null}
+
       {/* Top Header Actions */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-surface-border/50 pb-2.5">
         <Button

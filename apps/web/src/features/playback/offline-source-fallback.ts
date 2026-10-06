@@ -20,6 +20,7 @@ import {
 } from "@/features/library/cache-library";
 import { providerDisplayName } from "@/lib/domain/provider-labels";
 import { resolveProviderTrackSource } from "@/features/library/provider-track-identity";
+import { extensionForImportedMimeType } from "@/features/upload/upload-import-helpers";
 import { analyzeAudioBlobLoudness } from "./loudness";
 
 export type OfflineProviderSource = {
@@ -145,7 +146,7 @@ async function importOfflineProviderTrack(input: {
       downloaded.blob,
       downloaded.contentType
     );
-    const extension = mimeType === "audio/flac" ? "flac" : "mp3";
+    const extension = extensionForImportedMimeType(mimeType);
     const file = new File(
       [downloaded.blob],
       `${sanitizeFileName(track.title) || source.provider}-fallback.${extension}`,

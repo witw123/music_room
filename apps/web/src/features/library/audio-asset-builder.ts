@@ -112,6 +112,7 @@ export async function prepareAudioAssets(input: {
   file: File;
   signal?: AbortSignal;
   onProgress?: (progress: AssetPreparationProgress) => void;
+  expectedDurationMs?: number;
 }): Promise<PreparedAudioAssets> {
   const format = resolveSupportedUploadFormat(input.file);
   if (!format) {
@@ -121,7 +122,7 @@ export async function prepareAudioAssets(input: {
     throw new Error("音频文件为空。");
   }
 
-  const decodePlan = await inspectDecodePlan(input.file, input.onProgress);
+  const decodePlan = await inspectDecodePlan(input.file, input.onProgress, input.expectedDurationMs);
   const sourcePromise = prepareOriginalAsset(input);
   const useStreaming = decodePlan.useStreaming && format !== "m4a";
   let playbackDraftId = useStreaming ? createPlaybackDraftId() : null;
@@ -133,7 +134,7 @@ export async function prepareAudioAssets(input: {
       draftId: playbackDraftId,
       expectedDurationMs: decodePlan.durationSeconds
         ? Math.max(1, Math.round(decodePlan.durationSeconds * 1000))
-        : undefined
+        : input.expectedDurationMs
     });
   };
   const playbackPromise = useStreaming
@@ -1077,10 +1078,16 @@ async function encodePlaybackAsset(
   if (audioBuffer.numberOfChannels < 1 || audioBuffer.numberOfChannels > 2) {
     throw new Error("仅支持单声道或双声道音频。");
   }
-  assertDecodedPcmWithinMemoryBudget({
-    durationSeconds: audioBuffer.duration,
-    channels: audioBuffer.numberOfChannels
-  });
+  try {
+    assertDecodedPcmWithinMemoryBudget({
+      durationSeconds: audioBuffer.duration,
+      channels: audioBuffer.numberOfChannels
+    });
+  } catch (error) {
+    if (!(error instanceof AudioDecodeMemoryLimitError)) {
+      throw error;
+    }
+  }
 
   const channels = audioBuffer.numberOfChannels as 1 | 2;
   const loudness = analyzeAudioBuffer(audioBuffer);
@@ -1272,26 +1279,37 @@ export function prepareIndependentOpusSegment(
 
 async function inspectDecodePlan(
   file: File,
-  onProgress?: (progress: AssetPreparationProgress) => void
+  onProgress?: (progress: AssetPreparationProgress) => void,
+  expectedDurationMs?: number
 ) {
-  let durationSeconds: number | undefined;
+  let durationSeconds: number | undefined =
+    expectedDurationMs && expectedDurationMs > 0
+      ? expectedDurationMs / 1000
+      : undefined;
   let channels: number | undefined;
   onProgress?.({ stage: "inspecting", completed: 0, total: 1 });
   try {
     const { parseBlob } = await import("music-metadata");
     const metadata = await parseBlob(file, { duration: true, skipCovers: true });
-    durationSeconds = typeof metadata.format.duration === "number" &&
-      Number.isFinite(metadata.format.duration) && metadata.format.duration > 0
-      ? metadata.format.duration
-      : undefined;
+    if (
+      typeof metadata.format.duration === "number" &&
+      Number.isFinite(metadata.format.duration) &&
+      metadata.format.duration > 0
+    ) {
+      durationSeconds = metadata.format.duration;
+    }
     channels = typeof metadata.format.numberOfChannels === "number" &&
-      Number.isFinite(metadata.format.numberOfChannels) && metadata.format.numberOfChannels > 0
+      Number.isFinite(metadata.format.numberOfChannels) &&
+      metadata.format.numberOfChannels > 0
       ? metadata.format.numberOfChannels
       : undefined;
   } catch {
     // The browser decoder or the format-specific streaming decoder remains authoritative.
   } finally {
     onProgress?.({ stage: "inspecting", completed: 1, total: 1 });
+  }
+  if (durationSeconds !== undefined && channels === undefined) {
+    channels = 2;
   }
   const estimatedPcmBytes = durationSeconds !== undefined && channels !== undefined
     ? estimateDecodedPcmBytes({ durationSeconds, channels })
@@ -1349,9 +1367,26 @@ async function readFileUnit(file: File, unitIndex: number) {
 }
 
 async function decodeAudioFile(file: File) {
-  const context = new AudioContext({ sampleRate: opusSampleRate });
+  const buffer = await file.arrayBuffer();
+  let context: AudioContext;
   try {
-    return await context.decodeAudioData(await file.arrayBuffer());
+    context = new AudioContext({ sampleRate: opusSampleRate });
+  } catch {
+    context = new AudioContext();
+  }
+  try {
+    return await context.decodeAudioData(buffer.slice(0));
+  } catch (error) {
+    try {
+      const fallbackContext = new AudioContext();
+      try {
+        return await fallbackContext.decodeAudioData(buffer.slice(0));
+      } finally {
+        await fallbackContext.close().catch(() => undefined);
+      }
+    } catch {
+      throw error;
+    }
   } finally {
     await context.close().catch(() => undefined);
   }

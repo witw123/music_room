@@ -1088,7 +1088,10 @@ function inferFileExtension(mimeType: string) {
     case "audio/x-wav":
       return "wav";
     case "audio/mp4":
+    case "audio/m4a":
+    case "audio/x-m4a":
     case "audio/aac":
+    case "video/mp4":
       return "m4a";
     case "audio/ogg":
       return "ogg";

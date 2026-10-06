@@ -390,6 +390,8 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
                     onImportNeteaseTracks={props.onImportNeteaseTracks}
                     onImportQqMusicTrack={props.onImportQqMusicTrack}
                     onImportQqMusicTracks={props.onImportQqMusicTracks}
+                    onImportBilibiliTrack={props.onImportBilibiliTrack}
+                    onImportBilibiliTracks={props.onImportBilibiliTracks}
                     onLoadPlaylistIntoRoom={props.onLoadPlaylistIntoRoom}
                     onPlayTrack={props.onPlayTrack}
                     onReorderTracks={props.onReorderTracks}
@@ -623,6 +625,8 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
                   onImportNeteaseTracks={props.onImportNeteaseTracks}
                   onImportQqMusicTrack={props.onImportQqMusicTrack}
                   onImportQqMusicTracks={props.onImportQqMusicTracks}
+                  onImportBilibiliTrack={props.onImportBilibiliTrack}
+                  onImportBilibiliTracks={props.onImportBilibiliTracks}
                   onLoadPlaylistIntoRoom={props.onLoadPlaylistIntoRoom}
                   onPlayTrack={props.onPlayTrack}
                   onReorderTracks={props.onReorderTracks}

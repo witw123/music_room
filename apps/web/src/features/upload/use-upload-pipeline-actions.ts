@@ -114,28 +114,35 @@ export function useUploadPipelineActions({
       await upsertCachedLibraryTrack(cachedRecord);
       const localRepository = await getConfiguredLocalRepository();
       if (localRepository) {
-        await saveAudioFileToLocalDirectory({
-          file: input.file,
-          fileHash: input.track.fileHash,
-          title: input.track.title,
-          mimeType: input.track.mimeType ?? "audio/mpeg",
-          trackId: input.track.id,
-          track: {
-            artist: input.track.artist,
-            album: input.track.album,
-            artworkUrl: input.track.artworkUrl,
-            lyrics: input.lyrics ?? null,
-            translatedLyrics: input.track.translatedLyrics ?? null,
-            romanizedLyrics: input.track.romanizedLyrics ?? null,
-            provider: resolveProviderTrackSource(input.track)?.provider ?? "local_upload",
-            providerTrackId: resolveProviderTrackSource(input.track)?.trackId ?? null,
-            loudness: input.track.loudness,
-            durationMs: input.track.durationMs,
-            sizeBytes: input.track.sizeBytes ?? input.file.size,
-            originalAsset: input.track.originalAsset,
-            playbackAsset: input.track.playbackAsset
+        try {
+          await saveAudioFileToLocalDirectory({
+            file: input.file,
+            fileHash: input.track.fileHash,
+            title: input.track.title,
+            mimeType: input.track.mimeType ?? "audio/mpeg",
+            trackId: input.track.id,
+            track: {
+              artist: input.track.artist,
+              album: input.track.album,
+              artworkUrl: input.track.artworkUrl,
+              lyrics: input.lyrics ?? null,
+              translatedLyrics: input.track.translatedLyrics ?? null,
+              romanizedLyrics: input.track.romanizedLyrics ?? null,
+              provider: resolveProviderTrackSource(input.track)?.provider ?? "local_upload",
+              providerTrackId: resolveProviderTrackSource(input.track)?.trackId ?? null,
+              loudness: input.track.loudness,
+              durationMs: input.track.durationMs,
+              sizeBytes: input.track.sizeBytes ?? input.file.size,
+              originalAsset: input.track.originalAsset,
+              playbackAsset: input.track.playbackAsset
+            }
+          });
+          if (input.refreshCache !== false) {
+            await refreshCacheLibrary();
           }
-        }).then(() => input.refreshCache !== false ? refreshCacheLibrary() : undefined).catch(() => undefined);
+        } catch {
+          // Keep database record if directory write encounters permission issue
+        }
       }
       if (roomSnapshot?.room.id === input.roomId) {
         const tracks = roomSnapshot.tracks.some((track) => track.id === input.track.id)

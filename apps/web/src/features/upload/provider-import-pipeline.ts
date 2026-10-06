@@ -319,6 +319,7 @@ export async function importProviderTracks(input: {
 
         const assets = prefetched.assets ?? await prepareAudioAssets({
           file: prefetched.file,
+          expectedDurationMs: candidate.durationMs,
           onProgress: ({ stage, completed, total }) => {
             const { stageLabel, percent } = mapAssetPreparationProgress(stage, completed, total);
             input.setStatusMessage(`${index + 1} / ${pendingCandidates.length}《${candidate.title}》· ${stageLabel} ${percent}%`);
