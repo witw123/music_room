@@ -80,9 +80,9 @@ export async function cacheProviderTrackForPlayback(
 
   // Keep the Blob in IndexedDB until the directory copy has committed.
   // Yield a task so playback can bind its audio before optional work starts.
-  setTimeout(() => {
-    void completePlaybackMetadata(track, response.blob, fileHash).catch(() => undefined);
-    void saveCachedAudioFileToLocalDirectory({
+  setTimeout(async () => {
+    await completePlaybackMetadata(track, response.blob, fileHash).catch(() => undefined);
+    await saveCachedAudioFileToLocalDirectory({
       file: response.blob,
       fileHash,
       title: track.title,

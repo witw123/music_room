@@ -11,6 +11,7 @@ import type {
 } from "@music-room/shared";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import {
+  deleteCachedLibraryTrack,
   deleteLocalTrackDataForTracks,
   linkTrackAssets,
   upsertCachedLibraryTrack
@@ -104,45 +105,51 @@ export function useUploadPipelineActions({
       refreshCache?: boolean;
       lyrics?: string | null;
     }) => {
-      const cachedRecord = buildCachedLibraryTrackUpsertRecord({
-        ...input,
-        track: {
-          ...input.track,
-          lyrics: input.lyrics ?? null
-        }
-      });
-      await upsertCachedLibraryTrack(cachedRecord);
       const localRepository = await getConfiguredLocalRepository();
       if (localRepository) {
-        try {
-          await saveAudioFileToLocalDirectory({
-            file: input.file,
-            fileHash: input.track.fileHash,
-            title: input.track.title,
-            mimeType: input.track.mimeType ?? "audio/mpeg",
-            trackId: input.track.id,
-            track: {
-              artist: input.track.artist,
-              album: input.track.album,
-              artworkUrl: input.track.artworkUrl,
-              lyrics: input.lyrics ?? null,
-              translatedLyrics: input.track.translatedLyrics ?? null,
-              romanizedLyrics: input.track.romanizedLyrics ?? null,
-              provider: resolveProviderTrackSource(input.track)?.provider ?? "local_upload",
-              providerTrackId: resolveProviderTrackSource(input.track)?.trackId ?? null,
-              loudness: input.track.loudness,
-              durationMs: input.track.durationMs,
-              sizeBytes: input.track.sizeBytes ?? input.file.size,
-              originalAsset: input.track.originalAsset,
-              playbackAsset: input.track.playbackAsset
-            }
-          });
-          if (input.refreshCache !== false) {
-            await refreshCacheLibrary();
+        const providerSource = resolveProviderTrackSource(input.track);
+        const provider = providerSource?.provider ?? (
+          input.track.sourceType === "netease" || input.track.sourceType === "qqmusic" || input.track.sourceType === "bilibili" || input.track.sourceType === "alist"
+            ? input.track.sourceType
+            : "local_upload"
+        );
+        const providerTrackId = providerSource?.trackId ?? input.track.sourceRef?.trackId ?? null;
+
+        await saveAudioFileToLocalDirectory({
+          file: input.file,
+          fileHash: input.track.fileHash,
+          title: input.track.title,
+          mimeType: input.track.mimeType ?? "audio/mpeg",
+          trackId: input.track.id,
+          track: {
+            artist: input.track.artist,
+            album: input.track.album,
+            artworkUrl: input.track.artworkUrl,
+            lyrics: input.lyrics ?? null,
+            translatedLyrics: input.track.translatedLyrics ?? null,
+            romanizedLyrics: input.track.romanizedLyrics ?? null,
+            provider,
+            providerTrackId,
+            loudness: input.track.loudness,
+            durationMs: input.track.durationMs,
+            sizeBytes: input.track.sizeBytes ?? input.file.size,
+            originalAsset: input.track.originalAsset,
+            playbackAsset: input.track.playbackAsset
           }
-        } catch {
-          // Keep database record if directory write encounters permission issue
+        });
+        await deleteCachedLibraryTrack(input.track.fileHash);
+        if (input.refreshCache !== false) {
+          await refreshCacheLibrary();
         }
+      } else {
+        const cachedRecord = buildCachedLibraryTrackUpsertRecord({
+          ...input,
+          track: {
+            ...input.track,
+            lyrics: input.lyrics ?? null
+          }
+        });
+        await upsertCachedLibraryTrack(cachedRecord);
       }
       if (roomSnapshot?.room.id === input.roomId) {
         const tracks = roomSnapshot.tracks.some((track) => track.id === input.track.id)

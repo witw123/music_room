@@ -515,6 +515,7 @@ export async function saveAudioFileToLocalDirectory(input: {
       assetId: originalAsset.assetId,
       manifestPath: await repository.writeOriginalManifest(originalAsset, relativePath)
     };
+    await deleteAudioAsset(originalAsset.assetId).catch(() => undefined);
   }
   let savedPlaybackAsset = existingTrack?.playbackAsset ?? null;
   const playbackAsset = input.track?.playbackAsset
@@ -598,9 +599,20 @@ export async function saveAudioFileToLocalDirectory(input: {
     storageKind: "saved"
   });
   await deleteLocalAudioCacheFile(input.fileHash, { repository });
-  await deleteCachedLibraryTrackFile(input.fileHash);
+  await deleteCachedLibraryTrack(input.fileHash);
+  if (savedOriginalAsset?.assetId) {
+    await deleteAudioAsset(savedOriginalAsset.assetId).catch(() => undefined);
+  }
+  if (savedPlaybackAsset?.assetId) {
+    await deleteAudioAsset(savedPlaybackAsset.assetId).catch(() => undefined);
+  }
   if (input.trackId) {
-    await deleteOriginalAssetForTrack(input.trackId);
+    const link = await getTrackAssetLink(input.trackId).catch(() => null);
+    if (link) {
+      await deleteAudioAsset(link.originalAssetId).catch(() => undefined);
+      await deleteAudioAsset(link.playbackAssetId).catch(() => undefined);
+    }
+    await deleteOriginalAssetForTrack(input.trackId).catch(() => undefined);
   }
     return { fileName, artworkUrl };
   });
@@ -638,6 +650,12 @@ export async function saveCachedAudioFileToLocalDirectory(input: {
     playbackAsset: input.playbackAsset
   });
   await deleteCachedLibraryTrackFile(input.fileHash);
+  if (input.originalAsset?.assetId) {
+    await deleteAudioAsset(input.originalAsset.assetId).catch(() => undefined);
+  }
+  if (input.playbackAsset?.assetId) {
+    await deleteAudioAsset(input.playbackAsset.assetId).catch(() => undefined);
+  }
     return { fileName };
   });
 }
@@ -665,6 +683,7 @@ async function persistCachedTrackRecord(
         relativePath
       )
     };
+    await deleteAudioAsset(assets.originalAsset.assetId).catch(() => undefined);
   }
   let playbackAsset = existing?.playbackAsset ?? null;
   if (assets?.playbackAsset) {

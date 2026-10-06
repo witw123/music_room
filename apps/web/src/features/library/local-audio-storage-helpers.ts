@@ -78,7 +78,8 @@ export function sanitizeFileName(value: string) {
 }
 
 export function inferFileExtension(mimeType: string) {
-  switch (mimeType.toLowerCase()) {
+  const normalized = normalizeLocalAudioMimeType(mimeType) || mimeType.toLowerCase();
+  switch (normalized) {
     case "audio/mpeg":
     case "audio/mp3":
       return "mp3";
@@ -95,6 +96,9 @@ export function inferFileExtension(mimeType: string) {
       return "m4a";
     case "audio/ogg":
       return "ogg";
+    case "audio/webm":
+    case "video/webm":
+      return "webm";
     default:
       return "";
   }

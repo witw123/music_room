@@ -878,7 +878,7 @@ export function createRepositoryTrackRecord(input: {
     sizeBytes: input.sizeBytes,
     ...(input.loudness ? { loudness: input.loudness } : {}),
     ...(input.provider !== undefined ? { sourceType: input.provider } : {}),
-    ...(input.providerTrackId && (input.provider === "netease" || input.provider === "qqmusic")
+    ...(input.providerTrackId && (input.provider === "netease" || input.provider === "qqmusic" || input.provider === "bilibili" || input.provider === "alist")
       ? { sourceRef: { provider: input.provider, trackId: input.providerTrackId } }
       : { sourceRef: null }),
     source: input.source,

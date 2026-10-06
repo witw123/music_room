@@ -119,8 +119,15 @@ export function buildCachedLibraryTrackUpsertRecord(
     input.file instanceof File ? input.file : toCachedLibraryFileFromBlob(input.file, input.track);
   const providerSource = resolveProviderTrackSource(input.track);
   const cacheProvider = providerSource?.provider ?? (
-    input.track.sourceType === "local_upload" ? "local_upload" : undefined
+    input.track.sourceType === "local_upload" ||
+    input.track.sourceType === "netease" ||
+    input.track.sourceType === "qqmusic" ||
+    input.track.sourceType === "bilibili" ||
+    input.track.sourceType === "alist"
+      ? input.track.sourceType
+      : undefined
   );
+  const providerTrackId = providerSource?.trackId ?? input.track.sourceRef?.trackId ?? null;
 
   return {
     fileHash: input.track.fileHash,
@@ -131,7 +138,7 @@ export function buildCachedLibraryTrackUpsertRecord(
     ...(cacheProvider
       ? {
           provider: cacheProvider,
-          ...(providerSource ? { providerTrackId: providerSource.trackId } : {})
+          ...(providerTrackId ? { providerTrackId } : {})
         }
       : {}),
     ...(input.track.loudness ? { loudness: input.track.loudness } : {}),

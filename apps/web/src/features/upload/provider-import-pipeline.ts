@@ -20,6 +20,7 @@ import { importTaskStore, mapAssetPreparationProgress } from "./import-task-stor
 import { buildRegisterTrackPayload } from "./upload-pipeline";
 import { toCachedLibraryFile } from "@/features/library/cache-library";
 import { resolveLocalArtworkUrl } from "@/features/library/audio-metadata";
+import { getConfiguredLocalRepository } from "@/features/library/local-audio-storage";
 import { hasRoomPermission } from "@/features/room/room-permissions";
 import {
   buildProviderSourceRef,
@@ -56,6 +57,30 @@ export async function prefetchProviderAudio(
   sourceType: Exclude<TrackSourceType, "local_upload">,
   onProgress?: (progress: { loaded: number; total: number | null; percent?: number }) => void
 ): Promise<PrefetchedProviderAudio> {
+  const localRepository = await getConfiguredLocalRepository().catch(() => null);
+  if (localRepository) {
+    const tracks = await localRepository.listTracks().catch(() => []);
+    const matchingTrack = tracks.find((t) =>
+      t.sourceRef?.provider === sourceType &&
+      t.sourceRef?.trackId === candidate.providerTrackId
+    );
+    if (matchingTrack?.source?.relativePath) {
+      const file = await localRepository.readPath(matchingTrack.source.relativePath).catch(() => null);
+      if (file) {
+        const assets = await getReusableAudioAssets({
+          fileHash: matchingTrack.fileHash,
+          sizeBytes: matchingTrack.sizeBytes
+        }).catch(() => null);
+        onProgress?.({ loaded: 1, total: 1, percent: 100 });
+        return {
+          cachedTrack: null,
+          file,
+          assets
+        };
+      }
+    }
+  }
+
   const cachedTrack: Awaited<ReturnType<typeof getCachedLibraryTrackByProviderTrack>> | null = (
     await getCachedLibraryTrackByProviderTrack(sourceType, candidate.providerTrackId)
   ) ?? null;
