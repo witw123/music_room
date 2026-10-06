@@ -150,14 +150,6 @@ export function RoomLibraryPlaylistsSection({
           keys.push(`${t.sourceRef.provider}:${t.sourceRef.trackId}`);
           keys.push(`provider:${t.sourceRef.provider}:${t.sourceRef.trackId}`);
           keys.push(t.sourceRef.trackId);
-          if (t.sourceRef.provider === "bilibili") {
-            const bvid = t.sourceRef.trackId.split(":")[0];
-            if (bvid) {
-              keys.push(bvid);
-              keys.push(`bilibili:${bvid}`);
-              keys.push(`provider:bilibili:${bvid}`);
-            }
-          }
         }
         if (t.fileHash) keys.push(t.fileHash);
         return keys;
@@ -173,10 +165,6 @@ export function RoomLibraryPlaylistsSection({
         if (roomTrackKeySet.has(id)) return true;
         const normalized = id.startsWith("provider:") ? id.slice("provider:".length) : id;
         if (roomTrackKeySet.has(normalized)) return true;
-        if (normalized.startsWith("bilibili:")) {
-          const bvid = normalized.split(":")[1];
-          if (bvid && (roomTrackKeySet.has(bvid) || roomTrackKeySet.has(`bilibili:${bvid}`))) return true;
-        }
         return false;
       }).length;
       map.set(playlist.id, { total, imported, isAllImported: total > 0 && imported >= total });
@@ -253,14 +241,11 @@ export function RoomLibraryPlaylistsSection({
         const missingBilibili: BilibiliTrackCandidate[] = [];
 
         for (const track of remoteTracks) {
-          const bvid = track.provider === "bilibili" ? (track.bvid || track.providerTrackId.split(":")[0]) : null;
           const inRoom = tracks.some(
             (t) =>
               (t.sourceRef?.provider === track.provider && t.sourceRef?.trackId === track.providerTrackId) ||
-              (track.provider === "bilibili" && t.sourceRef?.provider === "bilibili" && (
-                t.sourceRef?.trackId === bvid ||
-                t.sourceRef?.trackId?.split(":")[0] === bvid
-              ))
+              (t.id === track.providerTrackId) ||
+              (t.id === `${track.provider}:${track.providerTrackId}`)
           );
           if (!inRoom) {
             if (track.provider === "netease") missingNetease.push(track as NeteaseTrackCandidate);
@@ -600,12 +585,6 @@ function RoomLibraryPlaylistDetail({
           keys.push(`${s.provider}:${s.trackId}`);
           keys.push(`provider:${s.provider}:${s.trackId}`);
           keys.push(s.trackId);
-          if (s.provider === "bilibili") {
-            const bvid = s.trackId.split(":")[0];
-            keys.push(bvid);
-            keys.push(`bilibili:${bvid}`);
-            keys.push(`provider:bilibili:${bvid}`);
-          }
         }
         return keys;
       })
@@ -616,12 +595,10 @@ function RoomLibraryPlaylistDetail({
     if (remoteTracks.length > 0) {
       return remoteTracks.map((t) => {
         const key = `${t.provider}:${t.providerTrackId}`;
-        const bvid = t.provider === "bilibili" ? (t.bvid || t.providerTrackId.split(":")[0]) : null;
         const inRoom =
           roomProviderTrackKeys.has(key) ||
           roomProviderTrackKeys.has(`provider:${key}`) ||
-          roomProviderTrackKeys.has(t.providerTrackId) ||
-          (bvid ? roomProviderTrackKeys.has(bvid) || roomProviderTrackKeys.has(`bilibili:${bvid}`) : false);
+          roomProviderTrackKeys.has(t.providerTrackId);
         return {
           id: key,
           title: t.title,
