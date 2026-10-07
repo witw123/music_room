@@ -33,10 +33,11 @@ import { getCurrentRoomMemberPermissions, isRoomHost } from "@/features/room/roo
 import {
   MusicIcon,
   RadioIcon,
+  SearchIcon,
   UsersIcon
 } from "@/components/icons/DiscoverIcons";
 
-type ManagementTabId = "library" | "local" | "members";
+type ManagementTabId = "library" | "search" | "local" | "members";
 
 export type RoomDashboardViewProps = {
   roomSnapshot: RoomSnapshot;
@@ -113,11 +114,15 @@ type RoomLayoutProps = RoomDashboardViewProps & {
 
 const tabConfigs: Array<{ id: ManagementTabId; label: string; icon: React.ComponentType<{ className?: string }> }> = [
   { id: "library", label: "曲库", icon: MusicIcon },
+  { id: "search", label: "搜索", icon: SearchIcon },
   { id: "local", label: "我的歌单", icon: RadioIcon },
   { id: "members", label: "成员", icon: UsersIcon }
 ];
 
 const LibraryTabPanel = dynamic(() => import("./LibraryTabPanel").then((mod) => mod.LibraryTabPanel), {
+  loading: RoomTabPanelPlaceholder
+});
+const SearchTabPanel = dynamic(() => import("./SearchTabPanel").then((mod) => mod.SearchTabPanel), {
   loading: RoomTabPanelPlaceholder
 });
 const LocalStorageTabPanel = dynamic(() => import("./LocalStorageTabPanel").then((mod) => mod.LocalStorageTabPanel), {
@@ -156,11 +161,12 @@ function InteractiveRoomLayout(props: RoomLayoutProps) {
   const { stageReady, panelsReady } = useProgressiveRoomLoading();
   const [activeTab, setActiveTab] = useState<ManagementTabId>("library");
 
-  // 三个 tab 面板迟早都会被点到:空闲时预取 chunk,让首次切换无需加载占位。
+  // 四个 tab 面板迟早都会被点到:空闲时预取 chunk,让首次切换无需加载占位。
   useEffect(
     () =>
       preloadRoomPanelChunks([
         () => import("./LibraryTabPanel"),
+        () => import("./SearchTabPanel"),
         () => import("./LocalStorageTabPanel"),
         () => import("./MembersTabPanel")
       ]),
@@ -230,15 +236,15 @@ function InteractiveRoomLayout(props: RoomLayoutProps) {
                   onKeyDown={(event) => handleTabKeyDown(event, tab)}
                   role="tab"
                   tabIndex={isActive ? 0 : -1}
-                  className={`flex-1 flex min-h-8 sm:min-h-9 whitespace-nowrap items-center justify-center gap-1.5 rounded-lg px-2.5 py-1 text-xs sm:text-sm font-medium transition-all duration-150 cursor-pointer ${
+                  className={`flex-1 flex min-h-8 sm:min-h-9 whitespace-nowrap items-center justify-center gap-1 sm:gap-1.5 rounded-lg px-1.5 sm:px-2.5 py-1 text-xs sm:text-sm font-medium transition-all duration-150 cursor-pointer ${
                     isActive
                       ? "bg-surface-elevated text-foreground font-semibold shadow-xs"
                       : "text-foreground-muted hover:text-foreground hover:bg-surface-hover/60"
                   }`}
                   type="button"
                 >
-                  <IconComp className="w-3.5 h-3.5" />
-                  <span>{label}</span>
+                  <IconComp className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">{label}</span>
                 </button>
               );
             })}
@@ -288,7 +294,18 @@ function RoomManagementContent(props: RoomLayoutProps & { activeTab: ManagementT
         roomPlaylists={props.roomSnapshot.playlists}
         tracks={props.roomSnapshot.tracks}
         uploadedTracks={props.uploadedTracks}
-        showProviderSearch={true}
+      />
+    );
+  }
+  if (props.activeTab === "search") {
+    return (
+      <SearchTabPanel
+        canManageLibrary={props.canManageLibrary}
+        onImportBilibiliTrack={props.onImportBilibiliTrack}
+        onImportBilibiliTracks={props.onImportBilibiliTracks}
+        onImportNeteaseTrack={props.onImportNeteaseTrack}
+        onImportQqMusicTrack={props.onImportQqMusicTrack}
+        roomTracks={props.roomSnapshot.tracks}
       />
     );
   }

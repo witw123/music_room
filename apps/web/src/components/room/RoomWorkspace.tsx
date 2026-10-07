@@ -93,7 +93,7 @@ type RoomWorkspaceProps = {
   onDeleteTrack: (trackId: string) => Promise<void>;
   onPlayTrack: (trackId: string) => Promise<void>;
   onRefreshRoom: () => Promise<RoomSnapshot | null>;
-  onTabChange: (tab: "library" | "local" | "members") => void;
+  onTabChange: (tab: "library" | "search" | "local" | "members") => void;
   onDiagnosticsVisibilityChange: (open: boolean) => void;
   onSeek: (positionMs: number) => void;
   socket: RoomSocket | null;

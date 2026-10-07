@@ -19,7 +19,7 @@ export type UseRoomDerivedStateInput = {
   roomSnapshot: RoomSnapshot | null;
   connectedPeers: string[];
   mediaConnectedPeers: string[];
-  activeDashboardTab: "library" | "local" | "members";
+  activeDashboardTab: "library" | "search" | "local" | "members";
   coarsePlayback: RoomCoarsePlaybackState;
   peerDiagnostics: PeerDiagnosticsSnapshot[];
   peerRecentEvents: PeerRecentEvent[];
@@ -228,7 +228,7 @@ export function getActiveMemberPeerIds(members: RoomSnapshot["room"]["members"])
 }
 
 export function selectWorkspacePeerDiagnostics(input: {
-  activeDashboardTab: "library" | "local" | "members";
+  activeDashboardTab: "library" | "search" | "local" | "members";
   visiblePeerDiagnostics: PeerDiagnosticsSnapshot[];
   visiblePeerRecentEvents: PeerRecentEvent[];
 }) {

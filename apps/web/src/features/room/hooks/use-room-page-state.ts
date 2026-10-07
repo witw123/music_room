@@ -31,7 +31,7 @@ export type RoomRecoveryState = {
 };
 
 export type RoomPageState = {
-  activeDashboardTab: "library" | "local" | "members";
+  activeDashboardTab: "library" | "search" | "local" | "members";
   playbackStartRequest: PlaybackStartRequest | null;
   roomRecoveryState: RoomRecoveryState;
   isDiagnosticsPanelOpen: boolean;

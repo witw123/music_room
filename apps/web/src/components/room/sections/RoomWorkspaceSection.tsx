@@ -45,7 +45,7 @@ export type RoomWorkspaceSectionProps = {
   onFilesSelected: (files: FileList | File[] | null) => Promise<void>;
   onPlayQueueItem: (queueItemId: string) => Promise<void>;
   onPlayTrack: (trackId?: string) => Promise<void>;
-  onTabChange: (tab: "library" | "local" | "members") => void;
+  onTabChange: (tab: "library" | "search" | "local" | "members") => void;
   onDiagnosticsVisibilityChange: (open: boolean) => void;
   onSeek: (positionMs: number) => void;
   socket: RoomSocket | null;
