@@ -15,7 +15,7 @@ import {
   type ThemePreference
 } from "@/features/settings/settings-store";
 
-export type AppNavItemId = "home" | "discover" | "playlists" | "profile";
+export type AppNavItemId = "home" | "discover" | "playlists" | "profile" | "settings";
 
 type AppSidebarProps = {
   activeItem?: AppNavItemId;
@@ -25,11 +25,19 @@ type AppSidebarProps = {
   onLogout?: () => void;
 };
 
-const navItems: Array<{ id: AppNavItemId; label: string; href: string; icon: IconName }> = [
-  { id: "home", label: "首页", href: "/app", icon: "home" },
-  { id: "discover", label: "发现", href: "/app/discover", icon: "discover" },
-  { id: "playlists", label: "歌单", href: "/app/playlists", icon: "playlist" },
-  { id: "profile", label: "我的", href: "/app/profile", icon: "profile" }
+type NavItemConfig = {
+  id: AppNavItemId;
+  label: string;
+  href: string;
+  icon: IconName;
+  group: "explore" | "library";
+};
+
+const navItems: NavItemConfig[] = [
+  { id: "home", label: "房间大厅", href: "/app", icon: "home", group: "explore" },
+  { id: "discover", label: "发现音乐", href: "/app/discover", icon: "discover", group: "explore" },
+  { id: "playlists", label: "我的歌单", href: "/app/playlists", icon: "playlist", group: "library" },
+  { id: "profile", label: "个人主页", href: "/app/profile", icon: "profile", group: "library" }
 ];
 
 type IconName =
@@ -143,37 +151,101 @@ export function AppSidebar({
         </Link>
       </div>
 
-      <div className={`hide-scrollbar flex min-h-0 flex-1 items-center overflow-hidden md:flex-col md:items-stretch md:gap-3 md:p-2 ${compactMobile ? "gap-2 p-1.5" : "gap-3 p-2.5"}`}>
-        <nav className="hide-scrollbar flex min-w-0 flex-1 flex-wrap items-center gap-1 overflow-x-hidden md:min-h-0 md:flex-col md:items-stretch md:overflow-y-auto md:overflow-x-hidden" aria-label="工作区">
-          {navItems.map((item) => {
-            const isActive = currentItem === item.id;
-            return (
-              <Link
-                key={item.id}
-                href={item.href as Route}
-                aria-current={isActive ? "page" : undefined}
-                onClick={() => {
-                  if (roomId) {
-                    storeAwayRoomId(roomId);
-                  }
-                }}
-                onPointerDown={() => setPendingItemId(item.id)}
-                title={collapsed ? item.label : undefined}
-                className={`app-sidebar__nav-item group relative flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center rounded-xl font-medium transition-all duration-150 sm:flex-row sm:gap-2.5 sm:px-3 sm:py-2.5 sm:text-xs md:flex-none md:justify-start md:gap-3 md:px-3.5 md:py-2.5 md:text-sm ${compactMobile ? "gap-0.5 px-0.5 py-1.5 text-[9px]" : "gap-1 px-1 py-2 text-[10px]"} ${
-                  isActive
-                    ? "text-accent bg-accent/10 font-semibold"
-                    : "text-foreground-muted hover:text-white hover:bg-white/[0.04]"
-                } ${collapsed ? "md:justify-center md:px-2" : ""}`}
-              >
-                <NavIcon name={item.icon} />
-                <span className={`truncate ${collapsed ? "md:hidden" : ""}`}>{item.label}</span>
-              </Link>
-            );
-          })}
+      <div className={`hide-scrollbar flex min-h-0 flex-1 items-center overflow-hidden md:flex-col md:items-stretch md:gap-2.5 md:p-2 ${compactMobile ? "gap-2 p-1.5" : "gap-3 p-2.5"}`}>
+        {/* Quick Search */}
+        <div className="hidden w-full px-1 pb-1 md:block">
+          <Link
+            href="/app/discover"
+            className={`group flex items-center gap-2.5 rounded-xl border border-white/[0.08] bg-white/[0.03] text-foreground-muted transition-all duration-150 hover:border-white/15 hover:bg-white/[0.07] hover:text-white ${
+              collapsed ? "h-10 w-10 justify-center p-0" : "h-9 w-full px-3 py-1.5 text-xs"
+            }`}
+            title="搜索音乐与房间"
+          >
+            <NavIcon name="search" size={15} />
+            <span className={`truncate text-xs ${collapsed ? "md:hidden" : ""}`}>搜索音乐与房间</span>
+            <kbd className={`ml-auto rounded border border-white/10 bg-white/[0.05] px-1.5 py-0.5 text-[9px] font-sans text-foreground-muted/60 ${collapsed ? "md:hidden" : ""}`}>
+              /
+            </kbd>
+          </Link>
+        </div>
 
+        <nav className="hide-scrollbar flex min-w-0 flex-1 flex-wrap items-center gap-1 overflow-x-hidden md:min-h-0 md:flex-col md:items-stretch md:overflow-y-auto md:overflow-x-hidden" aria-label="工作区">
+          {!collapsed && (
+            <div className="hidden px-3 pt-1 pb-1 text-[10px] font-semibold tracking-wider text-foreground-muted/50 uppercase select-none md:block">
+              探索
+            </div>
+          )}
+          {navItems
+            .filter((item) => item.group === "explore")
+            .map((item) => {
+              const isActive = currentItem === item.id;
+              return (
+                <Link
+                  key={item.id}
+                  href={item.href as Route}
+                  aria-current={isActive ? "page" : undefined}
+                  onClick={() => {
+                    if (roomId) {
+                      storeAwayRoomId(roomId);
+                    }
+                  }}
+                  onPointerDown={() => setPendingItemId(item.id)}
+                  title={collapsed ? item.label : undefined}
+                  className={`app-sidebar__nav-item group relative flex min-h-10 min-w-0 flex-1 flex-col items-center justify-center rounded-xl font-medium transition-all duration-150 sm:flex-row sm:gap-2.5 sm:px-3 sm:py-2 sm:text-xs md:flex-none md:justify-start md:gap-3 md:px-3 md:py-2 md:text-sm ${compactMobile ? "gap-0.5 px-0.5 py-1.5 text-[9px]" : "gap-1 px-1 py-2 text-[10px]"} ${
+                    isActive
+                      ? "text-accent bg-accent/10 font-semibold"
+                      : "text-foreground-muted hover:text-white hover:bg-white/[0.04]"
+                  } ${collapsed ? "md:justify-center md:px-2" : ""}`}
+                >
+                  <NavIcon name={item.icon} />
+                  <span className={`truncate ${collapsed ? "md:hidden" : ""}`}>{item.label}</span>
+                </Link>
+              );
+            })}
+
+          {!collapsed && (
+            <div className="hidden px-3 pt-3 pb-1 text-[10px] font-semibold tracking-wider text-foreground-muted/50 uppercase select-none md:block">
+              音乐空间
+            </div>
+          )}
+          {navItems
+            .filter((item) => item.group === "library")
+            .map((item) => {
+              const isActive = currentItem === item.id;
+              return (
+                <Link
+                  key={item.id}
+                  href={item.href as Route}
+                  aria-current={isActive ? "page" : undefined}
+                  onClick={() => {
+                    if (roomId) {
+                      storeAwayRoomId(roomId);
+                    }
+                  }}
+                  onPointerDown={() => setPendingItemId(item.id)}
+                  title={collapsed ? item.label : undefined}
+                  className={`app-sidebar__nav-item group relative flex min-h-10 min-w-0 flex-1 flex-col items-center justify-center rounded-xl font-medium transition-all duration-150 sm:flex-row sm:gap-2.5 sm:px-3 sm:py-2 sm:text-xs md:flex-none md:justify-start md:gap-3 md:px-3 md:py-2 md:text-sm ${compactMobile ? "gap-0.5 px-0.5 py-1.5 text-[9px]" : "gap-1 px-1 py-2 text-[10px]"} ${
+                    isActive
+                      ? "text-accent bg-accent/10 font-semibold"
+                      : "text-foreground-muted hover:text-white hover:bg-white/[0.04]"
+                  } ${collapsed ? "md:justify-center md:px-2" : ""}`}
+                >
+                  <NavIcon name={item.icon} />
+                  <span className={`truncate ${collapsed ? "md:hidden" : ""}`}>{item.label}</span>
+                </Link>
+              );
+            })}
         </nav>
 
-        <div className={`app-sidebar__footer hidden flex-col border-t border-white/[0.06] md:flex ${collapsed ? "md:items-center md:gap-2.5 md:px-0 md:pb-1 md:pt-3" : "md:items-stretch md:gap-1.5 md:px-0 md:pb-1 md:pt-3"}`}>
+        <div className={`app-sidebar__footer hidden flex-col border-t border-white/[0.06] md:flex ${collapsed ? "md:items-center md:gap-2 md:px-0 md:pb-1 md:pt-2.5" : "md:items-stretch md:gap-1 md:px-0 md:pb-1 md:pt-2.5"}`}>
+          <Link
+            href={"/app/settings" as Route}
+            className={`app-sidebar__footer-control group flex min-w-0 items-center justify-center gap-2.5 font-medium text-foreground-muted hover:text-white hover:bg-white/[0.06] rounded-xl transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${footerControlSizeClass} ${collapsed ? "md:justify-center" : "md:justify-start"}`}
+            title="设置与偏好"
+          >
+            <NavIcon name="settings" size={18} />
+            <span className={collapsed ? "md:hidden" : "truncate"}>设置与偏好</span>
+          </Link>
           <button
             aria-label={`切换到${themeActionLabel}`}
             className={`app-sidebar__footer-control app-sidebar__theme group flex min-w-0 items-center justify-center gap-2.5 font-medium text-foreground-muted hover:text-white hover:bg-white/[0.06] rounded-xl transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${footerControlSizeClass}`}
@@ -194,7 +266,7 @@ export function AppSidebar({
             type="button"
           >
             <NavIcon name={collapsed ? "expand" : "collapse"} size={18} />
-            <span className={collapsed ? "md:hidden" : "truncate"}>收起</span>
+            <span className={collapsed ? "md:hidden" : "truncate"}>收起侧栏</span>
           </button>
         </div>
       </div>
@@ -249,6 +321,9 @@ function clearThemeTransitionStyles(root: HTMLElement) {
 }
 
 function resolveActiveItem(pathname: string | null): AppNavItemId | null {
+  if (pathname?.startsWith("/app/settings")) {
+    return "settings";
+  }
   if (pathname?.startsWith("/app/discover")) {
     return "discover";
   }

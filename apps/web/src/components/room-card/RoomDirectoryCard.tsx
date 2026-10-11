@@ -64,7 +64,7 @@ export function RoomDirectoryCard({ room: directoryItem, onOpen }: RoomDirectory
 
   return (
     <article
-      className="group relative flex w-full h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-surface-border bg-surface-elevated p-3 sm:p-3.5 shadow-sm transition-all duration-200 hover:border-accent/40 focus-within:border-[color:var(--room-accent)] focus-within:ring-1 focus-within:ring-[color:var(--room-accent)] motion-reduce:transition-none"
+      className="group relative flex w-full h-full min-w-0 flex-col overflow-hidden rounded-xl border border-surface-border bg-surface-elevated p-3 shadow-xs transition-all duration-200 hover:border-accent/40 focus-within:border-[color:var(--room-accent)] focus-within:ring-1 focus-within:ring-[color:var(--room-accent)] motion-reduce:transition-none"
       data-room-theme={room.roomType}
       data-room-type={room.roomType}
       data-testid="room-directory-card"
@@ -80,19 +80,19 @@ export function RoomDirectoryCard({ room: directoryItem, onOpen }: RoomDirectory
 
       {/* Room Visual Cover: Integrates Room Type Badge and Online Status inside the cover */}
       <section
-        className="relative w-full aspect-[2.3/1] shrink-0 overflow-hidden rounded-xl border border-surface-border bg-slate-100 dark:bg-[#07090e] shadow-xs"
+        className="relative w-full aspect-[2.4/1] shrink-0 overflow-hidden rounded-lg border border-surface-border bg-slate-100 dark:bg-[#07090e] shadow-xs"
         data-card-scene={room.roomType}
         data-testid="room-directory-stage"
       >
         {/* Seamless Badges Over Cover: Room Type (Left) & Online Count (Right) with high contrast in both themes */}
-        <div className="pointer-events-none absolute top-2.5 left-3 right-3 z-20 flex items-center justify-between gap-2">
-          <span className="inline-flex items-center gap-1.5 rounded-lg bg-white/90 dark:bg-black/60 border border-black/5 dark:border-white/10 px-2 py-0.5 text-[11px] font-medium text-slate-800 dark:text-white/90 shadow-xs">
+        <div className="pointer-events-none absolute top-2 left-2.5 right-2.5 z-20 flex items-center justify-between gap-2">
+          <span className="inline-flex items-center gap-1.5 rounded-md bg-white/90 dark:bg-black/60 border border-black/5 dark:border-white/10 px-2 py-0.5 text-[11px] font-medium text-slate-800 dark:text-white/90 shadow-xs backdrop-blur-md">
             <span className="opacity-80">
               <RoomTypeGlyph roomType={room.roomType} />
             </span>
             {theme.label}
           </span>
-          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-white/90 dark:bg-black/60 border border-black/5 dark:border-white/10 px-2 py-0.5 text-[11px] font-mono tabular-nums text-slate-700 dark:text-white/90 shadow-xs">
+          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-white/90 dark:bg-black/60 border border-black/5 dark:border-white/10 px-2 py-0.5 text-[11px] font-mono tabular-nums text-slate-700 dark:text-white/90 shadow-xs backdrop-blur-md">
             <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
             {room.directoryOnlineMemberCount} 人在线
           </span>
@@ -110,7 +110,7 @@ export function RoomDirectoryCard({ room: directoryItem, onOpen }: RoomDirectory
 
       {/* Track Playing Information Placed BELOW the cover */}
       {nowPlaying?.title ? (
-        <div className="mt-2.5 flex items-center gap-2 rounded-xl border border-surface-border bg-surface/85 px-2.5 py-1.5">
+        <div className="mt-2 flex items-center gap-2 rounded-lg border border-surface-border bg-surface/75 px-2.5 py-1">
           <div className="flex items-end gap-0.5 h-3 shrink-0 text-accent">
             <span className="w-0.5 h-full bg-current rounded-full animate-bounce" style={{ animationDuration: "0.8s" }} />
             <span className="w-0.5 h-2 bg-current rounded-full animate-bounce" style={{ animationDuration: "1.1s", animationDelay: "0.2s" }} />
@@ -126,10 +126,10 @@ export function RoomDirectoryCard({ room: directoryItem, onOpen }: RoomDirectory
       ) : null}
 
       <div className={nowPlaying?.title ? "pt-2" : "pt-2.5"}>
-        <h3 className="truncate text-base sm:text-lg font-bold tracking-tight text-foreground transition-colors">
+        <h3 className="truncate text-sm sm:text-base font-semibold tracking-tight text-foreground transition-colors">
           {room.name}
         </h3>
-        <p className="mt-0.5 line-clamp-2 min-h-[2.25rem] break-words text-xs leading-relaxed text-foreground-muted/80">
+        <p className="mt-0.5 line-clamp-2 min-h-[2rem] break-words text-xs leading-relaxed text-foreground-muted/80">
           {room.description?.trim() || fallbackDescription(room)}
         </p>
       </div>

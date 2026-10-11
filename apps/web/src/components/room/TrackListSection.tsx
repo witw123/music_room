@@ -576,7 +576,7 @@ function TrackListSectionBase({
                       data-testid="track-add-queue-button"
                       data-track-id={track.id}
                       variant="ghost"
-                      className="h-10 w-10 shrink-0 !rounded-none bg-transparent p-0 hover:bg-transparent hover:text-foreground sm:h-8 sm:w-8"
+                      className="h-8 w-8 shrink-0 !rounded-none bg-transparent p-0 hover:bg-transparent hover:text-foreground sm:h-7 sm:w-7"
                       disabled={!canAddToQueue || pendingAction !== null}
                       onClick={() => void runAction(`queue:${track.id}`, () => onAddToQueue(track.id))}
                       aria-label={`将《${track.title}》加入队列`}

@@ -137,7 +137,7 @@ export function VinylBadge({
 export function PlaybackModeIcon({ mode }: { mode: PlaybackMode }) {
   if (mode === "shuffle") {
     return (
-      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M4 7h3.5c3.5 0 4.5 10 9 10H20" />
         <path d="m17 14 3 3-3 3" />
         <path d="M4 17h3c1.4 0 2.4-1.1 3.1-2.4" />
@@ -149,7 +149,7 @@ export function PlaybackModeIcon({ mode }: { mode: PlaybackMode }) {
 
   if (mode === "single") {
     return (
-      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M17 2l4 4-4 4" />
         <path d="M3 11V9a3 3 0 0 1 3-3h15" />
         <path d="m7 22-4-4 4-4" />
@@ -161,7 +161,7 @@ export function PlaybackModeIcon({ mode }: { mode: PlaybackMode }) {
   }
 
   return (
-    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M4 7h12" />
       <path d="m13 4 3 3-3 3" />
       <path d="M20 17H8" />
@@ -199,7 +199,7 @@ export function PlaybackModeButton({
       aria-label={`当前为${label}，点击切换到${playbackModeLabels[nextMode]}`}
       title={`当前：${label}，点击切换`}
       onClick={onCycle}
-      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-foreground-muted transition-colors hover:bg-white/10 active:bg-white/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-40"
+      className="inline-flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-lg text-foreground-muted transition-colors hover:bg-white/10 active:bg-white/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-40"
       style={{ color: accentColor }}
     >
       <PlaybackModeIcon mode={mode} />
@@ -229,7 +229,7 @@ export function LyricsToggleButton({
       title={isOpen ? "关闭桌面歌词" : "打开桌面歌词"}
       onClick={onToggle}
       disabled={disabled}
-      className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-xs font-bold transition-colors hover:bg-white/10 active:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-40 ${
+      className={`inline-flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-lg text-xs font-bold transition-colors hover:bg-white/10 active:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-40 ${
         isOpen ? "text-white bg-white/10" : "text-foreground-muted hover:text-white"
       }`}
       style={isOpen && accentColor ? { color: accentColor } : undefined}
@@ -242,7 +242,7 @@ export function LyricsToggleButton({
 function VolumeIcon({ volume }: { volume: number }) {
   if (volume <= 0.01) {
     return (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M11 5 6 9H3v6h3l5 4V5Z" />
         <path d="m19 9-5 6" />
         <path d="m14 9 5 6" />
@@ -251,7 +251,7 @@ function VolumeIcon({ volume }: { volume: number }) {
   }
 
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M11 5 6 9H3v6h3l5 4V5Z" />
       <path d="M15.5 8.5a5 5 0 0 1 0 7" />
       <path d="M18.5 5.5a9 9 0 0 1 0 13" />
@@ -341,7 +341,7 @@ function VolumeControl({
         aria-label={`音量 ${percentage}%，点击${isOpen ? "收起" : "调整"}`}
         title={`音量 ${percentage}%`}
         onClick={() => setIsOpen((current) => !current)}
-        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-foreground-muted transition-colors hover:bg-white/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:h-10 sm:w-10"
+        className="inline-flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-lg text-foreground-muted transition-colors hover:bg-white/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:h-8.5 sm:w-8.5"
         style={{ color: accentColor, ...(isOpen ? { backgroundColor: accentSoft } : {}) }}
       >
         <VolumeIcon volume={volume} />
@@ -989,6 +989,11 @@ export function DesktopBottomPlayerLayout({
 
       {/* Right: Audio Quality Badge + Lyrics Toggle + Volume Control + Immersive + Mini */}
       <div className="flex min-w-0 items-center justify-end gap-1.5 w-[260px] lg:w-[320px] shrink-0 ml-auto">
+        {currentTrackDuration > 0 ? (
+          <span className="hidden xl:inline text-[11px] font-mono tabular-nums text-foreground-muted/75 mr-1 select-none">
+            {formatDuration(boundedProgressMs)} / {formatDuration(currentTrackDuration)}
+          </span>
+        ) : null}
         <QualityBadge />
 
         {onToggleLyrics ? (
@@ -1033,13 +1038,13 @@ function ImmersiveToggleButton({ isOpen, onToggle, accentColor, accentSoft }: { 
       aria-label={isOpen ? "退出沉浸式播放" : "打开沉浸式播放"}
       title={isOpen ? "退出沉浸式播放" : "打开沉浸式播放"}
       onClick={onToggle}
-        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-foreground-muted transition-colors hover:bg-white/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:h-10 sm:w-10"
+      className="inline-flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-lg text-foreground-muted transition-colors hover:bg-white/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:h-8.5 sm:w-8.5"
       style={accentColor ? { color: accentColor, ...(isOpen ? { backgroundColor: accentSoft } : {}) } : undefined}
     >
       {isOpen ? (
-        <svg aria-hidden="true" fill="none" height="18" viewBox="0 0 24 24" width="18" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><path d="M9 15H4v5" /><path d="m4 20 6-6" /><path d="M15 9h5V4" /><path d="m20 4-6 6" /></svg>
+        <svg aria-hidden="true" fill="none" height="17" viewBox="0 0 24 24" width="17" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><path d="M9 15H4v5" /><path d="m4 20 6-6" /><path d="M15 9h5V4" /><path d="m20 4-6 6" /></svg>
       ) : (
-        <svg aria-hidden="true" fill="none" height="18" viewBox="0 0 24 24" width="18" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><path d="M4 9V4h5" /><path d="m4 4 6 6" /><path d="M20 15v5h-5" /><path d="m20 20-6-6" /></svg>
+        <svg aria-hidden="true" fill="none" height="17" viewBox="0 0 24 24" width="17" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><path d="M4 9V4h5" /><path d="m4 4 6 6" /><path d="M20 15v5h-5" /><path d="m20 20-6-6" /></svg>
       )}
     </button>
   );
@@ -1052,10 +1057,10 @@ function MiniPlayerToggleButton({ isOpen, onToggle, accentColor, accentSoft }: {
       aria-label={isOpen ? "关闭迷你播放器" : "打开迷你播放器"}
       title={isOpen ? "关闭迷你播放器" : "打开迷你播放器"}
       onClick={onToggle}
-      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-foreground-muted transition-colors hover:bg-white/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:h-10 sm:w-10"
+      className="inline-flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-lg text-foreground-muted transition-colors hover:bg-white/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:h-8.5 sm:w-8.5"
       style={accentColor ? { color: accentColor, ...(isOpen ? { backgroundColor: accentSoft } : {}) } : undefined}
     >
-      <svg aria-hidden="true" fill="none" height="18" viewBox="0 0 24 24" width="18" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8">
+      <svg aria-hidden="true" fill="none" height="17" viewBox="0 0 24 24" width="17" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8">
         <rect x="3.5" y="4" width="17" height="16" rx="2" />
         <rect x="11" y="12" width="7" height="5" rx="0.8" />
       </svg>

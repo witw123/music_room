@@ -309,16 +309,16 @@ export function RoomsHomePage({
 
         {/* Desktop Filter Tabs & Action Buttons */}
         <div className="hidden items-center justify-between gap-4 md:flex">
-          <div className="flex items-center gap-1 rounded-2xl border border-surface-border p-1 bg-surface-elevated/80 shadow-sm backdrop-blur-2xl" role="tablist" aria-label="房间类型筛选">
+          <div className="flex items-center gap-1 rounded-xl border border-surface-border p-1 bg-surface-elevated/70 shadow-xs backdrop-blur-xl" role="tablist" aria-label="房间类型筛选">
             {(["all", "interactive", "request", "radio"] as const).map((roomType) => {
               const isSelected = roomTypeFilter === roomType;
               return (
                 <button
                   aria-selected={isSelected}
-                  className={`flex min-h-9 whitespace-nowrap items-center justify-center rounded-xl px-4 py-1.5 text-xs sm:text-sm font-medium transition-all duration-150 ${
+                  className={`flex h-8 whitespace-nowrap items-center justify-center rounded-lg px-3.5 text-xs font-medium transition-colors ${
                     isSelected
-                      ? "bg-surface-elevated text-foreground font-semibold shadow-sm border border-surface-border"
-                      : "text-foreground-muted hover:text-foreground hover:bg-surface"
+                      ? "bg-surface text-foreground font-medium shadow-xs border border-surface-border"
+                      : "text-foreground-muted hover:text-foreground hover:bg-surface/50"
                   }`}
                   key={roomType}
                   onClick={() => setRoomTypeFilter(roomType)}
@@ -330,11 +330,11 @@ export function RoomsHomePage({
               );
             })}
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-2.5">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <Button
               data-testid="create-public-room"
               size="sm"
-              className="rounded-xl px-4 text-xs sm:text-sm font-semibold bg-accent hover:bg-accent-hover text-white shadow-sm transition-all active:scale-95"
+              className="h-8 rounded-lg px-3.5 text-xs font-medium bg-accent hover:bg-accent-hover text-white shadow-xs transition-colors"
               onClick={() => openCreateRoom("public")}
               type="button"
             >
@@ -344,7 +344,7 @@ export function RoomsHomePage({
               data-testid="open-join-room-dialog"
               variant="outline"
               size="sm"
-              className="rounded-xl border border-surface-border bg-surface hover:bg-surface-hover text-foreground text-xs sm:text-sm font-medium transition-all"
+              className="h-8 rounded-lg px-3 border border-surface-border bg-surface hover:bg-surface-hover text-foreground text-xs font-medium transition-colors"
               onClick={openJoinDialog}
               type="button"
             >
@@ -354,7 +354,7 @@ export function RoomsHomePage({
               aria-label="刷新房间列表"
               variant="ghost"
               size="sm"
-              className="rounded-xl text-foreground-muted hover:text-foreground hover:bg-surface text-xs sm:text-sm transition-all"
+              className="h-8 rounded-lg px-2.5 text-foreground-muted hover:text-foreground hover:bg-surface text-xs transition-colors"
               onClick={() => startTransition(() => void refreshAvailableRooms())}
               type="button"
             >

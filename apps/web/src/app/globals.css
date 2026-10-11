@@ -64,7 +64,7 @@
   }
 
   html[data-sidebar-collapsed="false"] {
-    --app-sidebar-width: 12rem;
+    --app-sidebar-width: 12.5rem;
   }
 
   /* Mobile browser chrome makes `100vh` taller than the visible area, so
