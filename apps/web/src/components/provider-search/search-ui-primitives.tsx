@@ -37,7 +37,7 @@ export function Artwork({
   size: "sm" | "md" | "lg";
   className?: string;
 }) {
-  const sizes = { sm: "h-10 w-10 rounded-lg", md: "h-20 w-20 rounded-xl", lg: "rounded-2xl" };
+  const sizes = { sm: "h-9 w-9 rounded-lg border border-surface-border", md: "h-20 w-20 rounded-xl", lg: "rounded-2xl" };
   return src ? (
     // eslint-disable-next-line @next/next/no-img-element
     <img alt={alt} className={`object-cover ${sizes[size]} ${className}`} loading="lazy" referrerPolicy="no-referrer" src={getArtworkSourceUrl(src)} />

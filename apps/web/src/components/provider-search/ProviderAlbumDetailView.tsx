@@ -221,7 +221,7 @@ export function ProviderAlbumTrackTable({
             const isSelectable = selectablePredicate ? selectablePredicate(track) : true;
             return (
               <div
-                className={`group flex items-center justify-between gap-2 px-2 py-2 sm:px-3 sm:py-2 rounded-xl transition-all hover:bg-surface-hover/60 border border-transparent hover:border-surface-border/40 ${
+                className={`group flex items-center justify-between gap-2 px-2 py-1.5 sm:px-3 sm:py-2 rounded-xl transition-all hover:bg-surface-hover/60 border border-transparent hover:border-surface-border/40 min-h-[44px] sm:min-h-[48px] ${
                   actions?.onPlay ? "cursor-pointer" : ""
                 } ${isSelected ? "bg-accent/5 border-accent/20" : ""}`}
                 key={trackKey}
@@ -254,7 +254,7 @@ export function ProviderAlbumTrackTable({
                     />
                   ) : null}
 
-                  <div className="hidden sm:flex w-6 shrink-0 items-center justify-center text-xs font-semibold tabular-nums text-foreground-muted">
+                  <div className="hidden sm:flex w-7 shrink-0 items-center justify-center text-xs font-mono tabular-nums text-foreground-muted/60">
                     <span className="group-hover:hidden">{String(index + 1).padStart(2, "0")}</span>
                     <PlayIcon className="hidden group-hover:block w-3.5 h-3.5 text-accent animate-fade-in" />
                   </div>
@@ -264,7 +264,7 @@ export function ProviderAlbumTrackTable({
 
                   {/* Title & Artist */}
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-foreground group-hover:text-accent transition-colors">
+                    <p className="truncate text-[13px] sm:text-sm font-medium text-foreground group-hover:text-accent transition-colors">
                       {track.title}
                     </p>
                     <p className="truncate text-xs text-foreground-muted mt-0.5">
@@ -280,7 +280,7 @@ export function ProviderAlbumTrackTable({
                 </span>
 
                 {/* Duration */}
-                <span className="hidden sm:inline-block shrink-0 text-xs font-mono text-foreground-muted tabular-nums px-2">
+                <span className="hidden sm:inline-block shrink-0 text-xs font-mono text-foreground-muted/60 tabular-nums px-2">
                   {formatDuration(track.durationMs)}
                 </span>
 
@@ -320,7 +320,7 @@ function TrackActions({ track, actions }: { track: Track; actions: ProviderAlbum
 
   return (
     <div className="flex items-center gap-1 shrink-0" onClick={(event) => event.stopPropagation()}>
-      <div className="hidden items-center gap-1 sm:flex">
+      <div className="hidden items-center gap-1 sm:flex opacity-90 sm:opacity-0 group-hover:opacity-100 transition-opacity">
         {actions.onImport ? (
           inRoom ? (
             <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium text-emerald-500 bg-emerald-500/10 border border-emerald-500/20">
@@ -474,11 +474,11 @@ function AlbumArtwork({ alt, src }: { alt: string; src: string | null }) {
 function TrackArtwork({ alt, src }: { alt: string; src: string | null }) {
   const [failed, setFailed] = useState(false);
   if (!src || failed) {
-    return <span aria-label={alt} className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white/[0.06] border border-white/[0.08] text-xs text-foreground-muted">♪</span>;
+    return <span aria-label={alt} className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-surface border border-surface-border text-xs text-foreground-muted">♪</span>;
   }
   return (
     // eslint-disable-next-line @next/next/no-img-element
-    <img alt={alt} className="h-10 w-10 shrink-0 rounded-xl object-cover border border-white/10 shadow-sm" decoding="async" loading="lazy" onError={() => setFailed(true)} src={getArtworkSourceUrl(src)} />
+    <img alt={alt} className="h-9 w-9 shrink-0 rounded-lg object-cover border border-surface-border shadow-xs" decoding="async" loading="lazy" onError={() => setFailed(true)} src={getArtworkSourceUrl(src)} />
   );
 }
 

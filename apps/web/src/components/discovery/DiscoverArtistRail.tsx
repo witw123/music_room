@@ -17,6 +17,7 @@ export function DiscoverArtistRail({
   if (!artists.length) return null;
   return (
     <DiscoverSection
+      eyebrow="ARTISTS"
       title="常听艺人"
       subtitle="开启单曲漫游与相关推荐"
     >

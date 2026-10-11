@@ -203,13 +203,13 @@ export function RoomLyricsPanel({
       data-testid="room-lyrics-panel"
     >
       {showControls && (canToggleTranslation || canToggleRomanized || Boolean(onOffsetChange)) ? (
-        <div className="absolute right-1 top-1/2 z-10 flex -translate-y-1/2 flex-col items-center gap-2 sm:right-2">
+        <div className="absolute right-1 top-1/2 z-10 flex -translate-y-1/2 flex-col items-center gap-1.5 sm:right-2">
           {!isChineseLyrics && canToggleTranslation ? (
             <button
               aria-label={showTranslation ? "关闭翻译" : "开启翻译"}
               aria-pressed={showTranslation}
-              className={`flex h-10 w-10 items-center justify-center rounded-full border text-base transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-30 ${
-                showTranslation ? "border-foreground text-foreground" : "border-surface-border/60 text-foreground-muted hover:border-foreground-muted hover:text-foreground"
+              className={`flex h-8 w-8 items-center justify-center rounded-full border text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-30 ${
+                showTranslation ? "border-accent bg-accent/15 text-accent" : "border-surface-border bg-surface/50 text-foreground-muted hover:border-surface-border hover:bg-surface-hover hover:text-foreground"
               }`}
               disabled={!canToggleTranslation}
               onClick={onToggleTranslation}
@@ -223,8 +223,8 @@ export function RoomLyricsPanel({
             <button
               aria-label={showRomanized ? "关闭罗马音" : "开启罗马音"}
               aria-pressed={showRomanized}
-              className={`flex h-10 w-10 items-center justify-center rounded-full border text-base transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-30 ${
-                showRomanized ? "border-foreground text-foreground" : "border-surface-border/60 text-foreground-muted hover:border-foreground-muted hover:text-foreground"
+              className={`flex h-8 w-8 items-center justify-center rounded-full border text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-30 ${
+                showRomanized ? "border-accent bg-accent/15 text-accent" : "border-surface-border bg-surface/50 text-foreground-muted hover:border-surface-border hover:bg-surface-hover hover:text-foreground"
               }`}
               disabled={!canToggleRomanized}
               onClick={onToggleRomanized}
@@ -235,10 +235,10 @@ export function RoomLyricsPanel({
             </button>
           ) : null}
           {onOffsetChange ? (
-            <div className="flex flex-col items-center gap-0.5 rounded-2xl border border-surface-border/60 bg-surface/50 p-1 backdrop-blur-sm shadow-xs">
+            <div className="flex flex-col items-center gap-0.5 rounded-xl border border-surface-border bg-surface/50 p-1 backdrop-blur-sm shadow-xs">
               <button
                 aria-label="歌词提前 0.5 秒"
-                className="flex h-6 w-6 items-center justify-center rounded-full text-xs text-foreground-muted hover:bg-surface-elevated hover:text-foreground transition-colors"
+                className="flex h-5 w-5 items-center justify-center rounded-md text-[11px] font-mono text-foreground-muted hover:bg-surface-hover hover:text-foreground transition-colors"
                 onClick={() => onOffsetChange(offsetMs + 500)}
                 title="歌词提前 0.5s"
                 type="button"
@@ -248,7 +248,7 @@ export function RoomLyricsPanel({
               <button
                 aria-label="重置歌词时间"
                 className={`px-1 py-0.5 text-[10px] tabular-nums font-mono transition-colors ${
-                  offsetMs !== 0 ? "text-accent font-semibold" : "text-foreground-muted hover:text-foreground"
+                  offsetMs !== 0 ? "text-accent font-semibold" : "text-foreground-muted/70 hover:text-foreground"
                 }`}
                 onClick={() => onOffsetChange(0)}
                 title={offsetMs !== 0 ? `已微调 ${(offsetMs / 1000).toFixed(1)}s (点击复位)` : "时间微调"}
@@ -258,7 +258,7 @@ export function RoomLyricsPanel({
               </button>
               <button
                 aria-label="歌词推迟 0.5 秒"
-                className="flex h-6 w-6 items-center justify-center rounded-full text-xs text-foreground-muted hover:bg-surface-elevated hover:text-foreground transition-colors"
+                className="flex h-5 w-5 items-center justify-center rounded-md text-[11px] font-mono text-foreground-muted hover:bg-surface-hover hover:text-foreground transition-colors"
                 onClick={() => onOffsetChange(offsetMs - 500)}
                 title="歌词推迟 0.5s"
                 type="button"
@@ -309,10 +309,10 @@ export function RoomLyricsPanel({
                   tabIndex={canSeekLine ? 0 : undefined}
                   data-testid="room-lyrics-line"
                   style={{ fontSize: `${getLyricFontSize({ isActive, visibleLines, fontScale })}rem` }}
-                  className={`${lineAlignmentClass} flex w-full ${canSeekLine ? "cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent" : ""} ${isActive ? (isSevenLineView ? "min-h-[3.5rem] sm:min-h-[4rem]" : isFiveLineView ? "min-h-[4rem] sm:min-h-[4.5rem]" : "min-h-[3rem] sm:min-h-[3.5rem]") : (isSevenLineView ? "min-h-[2.25rem] sm:min-h-[2.5rem]" : isFiveLineView ? "min-h-[2.5rem] sm:min-h-[3rem]" : "min-h-[2rem] sm:min-h-[2.25rem]")} shrink-0 ${mobile ? "max-w-none px-1 [overflow-wrap:anywhere]" : "max-w-[30rem]"} items-center break-words leading-[1.35] ${frozen ? "" : "transition-[opacity,transform,color] duration-300"} ${isSelected ? "text-accent" : "text-foreground"} ${
+                  className={`${lineAlignmentClass} flex w-full ${canSeekLine ? "cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent" : ""} ${isActive ? (isSevenLineView ? "min-h-[3.5rem] sm:min-h-[4rem]" : isFiveLineView ? "min-h-[4rem] sm:min-h-[4.5rem]" : "min-h-[3rem] sm:min-h-[3.5rem]") : (isSevenLineView ? "min-h-[2.25rem] sm:min-h-[2.5rem]" : isFiveLineView ? "min-h-[2.5rem] sm:min-h-[3rem]" : "min-h-[2rem] sm:min-h-[2.25rem]")} shrink-0 ${mobile ? "max-w-none px-1 [overflow-wrap:anywhere]" : immersive ? "max-w-[40rem]" : "max-w-[30rem]"} items-center break-words leading-[1.38] ${frozen ? "" : "transition-[opacity,transform,color] duration-300"} ${isSelected ? "text-accent" : "text-foreground"} ${
                     isActive
-                      ? `font-bold opacity-100 ${isSevenLineView ? "text-[1.05rem] sm:text-[1.25rem]" : isFiveLineView ? "text-[1.15rem] sm:text-[1.4rem]" : "text-[1.05rem] sm:text-[1.25rem]"}`
-                      : `font-medium opacity-30 hover:opacity-60 ${isSevenLineView ? "text-[0.75rem] sm:text-[0.9rem]" : isFiveLineView ? "text-[0.8rem] sm:text-[0.95rem]" : "text-[0.78rem] sm:text-[0.9rem]"}`
+                      ? `font-bold opacity-100 ${isSevenLineView ? "text-[1.1rem] sm:text-[1.3rem]" : isFiveLineView ? "text-[1.2rem] sm:text-[1.45rem]" : "text-[1.1rem] sm:text-[1.3rem]"}`
+                      : `font-medium opacity-30 hover:opacity-65 ${isSevenLineView ? "text-[0.78rem] sm:text-[0.92rem]" : isFiveLineView ? "text-[0.82rem] sm:text-[0.98rem]" : "text-[0.8rem] sm:text-[0.92rem]"}`
                   }`}
                 >
                   <span className="block w-full whitespace-pre-wrap">

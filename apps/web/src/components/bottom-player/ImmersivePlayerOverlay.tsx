@@ -319,7 +319,7 @@ export function ImmersivePlayerOverlay({
         <svg aria-hidden="true" fill="none" height="20" viewBox="0 0 24 24" width="20" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><path d="M6 6l12 12M18 6 6 18" /></svg>
       </button>
 
-      <main className="relative z-10 mx-auto hidden h-[calc(100*var(--app-dvh))] min-h-0 w-full max-w-[1560px] grid-cols-2 items-center gap-12 overflow-hidden px-10 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-16 md:grid lg:gap-16 lg:px-14 xl:gap-24 xl:px-20">
+      <main className="relative z-10 mx-auto hidden h-[calc(100*var(--app-dvh))] min-h-0 w-full max-w-[1560px] grid-cols-[minmax(0,44%)_minmax(0,56%)] lg:grid-cols-[minmax(0,42%)_minmax(0,58%)] items-center gap-10 overflow-hidden px-8 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-16 md:grid lg:gap-14 lg:px-12 xl:gap-20 xl:px-16">
         <div className="relative flex min-h-0 w-full min-w-0 items-center justify-center">
           <DesktopImmersivePlayer
             roomId={roomId}
@@ -360,7 +360,7 @@ export function ImmersivePlayerOverlay({
             commitSeek={commitSeek}
           />
         </div>
-        <section className="flex h-[min(78vh,52rem)] min-h-0 w-full max-w-[36rem] min-w-0 flex-col justify-center justify-self-center overflow-hidden" aria-label="歌曲信息与歌词">
+        <section className="flex h-[min(78vh,52rem)] min-h-0 w-full max-w-[42rem] min-w-0 flex-col justify-center justify-self-start overflow-hidden" aria-label="歌曲信息与歌词">
           <ImmersiveLyrics desktop frozen={playbackBarrierBlocked} isOpen={isOpen} isPlaying={isPlaying} onSeekToPosition={onSeekToPosition} roomLyrics={currentTrack?.lyrics ?? null} translatedLyrics={currentTrack?.translatedLyrics ?? null} romanizedLyrics={currentTrack?.romanizedLyrics ?? null} sourceProvider={sourceProvider} sourceTrackId={sourceTrackId} />
         </section>
       </main>

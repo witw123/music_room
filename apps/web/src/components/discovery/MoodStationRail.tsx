@@ -64,10 +64,11 @@ export function MoodStationRail({
 }) {
   return (
     <DiscoverSection
+      eyebrow="STATIONS"
       title="场景电台"
       subtitle="随时切入适合当前状态的流式旋律"
     >
-      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-2 sm:gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
         {moodStations.map((station) => {
           const IconComp = station.icon;
           const isPending = pending === `mood:${station.id}`;
@@ -77,22 +78,22 @@ export function MoodStationRail({
               type="button"
               disabled={pending !== null}
               onClick={() => void onPlayStation(station)}
-              className="group relative flex flex-col justify-between overflow-hidden rounded-xl border border-surface-border bg-surface-elevated p-3 sm:p-3.5 text-left transition-all duration-150 hover:bg-surface-hover hover:border-surface-border-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent min-h-[92px] sm:min-h-[98px] shadow-xs active:scale-[0.98] cursor-pointer select-none"
+              className="group relative flex flex-col justify-between overflow-hidden rounded-xl border border-surface-border bg-surface-elevated/70 p-2.5 sm:p-3 text-left transition-all duration-150 hover:bg-surface-hover hover:border-surface-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent min-h-[80px] sm:min-h-[86px] shadow-xs active:scale-[0.98] cursor-pointer select-none"
             >
               <div className="flex items-center justify-between w-full">
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-surface-border bg-surface text-foreground-muted transition-colors group-hover:text-foreground">
+                <div className="flex h-6 w-6 items-center justify-center rounded-md border border-surface-border bg-surface text-foreground-muted transition-colors group-hover:text-foreground">
                   <IconComp className="w-3.5 h-3.5" />
                 </div>
-                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-accent text-white shadow-sm opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition-all scale-95 group-hover:scale-100">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-accent text-white shadow-xs opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition-all scale-95 group-hover:scale-100">
                   {isPending ? (
-                    <span className="h-3 w-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span className="h-2.5 w-2.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   ) : (
-                    <PlayIcon className="w-3 h-3 ml-0.5" />
+                    <PlayIcon className="w-2.5 h-2.5 ml-0.5" />
                   )}
                 </span>
               </div>
-              <div className="mt-2">
-                <p className="text-xs sm:text-sm font-semibold tracking-tight text-foreground transition-colors group-hover:text-accent">
+              <div className="mt-1.5">
+                <p className="text-xs sm:text-[13px] font-semibold tracking-tight text-foreground transition-colors group-hover:text-accent">
                   {station.title}
                 </p>
                 <p className="mt-0.5 text-[10px] sm:text-[11px] text-foreground-muted truncate">

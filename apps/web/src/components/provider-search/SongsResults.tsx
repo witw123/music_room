@@ -41,10 +41,10 @@ export function SongsResults({
   return (
     <section className="mt-4 sm:mt-6">
       {results.length ? (
-        <div className="min-w-0 overflow-hidden rounded-2xl border border-white/[0.08] bg-black/40 backdrop-blur-sm">
+        <div className="min-w-0 overflow-hidden rounded-2xl border border-surface-border bg-surface/50 backdrop-blur-sm">
           {/* Desktop Table Header */}
-          <div className="hidden grid-cols-[42px_minmax(0,1.4fr)_minmax(120px,0.75fr)_minmax(140px,1fr)_90px_150px] gap-3 border-b border-white/[0.08] px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/30 md:grid">
-            <span>#</span>
+          <div className="hidden grid-cols-[38px_minmax(0,1.4fr)_minmax(120px,0.75fr)_minmax(140px,1fr)_80px_140px] gap-3 border-b border-surface-border px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground-muted/60 md:grid">
+            <span className="text-center">#</span>
             <span>单曲</span>
             <span>歌手</span>
             <span>专辑</span>
@@ -53,7 +53,7 @@ export function SongsResults({
           </div>
 
           {/* Track Rows */}
-          <div className="divide-y divide-white/[0.05]">
+          <div className="divide-y divide-surface-border/50">
             {results.map((track, index) => {
               const trackPlayKey = `play:${track.provider}:${track.providerTrackId}`;
               const isPlayingThis = pending === trackPlayKey;
@@ -74,12 +74,12 @@ export function SongsResults({
               return (
                 <article
                   key={`${track.provider}-${track.providerTrackId}`}
-                  className="group relative transition-colors hover:bg-white/[0.04] active:bg-white/[0.07]"
+                  className="group relative transition-colors hover:bg-surface-hover/60 active:bg-surface-hover/80"
                   data-testid="search-track-row"
                 >
                   {/* Mobile Row Design: Modern single-line ergonomic flex layout */}
                   <div
-                    className="flex items-center justify-between gap-2.5 px-3 py-2.5 md:hidden cursor-pointer"
+                    className="flex items-center justify-between gap-2.5 px-3 py-2 md:hidden cursor-pointer"
                     onClick={() => {
                       if (onPlay && pending === null) {
                         void onPlay(track);
@@ -87,13 +87,13 @@ export function SongsResults({
                     }}
                   >
                     {/* Artwork with play overlay */}
-                    <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-black/50">
+                    <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-surface-border bg-surface">
                       <Artwork alt={track.album ?? track.title} size="sm" src={track.artworkUrl} />
                       <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-active:opacity-100 transition-opacity">
                         {isPlayingThis ? (
-                          <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                          <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
                         ) : (
-                          <svg className="h-4 w-4 text-white" fill="currentColor" viewBox="0 0 24 24">
+                          <svg className="h-3.5 w-3.5 text-white" fill="currentColor" viewBox="0 0 24 24">
                             <path d="M8 5v14l11-7z" />
                           </svg>
                         )}
@@ -103,7 +103,7 @@ export function SongsResults({
                     {/* Meta: Title & Artist/Album */}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 min-w-0">
-                        <h3 className="truncate text-sm font-medium text-white/90 leading-tight">
+                        <h3 className="truncate text-[13px] font-medium text-foreground leading-tight">
                           {track.title}
                         </h3>
                         {isMultiPart ? (
@@ -121,12 +121,12 @@ export function SongsResults({
                           </button>
                         ) : null}
                       </div>
-                      <div className="mt-1 flex items-center gap-1.5 text-xs text-white/45 truncate">
+                      <div className="mt-0.5 flex items-center gap-1.5 text-xs text-foreground-muted truncate">
                         <span className="truncate">{track.artist}</span>
                         {track.album ? (
                           <>
-                            <span className="text-white/20 shrink-0">·</span>
-                            <span className="truncate max-w-[120px] text-white/40">{track.album}</span>
+                            <span className="text-foreground-muted/40 shrink-0">·</span>
+                            <span className="truncate max-w-[120px] text-foreground-muted/70">{track.album}</span>
                           </>
                         ) : null}
                       </div>
@@ -141,7 +141,7 @@ export function SongsResults({
                       {onPlay ? (
                         <Button
                           aria-label={`播放《${track.title}》`}
-                          className="h-8 w-8 text-white/70 hover:text-white"
+                          className="h-8 w-8 text-foreground-muted hover:text-foreground"
                           disabled={pending !== null}
                           onClick={() => void onPlay(track)}
                           size="icon"
@@ -163,7 +163,7 @@ export function SongsResults({
                       {isBilibili ? (
                         <Button
                           aria-label={`查看《${track.title}》分P列表`}
-                          className="h-8 w-8 text-white/70 hover:text-white"
+                          className="h-8 w-8 text-foreground-muted hover:text-foreground"
                           disabled={pending !== null}
                           onClick={() => onOpenBilibiliParts?.(track)}
                           size="icon"
@@ -185,7 +185,7 @@ export function SongsResults({
                       {/* Download */}
                       <Button
                         aria-label={downloaded ? `《${track.title}》已下载` : `下载《${track.title}》`}
-                        className="h-8 w-8 text-white/70 hover:text-white"
+                        className="h-8 w-8 text-foreground-muted hover:text-foreground"
                         disabled={pending !== null || downloaded || downloading}
                         onClick={() => void onDownload(track)}
                         size="icon"
@@ -199,7 +199,7 @@ export function SongsResults({
                       {/* Add to Playlist */}
                       <Button
                         aria-label={`加入歌单 ${track.title}`}
-                        className="h-8 w-8 text-white/70 hover:text-white"
+                        className="h-8 w-8 text-foreground-muted hover:text-foreground"
                         disabled={pending !== null}
                         onClick={(event) => void onImportPlaylist(track, getAnchoredDialogAnchor(event.currentTarget))}
                         size="icon"
@@ -212,7 +212,7 @@ export function SongsResults({
 
                       {/* Favorite */}
                       <FavoriteTrackButton
-                        className="h-8 w-8 text-white/70 hover:text-white"
+                        className="h-8 w-8 text-foreground-muted hover:text-foreground"
                         isFavorite={isFavorite(track)}
                         onToggle={() => onToggleFavorite(track)}
                         pending={isTogglingFavorite(track)}
@@ -223,30 +223,30 @@ export function SongsResults({
 
                   {/* Desktop Grid Layout */}
                   <div
-                    className="hidden cursor-pointer md:grid md:grid-cols-[42px_minmax(0,1.4fr)_minmax(120px,0.75fr)_minmax(140px,1fr)_90px_150px] md:items-center md:gap-3 md:px-5 md:py-3.5"
+                    className="hidden cursor-pointer md:grid md:grid-cols-[38px_minmax(0,1.4fr)_minmax(120px,0.75fr)_minmax(140px,1fr)_80px_140px] md:items-center md:gap-3 md:px-4 md:py-2.5 min-h-[48px]"
                     onClick={() => {
                       if (onPlay && pending === null) {
                         void onPlay(track);
                       }
                     }}
                   >
-                    <div className="flex items-center text-sm tabular-nums text-white/25">
+                    <div className="flex items-center justify-center text-xs font-mono tabular-nums text-foreground-muted/50 group-hover:text-accent">
                       {isPlayingThis ? (
                         <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-accent border-t-transparent" />
                       ) : (
                         <>
                           <span className="group-hover:hidden">{String(index + 1).padStart(2, "0")}</span>
-                          <svg className="hidden h-4 w-4 text-white group-hover:block" fill="currentColor" viewBox="0 0 24 24">
+                          <svg className="hidden h-3.5 w-3.5 text-accent group-hover:block" fill="currentColor" viewBox="0 0 24 24">
                             <path d="M8 5v14l11-7z" />
                           </svg>
                         </>
                       )}
                     </div>
 
-                    <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex min-w-0 items-center gap-2.5">
                       <Artwork alt={track.album ?? track.title} size="sm" src={track.artworkUrl} />
                       <div className="flex items-center gap-1.5 min-w-0">
-                        <h3 className="truncate text-sm font-medium text-white/90 group-hover:text-white transition-colors">
+                        <h3 className="truncate text-[13px] font-medium text-foreground group-hover:text-accent transition-colors">
                           {track.title}
                         </h3>
                         {isMultiPart ? (
@@ -266,19 +266,19 @@ export function SongsResults({
                       </div>
                     </div>
 
-                    <span className="truncate text-xs text-white/55">{track.artist}</span>
-                    <TrackAlbumLink className="truncate text-xs" onAlbum={onAlbum} pending={pending} track={track} />
-                    <span className="text-xs tabular-nums text-white/35">{formatDuration(track.durationMs)}</span>
+                    <span className="truncate text-xs text-foreground-muted">{track.artist}</span>
+                    <TrackAlbumLink className="truncate text-xs text-foreground-muted/70 hover:text-foreground" onAlbum={onAlbum} pending={pending} track={track} />
+                    <span className="text-xs font-mono tabular-nums text-foreground-muted/50">{formatDuration(track.durationMs)}</span>
 
                     <div
-                      className="flex items-center justify-end gap-1"
+                      className="flex items-center justify-end gap-0.5 opacity-80 sm:opacity-0 group-hover:opacity-100 transition-opacity"
                       onClick={(e) => e.stopPropagation()}
                     >
                       {/* Bilibili Multi-Part Entrance */}
                       {isBilibili ? (
                         <Button
                           aria-label={`查看《${track.title}》分P列表`}
-                          className="h-8 w-8 text-white/60 hover:text-white"
+                          className="h-8 w-8 text-foreground-muted hover:text-foreground hover:bg-surface-hover"
                           disabled={pending !== null}
                           onClick={() => onOpenBilibiliParts?.(track)}
                           size="icon"
@@ -298,7 +298,7 @@ export function SongsResults({
                       ) : null}
                       <Button
                         aria-label={downloaded ? `《${track.title}》已下载` : `下载《${track.title}》`}
-                        className="h-8 w-8 text-white/60 hover:text-white"
+                        className="h-8 w-8 text-foreground-muted hover:text-foreground hover:bg-surface-hover"
                         disabled={pending !== null || downloaded || downloading}
                         onClick={() => void onDownload(track)}
                         size="icon"
@@ -310,7 +310,7 @@ export function SongsResults({
                       </Button>
                       <Button
                         aria-label={`加入歌单 ${track.title}`}
-                        className="h-8 w-8 text-white/60 hover:text-white"
+                        className="h-8 w-8 text-foreground-muted hover:text-foreground hover:bg-surface-hover"
                         disabled={pending !== null}
                         onClick={(event) => void onImportPlaylist(track, getAnchoredDialogAnchor(event.currentTarget))}
                         size="icon"
@@ -321,7 +321,7 @@ export function SongsResults({
                         <Icon name="playlist-add" />
                       </Button>
                       <FavoriteTrackButton
-                        className="h-8 w-8 text-white/60 hover:text-white"
+                        className="h-8 w-8 text-foreground-muted hover:text-foreground hover:bg-surface-hover"
                         isFavorite={isFavorite(track)}
                         onToggle={() => onToggleFavorite(track)}
                         pending={isTogglingFavorite(track)}
