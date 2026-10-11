@@ -171,4 +171,64 @@ describe("room audio output", () => {
     expect(context.createMediaStreamDestination).toHaveBeenCalledTimes(2);
     expect(track.stop).toHaveBeenCalled();
   });
+
+  it("fades graph volume smoothly over duration", async () => {
+    const { context, gain } = createAudioContextMock();
+    vi.spyOn(roomAudioOutput, "getSharedAudioContext")
+      .mockReturnValue(context as unknown as AudioContext);
+    const audio = { volume: 1 } as HTMLAudioElement;
+    roomAudioOutput.bindLocalAudioElement(audio, { broadcast: false });
+
+    await roomAudioOutput.fadeOutAudio(50);
+    expect(gain.gain.cancelScheduledValues).toHaveBeenCalled();
+    expect(gain.gain.setTargetAtTime).toHaveBeenCalledWith(0, 12, expect.any(Number));
+
+    await roomAudioOutput.fadeInAudio(0.8, 50);
+    expect(gain.gain.setTargetAtTime).toHaveBeenCalledWith(0.8, 12, expect.any(Number));
+  });
+
+  it("supports setting equalizer gains and inserting equalizer filters when available", () => {
+    const filters: Array<{
+      type: string;
+      gain: { value: number };
+      frequency: { value: number };
+      connect: ReturnType<typeof vi.fn>;
+      disconnect: ReturnType<typeof vi.fn>;
+    }> = [];
+    const baseMock = createAudioContextMock();
+    const contextWithFilters = {
+      ...baseMock.context,
+      createBiquadFilter: vi.fn(() => {
+        const filter = {
+          type: "peaking",
+          gain: { value: 0 },
+          frequency: { value: 1000 },
+          connect: vi.fn(),
+          disconnect: vi.fn()
+        };
+        filters.push(filter);
+        return filter;
+      })
+    };
+    vi.spyOn(roomAudioOutput, "getSharedAudioContext")
+      .mockReturnValue(contextWithFilters as unknown as AudioContext);
+
+    roomAudioOutput.setEqualizerGains([3, 2, 0, -1, 4]);
+    expect(roomAudioOutput.getEqualizerGains()).toEqual([3, 2, 0, -1, 4]);
+
+    const audio = { volume: 1 } as HTMLAudioElement;
+    roomAudioOutput.bindLocalAudioElement(audio, { broadcast: false });
+
+    expect(contextWithFilters.createBiquadFilter).toHaveBeenCalledTimes(5);
+    expect(filters[0].gain.value).toBe(3);
+    expect(filters[1].gain.value).toBe(2);
+    expect(filters[4].gain.value).toBe(4);
+
+    // Dynamic gain update while bound
+    roomAudioOutput.setEqualizerGains([0, 0, 0, 0, 0]);
+    expect(filters[0].gain.value).toBe(0);
+
+    roomAudioOutput.releaseRoomAudioSession();
+    expect(filters[0].disconnect).toHaveBeenCalled();
+  });
 });

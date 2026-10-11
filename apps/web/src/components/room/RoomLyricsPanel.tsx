@@ -20,6 +20,8 @@ type RoomLyricsPanelProps = {
   showControls: boolean;
   showTranslation: boolean;
   showRomanized: boolean;
+  offsetMs?: number;
+  onOffsetChange?: (offsetMs: number) => void;
   onToggleTranslation?: () => void;
   onToggleRomanized?: () => void;
   onSeek?: (positionMs: number) => void;
@@ -42,6 +44,8 @@ export function RoomLyricsPanel({
   showControls,
   showTranslation,
   showRomanized,
+  offsetMs = 0,
+  onOffsetChange,
   onToggleTranslation,
   onToggleRomanized,
   onSeek
@@ -104,7 +108,8 @@ export function RoomLyricsPanel({
     return () => window.cancelAnimationFrame(animationFrameId);
   }, [isPlaying, frozen, positionMs]);
 
-  const activeIndex = getActiveRoomLyricIndex(lines, smoothPositionMs);
+  const effectivePositionMs = Math.max(0, smoothPositionMs + offsetMs);
+  const activeIndex = getActiveRoomLyricIndex(lines, effectivePositionMs);
   const activeLineRef = useRef<HTMLParagraphElement | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -197,34 +202,71 @@ export function RoomLyricsPanel({
       className={`pointer-events-auto relative z-20 mx-auto flex w-full ${immersive || mobile ? "max-w-none" : "max-w-[min(100%,34rem)]"} ${immersive || mobile ? "flex-1 self-stretch" : "flex-none"} flex-col overflow-hidden px-3 ${frozen ? "" : "animate-fade-in"} sm:px-6 ${panelHeightClass} ${className ?? ""}`}
       data-testid="room-lyrics-panel"
     >
-      {showControls && !isChineseLyrics ? (
-        <div className="absolute right-1 top-1/2 z-10 flex -translate-y-1/2 flex-col gap-2 sm:right-2">
-          <button
-            aria-label={showTranslation ? "关闭翻译" : "开启翻译"}
-            aria-pressed={showTranslation}
-            className={`flex h-10 w-10 items-center justify-center rounded-full border text-base transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-30 ${
-              showTranslation ? "border-foreground text-foreground" : "border-surface-border/60 text-foreground-muted hover:border-foreground-muted hover:text-foreground"
-            }`}
-            disabled={!canToggleTranslation}
-            onClick={onToggleTranslation}
-            title={canToggleTranslation ? (showTranslation ? "关闭翻译" : "开启翻译") : "暂无翻译"}
-            type="button"
-          >
-            译
-          </button>
-          <button
-            aria-label={showRomanized ? "关闭罗马音" : "开启罗马音"}
-            aria-pressed={showRomanized}
-            className={`flex h-10 w-10 items-center justify-center rounded-full border text-base transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-30 ${
-              showRomanized ? "border-foreground text-foreground" : "border-surface-border/60 text-foreground-muted hover:border-foreground-muted hover:text-foreground"
-            }`}
-            disabled={!canToggleRomanized}
-            onClick={onToggleRomanized}
-            title={canToggleRomanized ? (showRomanized ? "关闭罗马音" : "开启罗马音") : "暂无罗马音"}
-            type="button"
-          >
-            音
-          </button>
+      {showControls && (canToggleTranslation || canToggleRomanized || Boolean(onOffsetChange)) ? (
+        <div className="absolute right-1 top-1/2 z-10 flex -translate-y-1/2 flex-col items-center gap-2 sm:right-2">
+          {!isChineseLyrics && canToggleTranslation ? (
+            <button
+              aria-label={showTranslation ? "关闭翻译" : "开启翻译"}
+              aria-pressed={showTranslation}
+              className={`flex h-10 w-10 items-center justify-center rounded-full border text-base transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-30 ${
+                showTranslation ? "border-foreground text-foreground" : "border-surface-border/60 text-foreground-muted hover:border-foreground-muted hover:text-foreground"
+              }`}
+              disabled={!canToggleTranslation}
+              onClick={onToggleTranslation}
+              title={canToggleTranslation ? (showTranslation ? "关闭翻译" : "开启翻译") : "暂无翻译"}
+              type="button"
+            >
+              译
+            </button>
+          ) : null}
+          {!isChineseLyrics && canToggleRomanized ? (
+            <button
+              aria-label={showRomanized ? "关闭罗马音" : "开启罗马音"}
+              aria-pressed={showRomanized}
+              className={`flex h-10 w-10 items-center justify-center rounded-full border text-base transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-30 ${
+                showRomanized ? "border-foreground text-foreground" : "border-surface-border/60 text-foreground-muted hover:border-foreground-muted hover:text-foreground"
+              }`}
+              disabled={!canToggleRomanized}
+              onClick={onToggleRomanized}
+              title={canToggleRomanized ? (showRomanized ? "关闭罗马音" : "开启罗马音") : "暂无罗马音"}
+              type="button"
+            >
+              音
+            </button>
+          ) : null}
+          {onOffsetChange ? (
+            <div className="flex flex-col items-center gap-0.5 rounded-2xl border border-surface-border/60 bg-surface/50 p-1 backdrop-blur-sm shadow-xs">
+              <button
+                aria-label="歌词提前 0.5 秒"
+                className="flex h-6 w-6 items-center justify-center rounded-full text-xs text-foreground-muted hover:bg-surface-elevated hover:text-foreground transition-colors"
+                onClick={() => onOffsetChange(offsetMs + 500)}
+                title="歌词提前 0.5s"
+                type="button"
+              >
+                +
+              </button>
+              <button
+                aria-label="重置歌词时间"
+                className={`px-1 py-0.5 text-[10px] tabular-nums font-mono transition-colors ${
+                  offsetMs !== 0 ? "text-accent font-semibold" : "text-foreground-muted hover:text-foreground"
+                }`}
+                onClick={() => onOffsetChange(0)}
+                title={offsetMs !== 0 ? `已微调 ${(offsetMs / 1000).toFixed(1)}s (点击复位)` : "时间微调"}
+                type="button"
+              >
+                {offsetMs !== 0 ? `${offsetMs > 0 ? "+" : ""}${(offsetMs / 1000).toFixed(1)}s` : "±0s"}
+              </button>
+              <button
+                aria-label="歌词推迟 0.5 秒"
+                className="flex h-6 w-6 items-center justify-center rounded-full text-xs text-foreground-muted hover:bg-surface-elevated hover:text-foreground transition-colors"
+                onClick={() => onOffsetChange(offsetMs - 500)}
+                title="歌词推迟 0.5s"
+                type="button"
+              >
+                -
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
       <div className="relative min-h-0 flex-1 overflow-hidden" data-testid="room-lyrics-lines">
@@ -283,7 +325,7 @@ export function RoomLyricsPanel({
                         return <span key={`${line.id}:word:${wordIndex}`} className="inline whitespace-pre opacity-30">{word.text}</span>;
                       }
 
-                      const progress = getRoomLyricWordProgress(word, smoothPositionMs);
+                      const progress = getRoomLyricWordProgress(word, effectivePositionMs);
                       if (progress >= 1) {
                         return (
                           <span key={`${line.id}:word:${wordIndex}`} className="inline-block whitespace-pre opacity-100">

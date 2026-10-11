@@ -1,5 +1,6 @@
 import type { PlaybackMode } from "@music-room/shared";
 import { invokeTauri, isTauriRuntime } from "@/lib/desktop/tauri";
+import { EQUALIZER_PRESETS, type EqualizerPresetId } from "../playback/audio-equalizer";
 
 export const appSettingsStorageKey = "music-room-settings-v1";
 export const appSettingsChangeEvent = "music-room-settings-change";
@@ -114,6 +115,11 @@ export type AppSettings = {
     roomChatNotification: boolean;
     roomPresenceNotification: boolean;
     onlyNotifyInBackground: boolean;
+    enableFallbackSources: boolean;
+    crossfadeDurationMs: number;
+    equalizerEnabled: boolean;
+    equalizerPreset: EqualizerPresetId;
+    equalizerGains: [number, number, number, number, number];
   };
 };
 
@@ -145,7 +151,12 @@ const defaultSettings: AppSettings = {
     roomLibraryNotification: true,
     roomChatNotification: true,
     roomPresenceNotification: true,
-    onlyNotifyInBackground: true
+    onlyNotifyInBackground: true,
+    enableFallbackSources: true,
+    crossfadeDurationMs: 800,
+    equalizerEnabled: false,
+    equalizerPreset: "flat",
+    equalizerGains: [0, 0, 0, 0, 0]
   }
 };
 
@@ -257,7 +268,22 @@ export function normalizeSettings(value: unknown): AppSettings {
       roomLibraryNotification: playback.roomLibraryNotification !== false,
       roomChatNotification: playback.roomChatNotification !== false,
       roomPresenceNotification: playback.roomPresenceNotification !== false,
-      onlyNotifyInBackground: playback.onlyNotifyInBackground !== false
+      onlyNotifyInBackground: playback.onlyNotifyInBackground !== false,
+      enableFallbackSources: playback.enableFallbackSources !== false,
+      crossfadeDurationMs: typeof playback.crossfadeDurationMs === "number" && Number.isFinite(playback.crossfadeDurationMs)
+        ? Math.min(3000, Math.max(0, playback.crossfadeDurationMs))
+        : defaultSettings.playback.crossfadeDurationMs,
+      equalizerEnabled: playback.equalizerEnabled === true,
+      equalizerPreset: (typeof playback.equalizerPreset === "string" && playback.equalizerPreset in EQUALIZER_PRESETS ? playback.equalizerPreset : defaultSettings.playback.equalizerPreset) as EqualizerPresetId,
+      equalizerGains: Array.isArray(playback.equalizerGains) && playback.equalizerGains.length === 5 && playback.equalizerGains.every((g) => typeof g === "number" && Number.isFinite(g))
+        ? [
+            Math.max(-12, Math.min(12, playback.equalizerGains[0])),
+            Math.max(-12, Math.min(12, playback.equalizerGains[1])),
+            Math.max(-12, Math.min(12, playback.equalizerGains[2])),
+            Math.max(-12, Math.min(12, playback.equalizerGains[3])),
+            Math.max(-12, Math.min(12, playback.equalizerGains[4]))
+          ]
+        : [...defaultSettings.playback.equalizerGains]
     }
   };
 }
@@ -273,7 +299,10 @@ function cloneSettings(settings: AppSettings): AppSettings {
       uiScale: settings.layout.uiScale,
       customLayout: cloneCustomLayoutSettings(settings.layout.customLayout)
     },
-    playback: { ...settings.playback }
+    playback: {
+      ...settings.playback,
+      equalizerGains: [...settings.playback.equalizerGains]
+    }
   };
 }
 

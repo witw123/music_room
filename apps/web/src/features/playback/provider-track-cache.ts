@@ -28,6 +28,7 @@ import {
 import { musicRoomApi } from "@/lib/network/music-room-api";
 import { getAppSettings } from "@/features/settings/settings-store";
 import { analyzeAudioBlobLoudness } from "./loudness";
+import { downloadTrackWithFallback } from "./source-fallback-resolver";
 
 export const providerPlaybackCacheChangedEvent = "music-room-provider-playback-cache-changed";
 
@@ -44,11 +45,11 @@ export async function cacheProviderTrackForPlayback(
   if (existingCache) return existingCache;
 
   const preferredQuality = getAppSettings().playback.preferredAudioQuality;
-  const response = track.provider === "netease"
-    ? await musicRoomApi.downloadNeteaseTrack(track.providerTrackId, preferredQuality, signal)
-    : track.provider === "qqmusic"
-      ? await musicRoomApi.downloadQqMusicTrack(track.providerTrackId, preferredQuality, signal)
-      : await musicRoomApi.downloadBilibiliTrack(track.providerTrackId, signal);
+  const { response, actualTrack } = await downloadTrackWithFallback({
+    track,
+    preferredQuality,
+    signal
+  });
   signal?.throwIfAborted();
   const fileHash = await hashAudioBlob(response.blob);
   signal?.throwIfAborted();
@@ -62,8 +63,8 @@ export async function cacheProviderTrackForPlayback(
     lyrics: null,
     translatedLyrics: null,
     romanizedLyrics: null,
-    provider: track.provider,
-    providerTrackId: track.providerTrackId,
+    provider: actualTrack.provider,
+    providerTrackId: actualTrack.providerTrackId,
     mimeType,
     durationMs: track.durationMs,
     sizeBytes: response.blob.size,
@@ -81,13 +82,13 @@ export async function cacheProviderTrackForPlayback(
   // Keep the Blob in IndexedDB until the directory copy has committed.
   // Yield a task so playback can bind its audio before optional work starts.
   setTimeout(async () => {
-    await completePlaybackMetadata(track, response.blob, fileHash).catch(() => undefined);
+    await completePlaybackMetadata(actualTrack, response.blob, fileHash).catch(() => undefined);
     await saveCachedAudioFileToLocalDirectory({
       file: response.blob,
       fileHash,
-      title: track.title,
+      title: actualTrack.title,
       mimeType,
-      provider: track.provider
+      provider: actualTrack.provider
     }).catch(() => undefined);
   }, 0);
 

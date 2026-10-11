@@ -6,6 +6,7 @@ import {
   type RoomAudioElementPlayOptions,
   type RoomAudioElementPlayResult
 } from "./room-audio-activation-manager";
+import { EqualizerFilterNodeChain } from "./audio-equalizer";
 
 type PrimeRoomAudioOutputInput = {
   localAudio?: HTMLAudioElement | null;
@@ -28,6 +29,7 @@ type LocalAudioElementGraph = {
   context: AudioContext;
   source: MediaElementAudioSourceNode;
   normalizationGain: GainNode;
+  equalizerChain: EqualizerFilterNodeChain | null;
   localGain: GainNode;
   broadcastDestination: MediaStreamAudioDestinationNode | null;
 };
@@ -38,6 +40,7 @@ export class RoomAudioOutput {
   private broadcastDestination: MediaStreamAudioDestinationNode | null = null;
   private readonly broadcastStreamListeners = new Set<BroadcastStreamListener>();
   private localAudioElementGraph: LocalAudioElementGraph | null = null;
+  private equalizerGains: [number, number, number, number, number] | null = null;
   private readonly localAudioElementSources = new WeakMap<
     HTMLAudioElement,
     { context: AudioContext; source: MediaElementAudioSourceNode }
@@ -70,6 +73,51 @@ export class RoomAudioOutput {
     const resumed = await roomAudioActivationManager.resumeSharedAudioContext();
     this.applyVolume(input);
     return resumed;
+  }
+
+  async fadeGraphVolume(targetVolume: number, durationMs = 400): Promise<void> {
+    const graph = this.localAudioElementGraph;
+    if (!graph) return;
+    const safeVolume = normalizeOutputVolume(targetVolume);
+    try {
+      const now = graph.context.currentTime;
+      const durationSec = Math.max(0.05, durationMs / 1000);
+      graph.localGain.gain.cancelScheduledValues(now);
+      graph.localGain.gain.setValueAtTime(graph.localGain.gain.value, now);
+      if (typeof (graph.localGain.gain as unknown as { linearRampToValueAtTime?: unknown }).linearRampToValueAtTime === "function") {
+        (graph.localGain.gain as unknown as { linearRampToValueAtTime: (v: number, t: number) => void }).linearRampToValueAtTime(safeVolume, now + durationSec);
+      } else if (typeof graph.localGain.gain.setTargetAtTime === "function") {
+        graph.localGain.gain.setTargetAtTime(safeVolume, now, durationSec / 3);
+      } else {
+        graph.localGain.gain.setValueAtTime(safeVolume, now);
+      }
+      await new Promise((resolve) => setTimeout(resolve, durationMs));
+    } catch {
+      graph.localGain.gain.value = safeVolume;
+    }
+  }
+
+  async fadeOutAudio(durationMs = 400): Promise<void> {
+    return this.fadeGraphVolume(0, durationMs);
+  }
+
+  async fadeInAudio(targetVolume: number, durationMs = 400): Promise<void> {
+    return this.fadeGraphVolume(targetVolume, durationMs);
+  }
+
+  setEqualizerGains(gains: [number, number, number, number, number] | null) {
+    this.equalizerGains = gains ? [...gains] : null;
+    if (this.localAudioElementGraph?.equalizerChain) {
+      if (gains) {
+        this.localAudioElementGraph.equalizerChain.applyGains(gains);
+      } else {
+        this.localAudioElementGraph.equalizerChain.applyGains([0, 0, 0, 0, 0]);
+      }
+    }
+  }
+
+  getEqualizerGains(): [number, number, number, number, number] | null {
+    return this.equalizerGains ? [...this.equalizerGains] : null;
   }
 
   applyVolume(input: ApplyRoomAudioVolumeInput) {
@@ -179,8 +227,22 @@ export class RoomAudioOutput {
       this.elementLoudnessGains.set(element, graphGain);
       const localGain = context.createGain();
       localGain.gain.value = requestedVolume;
+
+      let equalizerChain: EqualizerFilterNodeChain | null = null;
+      if (typeof context.createBiquadFilter === "function") {
+        equalizerChain = new EqualizerFilterNodeChain(context);
+        if (this.equalizerGains) {
+          equalizerChain.applyGains(this.equalizerGains);
+        }
+      }
+
       source.connect(normalizationGain);
-      normalizationGain.connect(localGain);
+      if (equalizerChain?.inputNode && equalizerChain?.outputNode) {
+        normalizationGain.connect(equalizerChain.inputNode);
+        equalizerChain.outputNode.connect(localGain);
+      } else {
+        normalizationGain.connect(localGain);
+      }
       localGain.connect(context.destination);
       if (destination) {
         source.connect(destination);
@@ -190,6 +252,7 @@ export class RoomAudioOutput {
         context,
         source,
         normalizationGain,
+        equalizerChain,
         localGain,
         broadcastDestination: destination
       };
@@ -288,6 +351,9 @@ export class RoomAudioOutput {
       graph.normalizationGain.disconnect();
     } catch {
       // The gain may already be disconnected during a context transition.
+    }
+    if (graph.equalizerChain) {
+      graph.equalizerChain.disconnect();
     }
     this.localAudioElementGraph = null;
   }

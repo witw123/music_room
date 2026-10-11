@@ -36,6 +36,7 @@ export type DesktopLyricsBarProps = {
   romanizedLyric?: string | null;
   showTranslation?: boolean;
   showRomanized?: boolean;
+  offsetMs?: number;
   onToggleTranslation?: () => void;
   onToggleRomanized?: () => void;
   /** Latest playback position reported by the host; interpolated with rAF. */
@@ -71,6 +72,7 @@ export function DesktopLyricsBar({
   romanizedLyric = null,
   showTranslation = true,
   showRomanized = false,
+  offsetMs = 0,
   onToggleTranslation,
   onToggleRomanized,
   progressMs,
@@ -201,9 +203,10 @@ export function DesktopLyricsBar({
   }, [isPlaying, progressMs]);
 
   // Compute active lyric line and display words
+  const effectivePositionMs = Math.max(0, smoothPositionMs + offsetMs);
   const activeIndex = useMemo(
-    () => (lines.length > 0 ? Math.max(0, getActiveRoomLyricIndex(lines, smoothPositionMs)) : -1),
-    [lines, smoothPositionMs]
+    () => (lines.length > 0 ? Math.max(0, getActiveRoomLyricIndex(lines, effectivePositionMs)) : -1),
+    [lines, effectivePositionMs]
   );
   const activeLine = activeIndex >= 0 ? lines[activeIndex] : null;
   const displayWords = useMemo(
@@ -385,7 +388,7 @@ export function DesktopLyricsBar({
                 );
               }
 
-              const progress = getRoomLyricWordProgress(word, smoothPositionMs);
+              const progress = getRoomLyricWordProgress(word, effectivePositionMs);
               if (progress >= 1) {
                 return (
                   <span

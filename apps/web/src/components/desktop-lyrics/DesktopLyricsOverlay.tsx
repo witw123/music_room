@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } f
 import { DesktopLyricsBar } from "./DesktopLyricsBar";
 import { isCapacitorRuntime, isTauriRuntime } from "@/lib/desktop/tauri";
 import { useDesktopLyrics, getDesktopLyricsPositionStorageKey } from "@/features/playback/desktop-lyrics-context";
+import { useTrackLyricsOffset } from "@/features/playback/lyrics-offset-store";
 
 type Position = { x: number; y: number };
 
@@ -80,6 +81,8 @@ export function DesktopLyricsOverlay() {
   if (isTauriRuntime() || isCapacitorRuntime()) return null;
   if (!isOpen || !activePlayer) return null;
 
+  const trackKey = activePlayer.playbackTrackId || activePlayer.currentTrack?.id;
+  const { offsetMs } = useTrackLyricsOffset(trackKey);
   const canControl = activePlayer.canControlPlayback && Boolean(activePlayer.playbackTrackId);
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -184,6 +187,7 @@ export function DesktopLyricsOverlay() {
           romanizedLyric={lyrics.romanizedLyric}
           showTranslation={showTranslation}
           showRomanized={showRomanized}
+          offsetMs={offsetMs}
           onToggleTranslation={toggleTranslation}
           onToggleRomanized={toggleRomanized}
           anchorAt={activePlayer.anchorAt}
