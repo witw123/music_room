@@ -200,7 +200,7 @@ export function PlaybackModeButton({
       aria-label={`当前为${label}，点击切换到${playbackModeLabels[nextMode]}`}
       title={`当前：${label}，点击切换`}
       onClick={onCycle}
-      className="inline-flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-lg text-foreground-muted transition-colors hover:text-[var(--hover-color)] hover:bg-[var(--hover-bg)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-40"
+      className="inline-flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-full text-foreground-muted transition-colors hover:text-[var(--hover-color)] hover:bg-[var(--hover-bg)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-40"
       style={{
         color: accentColor,
         "--hover-color": accentColor,
@@ -736,8 +736,8 @@ export function QualityBadge({
         title="点击切换首选音质"
         className={
           isCapsule
-            ? `inline-flex h-7 items-center justify-center gap-1 rounded-lg bg-white/[0.12] px-2.5 text-[11px] font-medium text-white/80 active:scale-95 transition-all select-none hover:bg-white/[0.18] hover:text-white cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/40 ${className}`
-            : `inline-flex h-7 items-center justify-center gap-1 rounded-md border border-white/10 bg-white/[0.04] px-2 text-[11px] font-medium tracking-tight text-foreground-muted select-none transition-all cursor-pointer hover:text-[var(--hover-color)] hover:bg-[var(--hover-bg)] hover:border-[var(--hover-border)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent active:scale-95 ${className}`
+            ? `inline-flex h-8.5 items-center justify-center gap-1 rounded-lg bg-white/[0.12] px-2.5 text-xs font-medium text-white/80 active:scale-95 transition-all select-none hover:bg-white/[0.18] hover:text-white cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/40 ${className}`
+            : `inline-flex h-8.5 items-center justify-center gap-1 rounded-lg px-2 text-xs font-medium text-foreground-muted select-none transition-colors cursor-pointer hover:text-[var(--hover-color)] hover:bg-[var(--hover-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent active:scale-95 ${className}`
         }
         style={
           isCapsule
@@ -745,12 +745,10 @@ export function QualityBadge({
             : ({
                 "--hover-color": accentColor,
                 "--hover-bg": accentSoft,
-                "--hover-border": withAlpha(accentColor, 0.4),
                 ...(isOpen
                   ? {
                       color: accentColor,
-                      backgroundColor: accentSoft,
-                      borderColor: withAlpha(accentColor, 0.5)
+                      backgroundColor: accentSoft
                     }
                   : {})
               } as CSSProperties)
@@ -758,8 +756,8 @@ export function QualityBadge({
       >
         <span>{currentOption.badge}</span>
         <svg
-          width={isCapsule ? 9 : 8}
-          height={isCapsule ? 9 : 8}
+          width={10}
+          height={10}
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -929,7 +927,7 @@ export function DesktopBottomPlayerLayout({
           </div>
         </button>
 
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 max-w-[140px] lg:max-w-[190px]">
           <h3
             className="truncate text-sm font-medium text-foreground hover:text-white transition-colors cursor-pointer"
             onClick={onToggleImmersive}
@@ -954,12 +952,13 @@ export function DesktopBottomPlayerLayout({
             onToggle={onToggleFavoriteTrack}
             pending={favoriteTrackIsPending}
             track={favoriteTrack}
+            className="shrink-0 ml-1"
           />
         ) : null}
       </div>
 
       {/* Center: Playback Mode + Prev + Circular Play/Pause + Next + Queue (Viewport Dead-Center) */}
-      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center gap-2.5 sm:gap-3.5 pointer-events-auto">
+      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center gap-3 sm:gap-3.5 pointer-events-auto">
         <PlaybackModeButton
           mode={playbackMode}
           onCycle={onCyclePlaybackMode}
@@ -987,7 +986,7 @@ export function DesktopBottomPlayerLayout({
 
         <button
           data-testid="player-toggle-button"
-          className={`inline-flex h-9 w-9 items-center justify-center rounded-full text-white shadow-md outline-none transition-transform focus-visible:ring-2 focus-visible:ring-accent ${
+          className={`inline-flex h-8.5 w-8.5 items-center justify-center rounded-full text-white shadow-md outline-none transition-transform focus-visible:ring-2 focus-visible:ring-accent ${
             canControlPlayback
               ? "hover:scale-105 active:scale-95 cursor-pointer bg-accent"
               : "cursor-not-allowed opacity-50 bg-accent/60"
@@ -999,11 +998,11 @@ export function DesktopBottomPlayerLayout({
           type="button"
         >
           {isPlaying ? (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor">
               <path d="M6 19h4V5H6zm8-14v14h4V5z" />
             </svg>
           ) : (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" className="translate-x-[0.5px]">
               <path d="M8 5v14l11-7z" />
             </svg>
           )}
@@ -1050,7 +1049,7 @@ export function DesktopBottomPlayerLayout({
       {/* Right: Audio Quality Badge + Lyrics Toggle + Volume Control + Immersive + Mini */}
       <div className="flex min-w-0 items-center justify-end gap-2 sm:gap-2.5 lg:gap-3 min-w-[280px] lg:min-w-[340px] shrink-0 ml-auto">
         {currentTrackDuration > 0 ? (
-          <span className="hidden xl:inline-block text-xs font-mono tabular-nums text-foreground-muted/80 select-none mr-2 shrink-0">
+          <span className="hidden xl:inline-flex h-8.5 items-center text-xs font-mono tabular-nums text-foreground-muted/80 select-none mr-2 shrink-0 leading-none">
             {formatDuration(boundedProgressMs)} / {formatDuration(currentTrackDuration)}
           </span>
         ) : null}
