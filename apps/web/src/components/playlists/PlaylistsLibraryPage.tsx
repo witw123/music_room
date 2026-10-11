@@ -22,11 +22,11 @@ export function PlaylistsLibraryPage() {
     <main className="workspace-page hide-scrollbar relative overflow-y-auto selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
       <div aria-hidden="true" className="workspace-page-background" />
       <div className="workspace-page__inner relative z-10 pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(var(--room-mobile-bottom-inset)+2.5rem)] sm:pt-6 md:pt-10 md:pb-28">
-        {/* Artistic Segmented Control Navigation */}
+        {/* Segmented Control Navigation */}
         <header className="flex justify-center mb-6">
           <div
             aria-label="歌单分类"
-            className="flex items-center gap-1 rounded-2xl border border-surface-border p-1 bg-surface-elevated/80 shadow-xs max-w-full overflow-x-auto hide-scrollbar touch-pan-x"
+            className="flex items-center gap-0.5 rounded-lg border border-surface-border p-0.5 bg-surface max-w-full overflow-x-auto hide-scrollbar touch-pan-x"
             role="tablist"
           >
             {tabs.map(({ id, label, icon: IconComp }) => {
@@ -35,7 +35,7 @@ export function PlaylistsLibraryPage() {
                 <button
                   key={id}
                   aria-selected={isActive}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap transition-all duration-150 ${
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-colors duration-150 ${
                     isActive
                       ? "bg-surface-elevated text-foreground font-semibold shadow-xs"
                       : "text-foreground-muted hover:text-foreground hover:bg-surface-hover"
@@ -44,7 +44,7 @@ export function PlaylistsLibraryPage() {
                   role="tab"
                   type="button"
                 >
-                  <IconComp className="w-4 h-4" />
+                  <IconComp className="w-3.5 h-3.5" />
                   <span>{label}</span>
                 </button>
               );

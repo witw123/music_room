@@ -378,7 +378,7 @@ export function SettingsPage() {
             <SettingRow label="播放器样式" description="应用于底部、沉浸式和房间播放器。">
               <select
                 aria-label="播放器样式"
-                className="h-9 min-w-40 rounded-lg border border-surface-border bg-background-secondary px-2 text-xs text-foreground outline-none focus:border-accent"
+                className="h-8 min-w-40 rounded-md border border-surface-border bg-surface px-2.5 text-xs text-foreground outline-none focus:border-accent"
                 onChange={(event) => patchSettings({ playback: { playerStyle: event.target.value as PlayerStyle } })}
                 value={settings.playback.playerStyle}
               >
@@ -390,7 +390,7 @@ export function SettingsPage() {
             <SettingRow label="首选音质" description="解析并播放平台歌曲时的音质偏好；无权限或曲目缺少高规格时自动平滑回退。">
               <select
                 aria-label="首选音质"
-                className="h-9 min-w-40 rounded-lg border border-surface-border bg-background-secondary px-2 text-xs text-foreground outline-none focus:border-accent"
+                className="h-8 min-w-40 rounded-md border border-surface-border bg-surface px-2.5 text-xs text-foreground outline-none focus:border-accent"
                 onChange={(event) => patchSettings({ playback: { preferredAudioQuality: event.target.value as AudioQualityPreference } })}
                 value={settings.playback.preferredAudioQuality}
               >
@@ -411,7 +411,7 @@ export function SettingsPage() {
             <SettingRow label="本地歌单播放方式" description="仅影响主页和本地歌单播放器。">
               <select
                 aria-label="本地歌单播放方式"
-                className="h-9 min-w-32 rounded-lg border border-surface-border bg-background-secondary px-2 text-xs text-foreground outline-none focus:border-accent"
+                className="h-8 min-w-32 rounded-md border border-surface-border bg-surface px-2.5 text-xs text-foreground outline-none focus:border-accent"
                 onChange={(event) => patchSettings({ playback: { localPlaybackMode: event.target.value as PlaybackMode } })}
                 value={settings.playback.localPlaybackMode}
               >
@@ -686,9 +686,9 @@ export function SettingsPage() {
 
 function SettingsSection({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="border-b border-surface-border pb-6">
-      <h2 className="mb-3 text-base font-semibold text-foreground">{title}</h2>
-      <div className="divide-y divide-surface-border">{children}</div>
+    <section className="rounded-xl border border-surface-border bg-surface/40 p-4 sm:p-5 backdrop-blur-xs">
+      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-foreground-muted">{title}</h2>
+      <div className="divide-y divide-surface-border/50">{children}</div>
     </section>
   );
 }
@@ -703,10 +703,10 @@ function SettingRow({
   children: ReactNode;
 }) {
   return (
-    <div className="flex min-h-16 items-center justify-between gap-6 py-3">
-      <div className="min-w-0">
+    <div className="flex min-h-12 items-center justify-between gap-4 py-2.5">
+      <div className="min-w-0 pr-2">
         <p className="text-sm font-medium text-foreground">{label}</p>
-        <p className="mt-1 text-xs leading-5 text-foreground-muted">{description}</p>
+        <p className="mt-0.5 text-xs leading-relaxed text-foreground-muted">{description}</p>
       </div>
       <div className="shrink-0">{children}</div>
     </div>
@@ -715,7 +715,7 @@ function SettingRow({
 
 function Toggle({ checked, disabled = false, label, onChange }: { checked: boolean; disabled?: boolean; label: string; onChange: (checked: boolean) => void }) {
   return (
-    <label className={`inline-flex min-h-11 min-w-12 items-center justify-center ${disabled ? "cursor-not-allowed opacity-45" : "cursor-pointer"}`} title={label}>
+    <label className={`inline-flex min-h-8 min-w-10 items-center justify-center ${disabled ? "cursor-not-allowed opacity-45" : "cursor-pointer"}`} title={label}>
       <input
         aria-label={label}
         checked={checked}
@@ -724,7 +724,7 @@ function Toggle({ checked, disabled = false, label, onChange }: { checked: boole
         onChange={(event) => onChange(event.target.checked)}
         type="checkbox"
       />
-      <span className="relative h-7 w-12 rounded-full bg-surface-hover transition peer-checked:bg-accent peer-focus-visible:ring-2 peer-focus-visible:ring-accent after:absolute after:left-1 after:top-1 after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-transform peer-checked:after:translate-x-5" />
+      <span className="relative h-5 w-9 rounded-full bg-surface-hover transition peer-checked:bg-accent peer-focus-visible:ring-2 peer-focus-visible:ring-accent after:absolute after:left-0.75 after:top-0.75 after:h-3.5 after:w-3.5 after:rounded-full after:bg-white after:transition-transform peer-checked:after:translate-x-4" />
     </label>
   );
 }

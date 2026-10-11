@@ -119,7 +119,7 @@ export function BilibiliImportDialog({
         role="dialog"
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-surface-border px-5 py-4">
+        <div className="flex items-center justify-between border-b border-surface-border px-4 py-3">
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold text-foreground">导入 B 站收藏夹 / 合集</span>
           </div>
@@ -130,6 +130,7 @@ export function BilibiliImportDialog({
             size="icon"
             type="button"
             variant="ghost"
+            className="h-7 w-7 rounded-md text-foreground-muted hover:text-foreground hover:bg-surface-hover"
           >
             <CloseIcon />
           </Button>

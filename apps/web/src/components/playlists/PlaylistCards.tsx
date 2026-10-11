@@ -30,9 +30,9 @@ export function LocalPlaylistCard({
         onClick={onOpen}
         type="button"
       >
-        <div className="relative aspect-square overflow-hidden rounded-xl bg-surface shadow-[0_12px_28px_rgba(0,0,0,0.18)] transition-transform duration-200 group-hover:-translate-y-1">
+        <div className="relative aspect-square overflow-hidden rounded-xl bg-surface border border-surface-border shadow-xs transition-transform duration-200 group-hover:-translate-y-0.5">
           <Artwork artworkUrls={artworkUrls} size="cover" title={playlist.title} />
-          <span className="absolute bottom-3 left-3 rounded-full bg-black/70 px-2 py-1 text-[10px] font-medium text-white/90 backdrop-blur-sm">
+          <span className="absolute bottom-2 left-2 rounded-md bg-background/80 border border-surface-border/60 px-1.5 py-0.5 text-[10px] font-medium text-foreground-muted backdrop-blur-md">
             本地
           </span>
         </div>
@@ -48,7 +48,7 @@ export function LocalPlaylistCard({
       {onDelete ? (
         <Button
           aria-label={`删除本地歌单 ${playlist.title}`}
-          className="absolute right-1.5 top-1.5 h-8 w-8 bg-black/60 text-white/80 opacity-100 backdrop-blur-sm transition-opacity hover:bg-red-500/80 hover:text-white sm:h-7 sm:w-7 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
+          className="absolute right-1.5 top-1.5 h-7 w-7 rounded-md bg-background/80 border border-surface-border/60 text-foreground-muted opacity-100 backdrop-blur-md transition-all hover:bg-rose-500/10 hover:text-rose-500 hover:border-rose-500/20 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
           onClick={onDelete}
           size="icon"
           title="删除歌单"
@@ -101,7 +101,7 @@ export function NetworkPlaylistCard({
         onClick={onOpen}
         type="button"
       >
-        <div className="relative aspect-square overflow-hidden rounded-xl bg-surface shadow-[0_12px_28px_rgba(0,0,0,0.18)] transition-transform duration-200 group-hover:-translate-y-1">
+        <div className="relative aspect-square overflow-hidden rounded-xl bg-surface border border-surface-border shadow-xs transition-transform duration-200 group-hover:-translate-y-0.5">
           <Artwork artworkUrls={artworkUrls} size="cover" title={playlist.title} />
         </div>
         <div className="min-w-0 px-0.5 pt-2">
@@ -115,7 +115,7 @@ export function NetworkPlaylistCard({
       </button>
       <Button
         aria-label={`删除歌单 ${playlist.title}`}
-        className="absolute right-1.5 top-1.5 h-8 w-8 bg-black/60 text-white/80 opacity-100 backdrop-blur-sm transition-opacity hover:bg-red-500/80 hover:text-white sm:h-7 sm:w-7 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
+        className="absolute right-1.5 top-1.5 h-7 w-7 rounded-md bg-background/80 border border-surface-border/60 text-foreground-muted opacity-100 backdrop-blur-md transition-all hover:bg-rose-500/10 hover:text-rose-500 hover:border-rose-500/20 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
         onClick={onDelete}
         size="icon"
         title="删除歌单"
@@ -125,13 +125,13 @@ export function NetworkPlaylistCard({
         <svg
           aria-hidden="true"
           fill="none"
-          height="15"
+          height="14"
           stroke="currentColor"
           strokeLinecap="round"
           strokeLinejoin="round"
           strokeWidth="1.8"
           viewBox="0 0 24 24"
-          width="15"
+          width="14"
         >
           <path d="M3 6h18M8 6V4h8v2m-9 0 1 15h8l1-15M10 10v7m4-7v7" />
         </svg>

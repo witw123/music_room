@@ -61,29 +61,29 @@ export function ProviderAccountsPage() {
       <main className="profile-page workspace-page hide-scrollbar relative overflow-y-auto selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
         <AppPageBackground />
         <div className="workspace-page__inner workspace-page__inner--wide relative z-10 pt-[calc(0.75rem+env(safe-area-inset-top))] pb-[calc(var(--room-mobile-bottom-inset)+2rem)] sm:pt-6 md:pt-8 md:pb-24">
-          <section className="mb-6 rounded-2xl border border-white/[0.08] bg-surface/40 p-6 backdrop-blur-xl text-center flex flex-col items-center">
-            <div className="w-16 h-16 rounded-2xl bg-white/[0.06] border border-white/[0.1] flex items-center justify-center text-foreground-muted mb-4">
-              <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <section className="mb-6 rounded-xl border border-surface-border bg-surface/40 p-6 backdrop-blur-md text-center flex flex-col items-center">
+            <div className="w-14 h-14 rounded-xl bg-surface border border-surface-border flex items-center justify-center text-foreground-muted mb-3.5">
+              <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <circle cx="12" cy="8" r="4" strokeWidth="1.8" />
                 <path d="M4.5 21a7.5 7.5 0 0 1 15 0" strokeWidth="1.8" />
               </svg>
             </div>
-            <h2 className="text-lg font-bold text-foreground mb-1">访客模式</h2>
+            <h2 className="text-base sm:text-lg font-bold text-foreground mb-1">访客模式</h2>
             <p className="text-xs text-foreground-muted max-w-sm mb-5 leading-relaxed">
               登录账号后可同步音乐平台歌单、记录听歌画像并在房间中自由互动点歌。
             </p>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2.5">
               <button
                 type="button"
                 onClick={() => router.push(authEntryHref as Route)}
-                className="px-5 py-2 rounded-xl bg-accent hover:bg-accent-hover text-white text-xs font-semibold shadow-sm transition-all active:scale-95 cursor-pointer"
+                className="inline-flex h-8 items-center px-4 rounded-lg bg-accent hover:bg-accent-hover text-white text-xs font-medium shadow-xs transition-colors active:scale-95 cursor-pointer"
               >
                 立即登录 / 注册
               </button>
               <button
                 type="button"
                 onClick={() => router.push("/app" as Route)}
-                className="px-4 py-2 rounded-xl border border-white/[0.08] bg-white/[0.05] hover:bg-white/[0.10] text-foreground-muted hover:text-foreground text-xs font-medium transition-all cursor-pointer"
+                className="inline-flex h-8 items-center px-3.5 rounded-lg border border-surface-border bg-surface hover:bg-surface-hover text-foreground text-xs font-medium transition-colors cursor-pointer"
               >
                 返回房间大厅
               </button>
@@ -100,8 +100,8 @@ export function ProviderAccountsPage() {
       <div className="workspace-page__inner workspace-page__inner--wide w-full max-w-full overflow-hidden relative z-10 pt-[calc(0.75rem+env(safe-area-inset-top))] pb-[calc(var(--room-mobile-bottom-inset)+2rem)] sm:pt-6 md:pt-8 md:pb-24">
         <PersonalOverview activeSession={activeSession} onLogout={handleLogout} />
 
-        {/* Ergonomic Responsive Segmented Tab Navigation */}
-        <div className="grid grid-cols-3 sm:inline-flex items-center gap-1 p-1 rounded-xl border border-surface-border bg-surface/50 mb-4 sm:mb-5 w-full sm:w-auto">
+        {/* Responsive Segmented Tab Navigation */}
+        <div className="grid grid-cols-3 sm:inline-flex items-center gap-0.5 p-0.5 rounded-lg border border-surface-border bg-surface mb-4 sm:mb-5 w-full sm:w-auto">
           {tabList.map(({ id, label, mobileLabel, icon: IconComp }) => {
             const isActive = activeTab === id;
             return (
@@ -109,9 +109,9 @@ export function ProviderAccountsPage() {
                 key={id}
                 type="button"
                 onClick={() => setActiveTab(id)}
-                className={`flex sm:inline-flex items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-medium whitespace-nowrap transition-all duration-150 ${
+                className={`flex sm:inline-flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-3 h-7 rounded-md text-[11px] sm:text-xs font-medium whitespace-nowrap transition-colors duration-150 ${
                   isActive
-                    ? "bg-accent/15 text-accent font-semibold shadow-xs"
+                    ? "bg-surface-elevated text-foreground font-semibold shadow-2xs"
                     : "text-foreground-muted hover:text-foreground hover:bg-surface-hover"
                 }`}
               >

@@ -34,7 +34,15 @@ export function ProviderPlaylistPickerDialog({
           <h2 className="text-lg font-semibold text-foreground" id="provider-playlist-picker-title">选择目标歌单</h2>
           <p className="mt-1 truncate text-xs text-foreground-muted">{subjectLabel}</p>
         </div>
-        <Button aria-label="关闭" disabled={pending} onClick={onClose} size="icon" type="button" variant="ghost">
+        <Button
+          aria-label="关闭"
+          disabled={pending}
+          onClick={onClose}
+          size="icon"
+          type="button"
+          variant="ghost"
+          className="h-7 w-7 rounded-md text-foreground-muted hover:text-foreground hover:bg-surface-hover"
+        >
           <Icon name="close" />
         </Button>
       </div>
@@ -45,7 +53,34 @@ export function ProviderPlaylistPickerDialog({
           <Link className="mt-3 inline-block text-sm text-accent hover:text-accent/80" href="/app/playlists">前往歌单页创建</Link>
         </div>
       ) : null}
-      {options.length ? <section className="mt-5 first:mt-6"><h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-foreground-muted">歌单</h3><div className="space-y-2">{options.map((option) => { const item = option.playlist; return <button className="flex w-full items-center gap-3 rounded-xl border border-surface-border bg-black px-3 py-3 text-left transition-colors hover:border-accent/40 hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50" disabled={pending} key={`${option.kind}:${item.id}`} onClick={() => onSelect(option)} type="button"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent"><Icon name="music" /></span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-foreground">{item.title}</span><span className="mt-1 block truncate text-xs text-foreground-muted">{item.trackIds.length} 首歌曲</span></span><Icon name="chevron-right" /></button>; })}</div></section> : null}
+      {options.length ? (
+        <section className="mt-5 first:mt-6">
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-foreground-muted">歌单</h3>
+          <div className="space-y-2">
+            {options.map((option) => {
+              const item = option.playlist;
+              return (
+                <button
+                  className="flex w-full items-center gap-3 rounded-lg border border-surface-border bg-surface px-3 py-2.5 text-left transition-colors hover:border-accent/40 hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={pending}
+                  key={`${option.kind}:${item.id}`}
+                  onClick={() => onSelect(option)}
+                  type="button"
+                >
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-accent/10 text-accent">
+                    <Icon name="music" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium text-foreground">{item.title}</span>
+                    <span className="mt-0.5 block truncate text-xs text-foreground-muted">{item.trackIds.length} 首歌曲</span>
+                  </span>
+                  <Icon name="chevron-right" />
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
     </AnchoredDialog>
   );
 }

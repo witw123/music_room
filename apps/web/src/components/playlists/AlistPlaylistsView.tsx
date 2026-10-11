@@ -279,14 +279,14 @@ export function AlistPlaylistsView() {
                     token: inputToken.trim() || undefined
                   })
                 }
-                className="px-4 py-2 text-xs sm:text-sm font-medium rounded-xl border border-surface-border hover:bg-white/5 transition-colors text-foreground-muted"
+                className="px-4 py-2 text-xs sm:text-sm font-medium rounded-lg border border-surface-border hover:bg-surface-hover transition-colors text-foreground-muted"
               >
                 {testing ? "测试中..." : "测试连接"}
               </button>
               <button
                 type="submit"
                 disabled={testing}
-                className="px-5 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-accent text-accent-contrast hover:opacity-90 transition-opacity"
+                className="px-5 py-2 text-xs sm:text-sm font-semibold rounded-lg bg-accent text-white hover:bg-accent-hover transition-colors"
               >
                 保存并连接
               </button>
@@ -301,7 +301,7 @@ export function AlistPlaylistsView() {
   return (
     <div className="max-w-5xl mx-auto px-4 py-4 space-y-4">
       {/* Top Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 p-3 sm:p-4 rounded-2xl border border-surface-border bg-surface">
+      <div className="flex flex-wrap items-center justify-between gap-3 p-3 sm:p-4 rounded-xl border border-surface-border bg-surface/50">
         {/* Breadcrumbs */}
         <div className="flex items-center gap-1.5 text-xs sm:text-sm font-medium overflow-x-auto hide-scrollbar py-1">
           <button
@@ -337,22 +337,22 @@ export function AlistPlaylistsView() {
             onClick={() => void loadDirectory(currentPath)}
             disabled={loading}
             title="刷新当前目录"
-            className="p-2 rounded-xl border border-surface-border text-foreground-muted hover:text-foreground hover:bg-white/5 transition-colors disabled:opacity-50"
+            className="h-8 w-8 rounded-lg border border-surface-border text-foreground-muted hover:text-foreground hover:bg-surface-hover flex items-center justify-center transition-colors disabled:opacity-50"
           >
-            <RotateCcwIcon className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+            <RotateCcwIcon className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
           </button>
           <button
             onClick={() => setShowConfigDrawer(true)}
             title="网盘连接配置"
-            className="p-2 rounded-xl border border-surface-border text-foreground-muted hover:text-foreground hover:bg-white/5 transition-colors"
+            className="h-8 w-8 rounded-lg border border-surface-border text-foreground-muted hover:text-foreground hover:bg-surface-hover flex items-center justify-center transition-colors"
           >
-            <SettingsIcon className="w-4 h-4" />
+            <SettingsIcon className="w-3.5 h-3.5" />
           </button>
           {audioItems.length > 0 ? (
             <button
               onClick={() => void handlePlayAll()}
               disabled={loading}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-semibold bg-accent text-accent-contrast hover:opacity-90 transition-opacity"
+              className="inline-flex h-8 items-center gap-1.5 px-3.5 rounded-lg text-xs font-medium bg-accent text-white hover:bg-accent-hover transition-colors"
             >
               <PlayIcon className="w-3.5 h-3.5" />
               <span>播放全部 ({audioItems.length})</span>
@@ -363,7 +363,7 @@ export function AlistPlaylistsView() {
 
       {/* Error state */}
       {error ? (
-        <div className="p-4 rounded-xl border border-red-500/20 bg-red-500/10 text-red-400 text-xs sm:text-sm flex items-center justify-between">
+        <div className="p-3.5 rounded-xl border border-rose-500/20 bg-rose-500/10 text-rose-500 text-xs sm:text-sm flex items-center justify-between">
           <span>{error}</span>
           <button
             onClick={() => void loadDirectory(currentPath)}
@@ -385,9 +385,9 @@ export function AlistPlaylistsView() {
               <button
                 key={dir}
                 onClick={() => handleNavigateSubdir(dir)}
-                className="flex items-center gap-2 p-2.5 rounded-xl border border-surface-border bg-surface hover:bg-surface-muted text-left text-xs sm:text-sm text-foreground transition-all duration-150 group"
+                className="flex items-center gap-2 p-2 rounded-lg border border-surface-border bg-surface hover:bg-surface-hover text-left text-xs sm:text-sm text-foreground transition-colors group"
               >
-                <FolderIcon className="w-4 h-4 text-accent/80 group-hover:text-accent shrink-0" />
+                <FolderIcon className="w-3.5 h-3.5 text-accent/80 group-hover:text-accent shrink-0" />
                 <span className="truncate font-medium">{dir}</span>
               </button>
             ))}
@@ -407,12 +407,12 @@ export function AlistPlaylistsView() {
         </div>
 
         {audioItems.length === 0 && !loading ? (
-          <div className="py-12 text-center rounded-2xl border border-dashed border-surface-border bg-surface/40">
+          <div className="py-10 text-center rounded-xl border border-dashed border-surface-border bg-surface/30">
             <p className="text-sm font-medium text-foreground-muted">当前目录没有可播放的音频文件</p>
             <p className="text-xs text-foreground-muted/60 mt-1">支持 .flac, .mp3, .wav, .m4a, .ogg, .opus 等格式</p>
           </div>
         ) : (
-          <div className="rounded-2xl border border-surface-border bg-surface divide-y divide-surface-border/50 overflow-hidden">
+          <div className="rounded-xl border border-surface-border bg-surface/40 divide-y divide-surface-border/50 overflow-hidden">
             {audioItems.map((item, index) => {
               const isPlayingThis = playingTrackPath === item.path;
               const formatSize = (item.sizeBytes / 1024 / 1024).toFixed(1);
@@ -420,7 +420,7 @@ export function AlistPlaylistsView() {
               return (
                 <div
                   key={item.path}
-                  className="flex items-center justify-between px-3.5 py-2.5 hover:bg-white/[0.02] transition-colors group"
+                  className="flex items-center justify-between px-3.5 py-2 hover:bg-surface-hover/60 transition-colors group"
                 >
                   <div className="flex items-center gap-3 min-w-0 pr-4">
                     <span className="text-xs font-mono text-foreground-muted/40 w-5 text-center shrink-0">
@@ -429,7 +429,7 @@ export function AlistPlaylistsView() {
                     <button
                       onClick={() => void handlePlayItem(item)}
                       disabled={isPlayingThis}
-                      className="p-1.5 rounded-lg bg-white/5 hover:bg-accent hover:text-accent-contrast text-foreground transition-all shrink-0"
+                      className="p-1.5 rounded-lg bg-surface hover:bg-accent hover:text-white text-foreground transition-all shrink-0 border border-surface-border"
                       title="立即播放"
                     >
                       <PlayIcon className="w-3.5 h-3.5" />
@@ -440,12 +440,12 @@ export function AlistPlaylistsView() {
                           {item.title}
                         </span>
                         {item.ext ? (
-                          <span className="uppercase px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-white/10 text-foreground-muted shrink-0">
+                          <span className="uppercase px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-surface border border-surface-border text-foreground-muted shrink-0">
                             {item.ext}
                           </span>
                         ) : null}
                         {item.lrcPath ? (
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 shrink-0">
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
                             LRC
                           </span>
                         ) : null}
@@ -466,7 +466,7 @@ export function AlistPlaylistsView() {
                           // ignore
                         }
                       }}
-                      className="px-2.5 py-1 rounded-lg text-xs font-medium border border-surface-border text-foreground-muted hover:text-foreground hover:bg-white/5 transition-colors opacity-0 group-hover:opacity-100 sm:opacity-100"
+                      className="h-7 px-2.5 rounded-md text-xs font-medium border border-surface-border bg-surface text-foreground-muted hover:text-foreground hover:bg-surface-hover transition-colors opacity-0 group-hover:opacity-100 sm:opacity-100"
                     >
                       + 队列
                     </button>

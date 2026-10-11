@@ -60,7 +60,7 @@ export function BilibiliPartDetailView({
     <section className="mt-3 sm:mt-6 animate-in fade-in duration-300">
       {/* Back Button */}
       <button
-        className="inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold text-foreground-muted transition-all hover:bg-white/[0.08] hover:text-white mb-4 sm:mb-6 border border-white/[0.06] backdrop-blur-md"
+        className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium text-foreground-muted transition-colors hover:bg-surface-hover hover:text-foreground mb-4 border border-surface-border bg-surface/50"
         onClick={onBack}
         type="button"
       >
@@ -69,8 +69,8 @@ export function BilibiliPartDetailView({
       </button>
 
       {/* Video Hero Stage */}
-      <div className="relative overflow-hidden rounded-2xl border border-surface-border bg-surface/50 p-4 sm:p-6 md:p-8 backdrop-blur-xl grid gap-5 sm:gap-8 grid-cols-1 sm:grid-cols-[180px_minmax(0,1fr)] md:grid-cols-[220px_minmax(0,1fr)] items-center sm:items-end">
-        <div className="w-36 sm:w-44 md:w-full max-w-[220px] mx-auto sm:mx-0 shrink-0 aspect-video sm:aspect-square rounded-2xl overflow-hidden bg-surface-hover relative border border-white/10 shadow-lg">
+      <div className="relative overflow-hidden rounded-xl border border-surface-border bg-surface/40 p-4 sm:p-5 backdrop-blur-md grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-[144px_minmax(0,1fr)] md:grid-cols-[160px_minmax(0,1fr)] items-center sm:items-end">
+        <div className="w-32 sm:w-36 md:w-40 max-w-[160px] mx-auto sm:mx-0 shrink-0 aspect-square rounded-xl overflow-hidden bg-surface relative border border-surface-border shadow-xs">
           {detail.artworkUrl && !imageError ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -89,18 +89,18 @@ export function BilibiliPartDetailView({
         </div>
 
         <div className="relative z-10 flex min-w-0 flex-col justify-end text-center sm:text-left">
-          <div className="inline-flex items-center justify-center sm:justify-start gap-2 mb-2">
-            <span className="rounded-md bg-[#00aeec]/20 text-[#00aeec] border border-[#00aeec]/30 px-2 py-0.5 text-[11px] font-semibold tracking-wide">
+          <div className="inline-flex items-center justify-center sm:justify-start gap-2 mb-1.5">
+            <span className="rounded-md bg-accent/10 text-accent border border-accent/20 px-2 py-0.5 text-[11px] font-semibold tracking-wide">
               哔哩哔哩 · 视频分P合集
             </span>
-            <span className="text-xs text-foreground-muted">BV号: {detail.bvid}</span>
+            <span className="text-xs font-mono text-foreground-muted">BV号: {detail.bvid}</span>
           </div>
 
-          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight text-white line-clamp-2">
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground line-clamp-2">
             {detail.title}
           </h1>
 
-          <p className="mt-2 text-xs sm:text-sm text-foreground-muted/90 flex items-center justify-center sm:justify-start gap-2">
+          <p className="mt-1.5 text-xs text-foreground-muted flex items-center justify-center sm:justify-start gap-2">
             <span>UP主: <strong className="text-foreground font-medium">{detail.artist}</strong></span>
             <span>·</span>
             <span>共 {detail.parts.length} 首分P单曲</span>
@@ -112,12 +112,12 @@ export function BilibiliPartDetailView({
             )}
           </p>
 
-          <div className="mt-5 flex flex-wrap items-center justify-center sm:justify-start gap-3">
+          <div className="mt-4 flex flex-wrap items-center justify-center sm:justify-start gap-2.5">
             <Button
               size="sm"
               variant="default"
               onClick={() => onPlayAll(detail.parts)}
-              className="rounded-full px-5 py-2 text-xs font-semibold flex items-center gap-2 bg-accent text-white hover:bg-accent/90 shadow-md transition-all active:scale-95"
+              className="h-8 rounded-lg px-3.5 text-xs font-medium flex items-center gap-1.5 bg-accent text-white hover:bg-accent-hover shadow-xs transition-colors active:scale-95"
             >
               <PlayIcon className="w-3.5 h-3.5 fill-current" />
               <span>播放全部</span>
@@ -127,10 +127,10 @@ export function BilibiliPartDetailView({
                 size="sm"
                 variant="outline"
                 onClick={() => void onToggleFavoriteCollection(detail)}
-                className={`rounded-full px-4 py-2 text-xs font-medium flex items-center gap-2 border transition-all ${
+                className={`h-8 rounded-lg px-3 text-xs font-medium flex items-center gap-1.5 border transition-colors ${
                   isCollectionFavorite
-                    ? "border-[#fa233b]/40 bg-[#fa233b]/15 text-[#fa233b] hover:bg-[#fa233b]/25"
-                    : "border-white/10 bg-white/[0.06] text-white hover:bg-white/[0.12]"
+                    ? "border-rose-500/30 bg-rose-500/10 text-rose-500 hover:bg-rose-500/20"
+                    : "border-surface-border bg-surface text-foreground hover:bg-surface-hover"
                 }`}
               >
                 <HeartIcon className="w-3.5 h-3.5" />
@@ -142,7 +142,7 @@ export function BilibiliPartDetailView({
                 size="sm"
                 variant="outline"
                 onClick={() => void onSaveCollectionAsPlaylist(detail)}
-                className="rounded-full px-4 py-2 text-xs font-medium flex items-center gap-2 border border-white/10 bg-white/[0.06] text-white hover:bg-white/[0.12] transition-all"
+                className="h-8 rounded-lg px-3 text-xs font-medium flex items-center gap-1.5 border border-surface-border bg-surface text-foreground hover:bg-surface-hover transition-colors"
               >
                 <ListMusicIcon className="w-3.5 h-3.5" />
                 <span>保存为歌单</span>
@@ -153,7 +153,7 @@ export function BilibiliPartDetailView({
                 size="sm"
                 variant="outline"
                 onClick={(e) => onAddCollectionToPlaylist(detail, getAnchoredDialogAnchor(e.currentTarget))}
-                className="rounded-full px-4 py-2 text-xs font-medium flex items-center gap-2 border border-white/10 bg-white/[0.06] text-white hover:bg-white/[0.12] transition-all"
+                className="h-8 rounded-lg px-3 text-xs font-medium flex items-center gap-1.5 border border-surface-border bg-surface text-foreground hover:bg-surface-hover transition-colors"
               >
                 <Icon name="playlist-add" />
                 <span>添加到已有歌单</span>
@@ -164,8 +164,8 @@ export function BilibiliPartDetailView({
       </div>
 
       {/* Part Tracks List */}
-      <div className="mt-6 rounded-2xl border border-surface-border bg-surface/60 backdrop-blur-sm overflow-hidden">
-        <div className="px-4 py-3 border-b border-surface-border/60 flex items-center justify-between">
+      <div className="mt-5 rounded-xl border border-surface-border bg-surface/40 backdrop-blur-sm overflow-hidden">
+        <div className="px-4 py-2.5 border-b border-surface-border flex items-center justify-between">
           <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground-muted">
             分P列表 ({detail.parts.length})
           </h2>
@@ -216,7 +216,7 @@ export function BilibiliPartDetailView({
                     title="播放这首"
                     disabled={Boolean(pendingTrackId)}
                     onClick={() => onPlayTrack(part)}
-                    className="p-1.5 rounded-lg text-foreground-muted hover:text-foreground hover:bg-surface transition disabled:opacity-40"
+                    className="p-1.5 rounded-lg text-foreground-muted hover:text-foreground hover:bg-surface-hover transition disabled:opacity-40"
                   >
                     {isPending ? (
                       <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-accent border-t-transparent" />
@@ -231,7 +231,7 @@ export function BilibiliPartDetailView({
                       title="加入播放队列"
                       disabled={Boolean(pendingTrackId)}
                       onClick={() => onQueueTrack(part)}
-                      className="p-1.5 rounded-lg text-foreground-muted hover:text-foreground hover:bg-surface transition disabled:opacity-40"
+                      className="p-1.5 rounded-lg text-foreground-muted hover:text-foreground hover:bg-surface-hover transition disabled:opacity-40"
                     >
                       <Icon name="playlist-add" />
                     </button>
@@ -243,7 +243,7 @@ export function BilibiliPartDetailView({
                       title="下载到本地"
                       disabled={Boolean(pendingTrackId)}
                       onClick={() => onDownloadTrack(part)}
-                      className="p-1.5 rounded-lg text-foreground-muted hover:text-foreground hover:bg-surface transition disabled:opacity-40"
+                      className="p-1.5 rounded-lg text-foreground-muted hover:text-foreground hover:bg-surface-hover transition disabled:opacity-40"
                     >
                       <Icon name="download" />
                     </button>
@@ -255,7 +255,7 @@ export function BilibiliPartDetailView({
                       title="保存到歌单"
                       disabled={Boolean(pendingTrackId)}
                       onClick={(e) => onImportPlaylist(part, getAnchoredDialogAnchor(e.currentTarget))}
-                      className="p-1.5 rounded-lg text-foreground-muted hover:text-foreground hover:bg-surface transition disabled:opacity-40"
+                      className="p-1.5 rounded-lg text-foreground-muted hover:text-foreground hover:bg-surface-hover transition disabled:opacity-40"
                     >
                       <Icon name="playlist-add" />
                     </button>
@@ -267,7 +267,7 @@ export function BilibiliPartDetailView({
                       title={fav ? "取消收藏" : "收藏"}
                       onClick={() => onToggleFavorite(part)}
                       className={`p-1.5 rounded-lg transition ${
-                        fav ? "text-rose-500" : "text-foreground-muted hover:text-rose-500 hover:bg-surface"
+                        fav ? "text-rose-500" : "text-foreground-muted hover:text-rose-500 hover:bg-surface-hover"
                       }`}
                     >
                       <Icon name="heart" filled={fav} />

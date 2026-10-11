@@ -342,7 +342,7 @@ export function PlaylistDetailView({
   return (
     <section className="mt-2" data-testid="playlist-detail">
       <div className="mb-4 flex items-center justify-between">
-        <Button className="gap-1.5 text-xs text-foreground-muted hover:text-foreground" onClick={onBack} size="sm" type="button" variant="ghost">
+        <Button className="h-7 px-2.5 gap-1.5 rounded-md text-xs font-medium text-foreground-muted hover:text-foreground hover:bg-surface-hover border border-surface-border bg-surface/50" onClick={onBack} size="sm" type="button" variant="ghost">
           <svg
             aria-hidden="true"
             fill="none"
@@ -361,7 +361,7 @@ export function PlaylistDetailView({
         {onDelete ? (
           <Button
             aria-label="删除歌单"
-            className="text-xs text-red-400 hover:bg-red-500/10 hover:text-red-300"
+            className="h-7 px-2.5 gap-1.5 rounded-md text-xs font-medium text-rose-500 hover:bg-rose-500/10 hover:text-rose-600 border border-transparent hover:border-rose-500/20"
             onClick={onDelete}
             size="sm"
             type="button"
@@ -424,7 +424,7 @@ export function PlaylistDetailView({
         <div className="flex items-center gap-2">
           {showBatchDownload ? (
             <Button
-              className="gap-1.5 rounded-xl border border-surface-border bg-surface/50 px-3.5 py-2 text-xs sm:text-sm font-medium text-foreground hover:bg-surface-hover"
+              className="h-8 gap-1.5 rounded-lg border border-surface-border bg-surface px-3 text-xs font-medium text-foreground hover:bg-surface-hover"
               disabled={
                 isDownloadingAll || downloadTrackId !== null || downloadableTracks.length === 0
               }
@@ -453,7 +453,7 @@ export function PlaylistDetailView({
             </Button>
           ) : null}
           <Button
-            className="gap-1.5 rounded-xl bg-accent px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow-sm hover:bg-accent-hover active:scale-95"
+            className="h-8 gap-1.5 rounded-lg bg-accent px-3.5 text-xs font-medium text-white shadow-xs hover:bg-accent-hover active:scale-95"
             disabled={
               playableTracks.length === 0 ||
               playbackTrackId !== null ||
