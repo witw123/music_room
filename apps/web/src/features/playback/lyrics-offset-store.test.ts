@@ -4,7 +4,6 @@ import {
   resetTrackLyricsOffset,
   setTrackLyricsOffset,
   lyricsOffsetStorageKey,
-  lyricsOffsetChangeEvent,
   MAX_LYRICS_OFFSET_MS,
   MIN_LYRICS_OFFSET_MS
 } from "./lyrics-offset-store";

@@ -22,7 +22,7 @@ export type FallbackCandidate = {
  */
 export function normalizeTrackSearchTerms(title: string, artist: string): { cleanTitle: string; cleanArtist: string; query: string } {
   const cleanTitle = title
-    .replace(/[\(\[\{（【][^\(\)\[\]{}（）【】]*(live|remix|feat|ft\.|instrumental|伴奏|重制|cover|翻唱)[^\(\)\[\]{}（）【】]*[\)\]\}）】]/gi, "")
+    .replace(/[({[（【][^(){}[\]（）【】]*(live|remix|feat|ft\.|instrumental|伴奏|重制|cover|翻唱)[^(){}[\]（）【】]*[)}\]）】]/gi, "")
     .replace(/-\s*(live|remix|instrumental|伴奏|cover|翻唱)/gi, "")
     .replace(/[【】]/g, "")
     .trim() || title.trim();
@@ -30,7 +30,7 @@ export function normalizeTrackSearchTerms(title: string, artist: string): { clea
   // Pick primary artist before comma, slash, or ampersand
   const cleanArtist = artist
     .split(/[/,&、]/)[0]
-    .replace(/[\(\[\{（【].*[\)\]\}）】]/g, "")
+    .replace(/[({[（【].*[)}\]）】]/g, "")
     .trim() || artist.trim();
 
   return {

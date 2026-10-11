@@ -78,11 +78,12 @@ export function DesktopLyricsOverlay() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  const trackKey = activePlayer?.playbackTrackId || activePlayer?.currentTrack?.id;
+  const { offsetMs } = useTrackLyricsOffset(trackKey);
+
   if (isTauriRuntime() || isCapacitorRuntime()) return null;
   if (!isOpen || !activePlayer) return null;
 
-  const trackKey = activePlayer.playbackTrackId || activePlayer.currentTrack?.id;
-  const { offsetMs } = useTrackLyricsOffset(trackKey);
   const canControl = activePlayer.canControlPlayback && Boolean(activePlayer.playbackTrackId);
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {

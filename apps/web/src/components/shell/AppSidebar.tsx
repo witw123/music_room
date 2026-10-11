@@ -152,23 +152,6 @@ export function AppSidebar({
       </div>
 
       <div className={`hide-scrollbar flex min-h-0 flex-1 items-center overflow-hidden md:flex-col md:items-stretch md:gap-2.5 md:p-2 ${compactMobile ? "gap-2 p-1.5" : "gap-3 p-2.5"}`}>
-        {/* Quick Search */}
-        <div className="hidden w-full px-1 pb-1 md:block">
-          <Link
-            href="/app/discover"
-            className={`group flex items-center gap-2.5 rounded-xl border border-white/[0.08] bg-white/[0.03] text-foreground-muted transition-all duration-150 hover:border-white/15 hover:bg-white/[0.07] hover:text-white ${
-              collapsed ? "h-10 w-10 justify-center p-0" : "h-9 w-full px-3 py-1.5 text-xs"
-            }`}
-            title="搜索音乐与房间"
-          >
-            <NavIcon name="search" size={15} />
-            <span className={`truncate text-xs ${collapsed ? "md:hidden" : ""}`}>搜索音乐与房间</span>
-            <kbd className={`ml-auto rounded border border-white/10 bg-white/[0.05] px-1.5 py-0.5 text-[9px] font-sans text-foreground-muted/60 ${collapsed ? "md:hidden" : ""}`}>
-              /
-            </kbd>
-          </Link>
-        </div>
-
         <nav className="hide-scrollbar flex min-w-0 flex-1 flex-wrap items-center gap-1 overflow-x-hidden md:min-h-0 md:flex-col md:items-stretch md:overflow-y-auto md:overflow-x-hidden" aria-label="工作区">
           {!collapsed && (
             <div className="hidden px-3 pt-1 pb-1 text-[10px] font-semibold tracking-wider text-foreground-muted/50 uppercase select-none md:block">

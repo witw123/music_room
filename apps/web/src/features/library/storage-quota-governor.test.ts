@@ -4,11 +4,26 @@ import {
   purgeStaleCachedTracks
 } from "./storage-quota-governor";
 import * as indexeddb from "./indexeddb";
+import type { CachedLibraryTrackSummaryRecord } from "./indexeddb";
 
 vi.mock("./indexeddb", () => ({
   deleteCachedLibraryTrack: vi.fn(),
   listCachedLibraryTrackSummaries: vi.fn()
 }));
+
+function makeSummary(partial: Partial<CachedLibraryTrackSummaryRecord> & { fileHash: string; sizeBytes: number }): CachedLibraryTrackSummaryRecord {
+  return {
+    cachedAt: "2026-10-10T12:00:00Z",
+    mimeType: "audio/ogg",
+    provider: "netease",
+    providerTrackId: "mock-id",
+    title: "Mock Track",
+    artist: "Mock Artist",
+    album: null,
+    durationMs: 1000,
+    ...partial
+  };
+}
 
 describe("storage-quota-governor", () => {
   beforeEach(() => {
@@ -27,8 +42,8 @@ describe("storage-quota-governor", () => {
       });
 
       vi.mocked(indexeddb.listCachedLibraryTrackSummaries).mockResolvedValue([
-        { fileHash: "hash-1", sizeBytes: 10 * 1024 * 1024 } as any,
-        { fileHash: "hash-2", sizeBytes: 20 * 1024 * 1024 } as any
+        makeSummary({ fileHash: "hash-1", sizeBytes: 10 * 1024 * 1024 }),
+        makeSummary({ fileHash: "hash-2", sizeBytes: 20 * 1024 * 1024 })
       ]);
 
       const result = await getStorageQuotaEstimate();
@@ -45,16 +60,16 @@ describe("storage-quota-governor", () => {
   describe("purgeStaleCachedTracks", () => {
     it("purges tracks in LRU order (oldest cachedAt first)", async () => {
       vi.mocked(indexeddb.listCachedLibraryTrackSummaries).mockResolvedValue([
-        {
+        makeSummary({
           fileHash: "hash-new",
           sizeBytes: 1000,
           cachedAt: "2026-10-10T12:00:00Z"
-        } as any,
-        {
+        }),
+        makeSummary({
           fileHash: "hash-old",
           sizeBytes: 2000,
           cachedAt: "2026-10-01T12:00:00Z"
-        } as any
+        })
       ]);
 
       const result = await purgeStaleCachedTracks({ targetFreeBytes: 1500 });
@@ -66,27 +81,27 @@ describe("storage-quota-governor", () => {
 
     it("respects preserveFavoriteKeys and excludedFileHashes", async () => {
       vi.mocked(indexeddb.listCachedLibraryTrackSummaries).mockResolvedValue([
-        {
+        makeSummary({
           fileHash: "hash-favorite",
           provider: "netease",
           providerTrackId: "fav-1",
           sizeBytes: 1000,
           cachedAt: "2026-09-01T12:00:00Z"
-        } as any,
-        {
+        }),
+        makeSummary({
           fileHash: "hash-excluded",
           provider: "qqmusic",
           providerTrackId: "ex-1",
           sizeBytes: 1000,
           cachedAt: "2026-09-02T12:00:00Z"
-        } as any,
-        {
+        }),
+        makeSummary({
           fileHash: "hash-purgeable",
           provider: "bilibili",
           providerTrackId: "bv-1",
           sizeBytes: 3000,
           cachedAt: "2026-09-03T12:00:00Z"
-        } as any
+        })
       ]);
 
       const result = await purgeStaleCachedTracks({

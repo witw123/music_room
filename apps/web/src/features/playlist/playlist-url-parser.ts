@@ -25,7 +25,7 @@ export function parsePlaylistUrlOrText(input: string | null | undefined): Parsed
   // - https://y.music.163.com/m/playlist?id=123456
   // - https://music.163.com/playlist/123456
   // - https://music.163.com/#/album?id=123456
-  const neteaseMatch = trimmed.match(/(?:https?:\/\/)?(?:[a-zA-Z0-9-]+\.)?music\.163\.com\/(?:#\/|m\/)?(playlist|album|song)(?:[\/?]|.*?[?&]id=)([0-9]+)/i);
+  const neteaseMatch = trimmed.match(/(?:https?:\/\/)?(?:[a-zA-Z0-9-]+\.)?music\.163\.com\/(?:#\/|m\/)?(playlist|album|song)(?:[/?]|.*?[?&]id=)([0-9]+)/i);
   if (neteaseMatch) {
     const rawType = neteaseMatch[1].toLowerCase();
     const type: PlaylistSourceType = rawType === "song" ? "track" : (rawType as PlaylistSourceType);

@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import type { ProviderTrackCandidate } from "@music-room/shared";
 
 type FavoriteTrackButtonProps = {
@@ -10,6 +11,7 @@ type FavoriteTrackButtonProps = {
   size?: "compact" | "large";
   className?: string;
   accentColor?: string;
+  accentSoft?: string;
 };
 
 export function FavoriteTrackButton({
@@ -19,24 +21,31 @@ export function FavoriteTrackButton({
   onToggle,
   size = "compact",
   className = "",
-  accentColor
+  accentColor,
+  accentSoft
 }: FavoriteTrackButtonProps) {
   if (!track) return null;
   const hasCustomSize = className.includes("h-") || className.includes("w-");
-  const dimension = size === "large" ? "h-11 w-11" : hasCustomSize ? "" : "h-9 w-9";
+  const dimension = size === "large" ? "h-11 w-11" : hasCustomSize ? "" : "h-8.5 w-8.5";
   const iconSize = size === "large" ? 21 : 16;
+
+  const buttonStyle: CSSProperties = {
+    "--fav-accent": accentColor,
+    "--fav-accent-soft": accentSoft,
+    ...(isFavorite && accentColor ? { color: accentColor, backgroundColor: accentSoft } : {})
+  } as CSSProperties;
 
   return (
     <button
       aria-label={isFavorite ? `取消收藏《${track.title}》` : `收藏《${track.title}》`}
       aria-pressed={isFavorite}
-      className={`inline-flex ${dimension} shrink-0 items-center justify-center rounded-full text-foreground-muted transition-[background-color,color,transform] duration-200 hover:bg-surface-hover hover:text-accent active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-wait disabled:opacity-50 ${className} ${isFavorite ? "text-accent" : ""}`}
+      className={`inline-flex ${dimension} shrink-0 items-center justify-center rounded-full text-foreground-muted transition-[background-color,color,transform] duration-200 hover:text-[var(--fav-accent,var(--accent))] hover:bg-[var(--fav-accent-soft,var(--surface-hover))] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-wait disabled:opacity-50 ${className} ${isFavorite ? "text-accent" : ""}`}
       disabled={pending}
       onClick={(e) => {
         e.stopPropagation();
         void onToggle();
       }}
-      style={isFavorite && accentColor ? { color: accentColor } : undefined}
+      style={buttonStyle}
       title={isFavorite ? "取消收藏歌曲" : "收藏歌曲"}
       type="button"
     >
