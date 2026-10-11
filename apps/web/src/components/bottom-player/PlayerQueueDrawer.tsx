@@ -119,11 +119,10 @@ export function PlayerQueueDrawer({
 
   return (
     <div ref={rootRef} className="relative">
-      <Button
-        variant="ghost"
-        size="icon"
+      <button
+        type="button"
         data-testid={testId}
-        className={compactMobile ? "relative h-11 w-11 rounded-full text-white/80 transition-[transform,color] hover:text-white active:scale-95" : "relative h-8.5 w-8.5 rounded-full text-foreground-muted transition-colors hover:text-[var(--hover-color)] hover:bg-[var(--hover-bg)] active:scale-95"}
+        className={compactMobile ? "relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/80 transition-[transform,color] hover:text-white active:scale-95 focus-visible:outline-none" : "relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-foreground-muted transition-colors hover:text-[var(--hover-color)] hover:bg-[var(--hover-bg)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"}
         style={compactMobile ? undefined : ({
           "--hover-color": accentColor,
           "--hover-bg": accentSoft,
@@ -135,16 +134,16 @@ export function PlayerQueueDrawer({
         aria-label="歌曲队列"
         title="歌曲队列"
       >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 6h12" /><path d="M4 12h16" /><path d="M4 18h12" /><path d="m18 4 2 2-2 2" /></svg>
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 6h12" /><path d="M4 12h16" /><path d="M4 18h12" /><path d="m18 4 2 2-2 2" /></svg>
         {queue.length > 0 && (
           <span
-            className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 px-1 items-center justify-center rounded-full text-[10px] font-bold text-white transition-[background-color,box-shadow] duration-500"
+            className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 px-1 items-center justify-center rounded-full text-[10px] font-bold text-white transition-[background-color,box-shadow] duration-500 leading-none"
             style={{ backgroundColor: accentColor, boxShadow: `0 0 8px ${accentColor}` }}
           >
             {queue.length}
           </span>
         )}
-      </Button>
+      </button>
 
       {isOpen ? (
         <>

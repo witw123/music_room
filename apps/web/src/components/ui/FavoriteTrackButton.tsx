@@ -26,7 +26,7 @@ export function FavoriteTrackButton({
 }: FavoriteTrackButtonProps) {
   if (!track) return null;
   const hasCustomSize = className.includes("h-") || className.includes("w-");
-  const dimension = size === "large" ? "h-11 w-11" : hasCustomSize ? "" : "h-8.5 w-8.5";
+  const dimension = size === "large" ? "h-11 w-11" : hasCustomSize ? "" : "h-8 w-8";
   const iconSize = size === "large" ? 21 : 16;
 
   const buttonStyle: CSSProperties = {

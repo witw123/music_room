@@ -200,7 +200,7 @@ export function PlaybackModeButton({
       aria-label={`当前为${label}，点击切换到${playbackModeLabels[nextMode]}`}
       title={`当前：${label}，点击切换`}
       onClick={onCycle}
-      className="inline-flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-full text-foreground-muted transition-colors hover:text-[var(--hover-color)] hover:bg-[var(--hover-bg)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-40"
+      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-foreground-muted transition-colors hover:text-[var(--hover-color)] hover:bg-[var(--hover-bg)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-40"
       style={{
         color: accentColor,
         "--hover-color": accentColor,
@@ -235,7 +235,7 @@ export function LyricsToggleButton({
       title={isOpen ? "关闭桌面歌词" : "打开桌面歌词"}
       onClick={onToggle}
       disabled={disabled}
-      className={`inline-flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-lg text-xs font-bold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-40 ${
+      className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold leading-none transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-40 ${
         isOpen
           ? "border shadow-sm active:scale-95"
           : "text-foreground-muted hover:text-[var(--hover-color)] hover:bg-[var(--hover-bg)] active:scale-95"
@@ -252,7 +252,7 @@ export function LyricsToggleButton({
           : {})
       } as CSSProperties}
     >
-      <span className="text-[13px] font-bold font-sans">词</span>
+      <span className="text-[13px] font-bold font-sans leading-none">词</span>
     </button>
   );
 }
@@ -315,7 +315,7 @@ function VolumeControl({
   useBackHandler(() => setIsOpen(false), isOpen);
 
   return (
-    <div ref={rootRef} className="relative shrink-0">
+    <div ref={rootRef} className="relative shrink-0 flex items-center h-8">
       {isOpen ? (
         <div className="absolute bottom-full right-1/2 z-[60] mb-2 flex translate-x-1/2 flex-col items-center">
           <div className="light-popover-surface flex h-[9.25rem] w-14 flex-col items-center rounded-2xl border border-surface-border bg-background-secondary px-2.5 py-2.5 shadow-[0_14px_32px_rgba(0,0,0,0.45)] backdrop-blur-xl dark:bg-[#17181c]">
@@ -359,7 +359,7 @@ function VolumeControl({
         aria-label={`音量 ${percentage}%，点击${isOpen ? "收起" : "调整"}`}
         title={`音量 ${percentage}%`}
         onClick={() => setIsOpen((current) => !current)}
-        className="inline-flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-lg text-foreground-muted transition-colors hover:text-[var(--hover-color)] hover:bg-[var(--hover-bg)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-foreground-muted transition-colors hover:text-[var(--hover-color)] hover:bg-[var(--hover-bg)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         style={{
           "--hover-color": accentColor,
           "--hover-bg": accentSoft,
@@ -725,7 +725,7 @@ export function QualityBadge({
   return (
     <div
       ref={rootRef}
-      className={`relative inline-flex shrink-0 items-center ${isCapsule ? "justify-self-center" : ""}`}
+      className={`relative inline-flex shrink-0 items-center h-8 ${isCapsule ? "justify-self-center" : ""}`}
       onClick={(e) => e.stopPropagation()}
     >
       <button
@@ -736,8 +736,8 @@ export function QualityBadge({
         title="点击切换首选音质"
         className={
           isCapsule
-            ? `inline-flex h-8.5 items-center justify-center gap-1 rounded-lg bg-white/[0.12] px-2.5 text-xs font-medium text-white/80 active:scale-95 transition-all select-none hover:bg-white/[0.18] hover:text-white cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/40 ${className}`
-            : `inline-flex h-8.5 items-center justify-center gap-1 rounded-lg px-2 text-xs font-medium text-foreground-muted select-none transition-colors cursor-pointer hover:text-[var(--hover-color)] hover:bg-[var(--hover-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent active:scale-95 ${className}`
+            ? `inline-flex h-8 items-center justify-center gap-1 rounded-lg bg-white/[0.12] px-2.5 text-xs font-medium leading-none text-white/80 active:scale-95 transition-all select-none hover:bg-white/[0.18] hover:text-white cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/40 ${className}`
+            : `inline-flex h-8 items-center justify-center gap-1 rounded-lg px-2 text-xs font-medium leading-none text-foreground-muted select-none transition-colors cursor-pointer hover:text-[var(--hover-color)] hover:bg-[var(--hover-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent active:scale-95 ${className}`
         }
         style={
           isCapsule
@@ -754,7 +754,7 @@ export function QualityBadge({
               } as CSSProperties)
         }
       >
-        <span>{currentOption.badge}</span>
+        <span className="leading-none">{currentOption.badge}</span>
         <svg
           width={10}
           height={10}
@@ -973,20 +973,20 @@ export function DesktopBottomPlayerLayout({
           onClick={onPrev}
           title="上一首"
           aria-label="上一首"
-          className="inline-flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-full text-foreground-muted transition-colors hover:text-[var(--hover-color)] hover:bg-[var(--hover-bg)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-40"
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-foreground-muted transition-colors hover:text-[var(--hover-color)] hover:bg-[var(--hover-bg)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-40"
           style={{
             "--hover-color": artworkAccent,
             "--hover-bg": artworkAccentSoft
           } as CSSProperties}
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor">
             <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
           </svg>
         </button>
 
         <button
           data-testid="player-toggle-button"
-          className={`inline-flex h-8.5 w-8.5 items-center justify-center rounded-full text-white shadow-md outline-none transition-transform focus-visible:ring-2 focus-visible:ring-accent ${
+          className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white shadow-md outline-none transition-transform focus-visible:ring-2 focus-visible:ring-accent ${
             canControlPlayback
               ? "hover:scale-105 active:scale-95 cursor-pointer bg-accent"
               : "cursor-not-allowed opacity-50 bg-accent/60"
@@ -998,11 +998,11 @@ export function DesktopBottomPlayerLayout({
           type="button"
         >
           {isPlaying ? (
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
               <path d="M6 19h4V5H6zm8-14v14h4V5z" />
             </svg>
           ) : (
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" className="translate-x-[0.5px]">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" className="translate-x-[0.5px]">
               <path d="M8 5v14l11-7z" />
             </svg>
           )}
@@ -1015,13 +1015,13 @@ export function DesktopBottomPlayerLayout({
           onClick={onNext}
           title="下一首"
           aria-label="下一首"
-          className="inline-flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-full text-foreground-muted transition-colors hover:text-[var(--hover-color)] hover:bg-[var(--hover-bg)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-40"
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-foreground-muted transition-colors hover:text-[var(--hover-color)] hover:bg-[var(--hover-bg)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-40"
           style={{
             "--hover-color": artworkAccent,
             "--hover-bg": artworkAccentSoft
           } as CSSProperties}
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor">
             <path d="M6 18l8.5-6L6 6zm10-12v12h2V6z" />
           </svg>
         </button>
@@ -1047,9 +1047,9 @@ export function DesktopBottomPlayerLayout({
       </div>
 
       {/* Right: Audio Quality Badge + Lyrics Toggle + Volume Control + Immersive + Mini */}
-      <div className="flex min-w-0 items-center justify-end gap-2 sm:gap-2.5 lg:gap-3 min-w-[280px] lg:min-w-[340px] shrink-0 ml-auto">
+      <div className="flex min-w-0 items-center justify-end gap-2 sm:gap-2.5 lg:gap-3 min-w-[280px] lg:min-w-[340px] shrink-0 ml-auto h-8">
         {currentTrackDuration > 0 ? (
-          <span className="hidden xl:inline-flex h-8.5 items-center text-xs font-mono tabular-nums text-foreground-muted/80 select-none mr-2 shrink-0 leading-none">
+          <span className="hidden xl:inline-flex h-8 items-center text-xs font-mono tabular-nums text-foreground-muted/80 select-none mr-2 shrink-0 leading-none">
             {formatDuration(boundedProgressMs)} / {formatDuration(currentTrackDuration)}
           </span>
         ) : null}
@@ -1110,7 +1110,7 @@ function ImmersiveToggleButton({
       aria-label={isOpen ? "退出沉浸式播放" : "打开沉浸式播放"}
       title={isOpen ? "退出沉浸式播放" : "打开沉浸式播放"}
       onClick={onToggle}
-      className="inline-flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-lg text-foreground-muted transition-colors hover:text-[var(--hover-color)] hover:bg-[var(--hover-bg)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-foreground-muted transition-colors hover:text-[var(--hover-color)] hover:bg-[var(--hover-bg)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       style={{
         "--hover-color": accentColor,
         "--hover-bg": accentSoft,
@@ -1143,7 +1143,7 @@ function MiniPlayerToggleButton({
       aria-label={isOpen ? "关闭迷你播放器" : "打开迷你播放器"}
       title={isOpen ? "关闭迷你播放器" : "打开迷你播放器"}
       onClick={onToggle}
-      className="inline-flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-lg text-foreground-muted transition-colors hover:text-[var(--hover-color)] hover:bg-[var(--hover-bg)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-foreground-muted transition-colors hover:text-[var(--hover-color)] hover:bg-[var(--hover-bg)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       style={{
         "--hover-color": accentColor,
         "--hover-bg": accentSoft,

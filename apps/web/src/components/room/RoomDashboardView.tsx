@@ -236,7 +236,7 @@ function InteractiveRoomLayout(props: RoomLayoutProps) {
                   onKeyDown={(event) => handleTabKeyDown(event, tab)}
                   role="tab"
                   tabIndex={isActive ? 0 : -1}
-                  className={`flex-1 flex min-h-8 sm:min-h-8.5 whitespace-nowrap items-center justify-center gap-1 sm:gap-1.5 rounded-lg px-2 sm:px-3 py-1 text-xs font-medium transition-colors cursor-pointer ${
+                  className={`flex-1 flex min-h-8 sm:min-h-8 whitespace-nowrap items-center justify-center gap-1 sm:gap-1.5 rounded-lg px-2 sm:px-3 py-1 text-xs font-medium transition-colors cursor-pointer ${
                     isActive
                       ? "bg-surface-elevated text-foreground font-medium shadow-xs border border-surface-border/60"
                       : "text-foreground-muted hover:text-foreground hover:bg-surface/50"
