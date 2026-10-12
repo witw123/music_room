@@ -504,10 +504,46 @@ export function FavoriteAlbumsPage({
             </div>
           ) : null}
           <div className="flex items-center gap-3">
-            <div aria-label="收藏内容类型" className="flex items-center gap-5 border-b border-surface-border" role="tablist">
-              <button aria-selected={favoriteView === "tracks"} className={`border-b-2 px-0.5 py-2 text-sm font-semibold transition-colors ${favoriteView === "tracks" ? "border-accent text-foreground" : "border-transparent text-foreground-muted hover:text-foreground"}`} onClick={() => { setFavoriteView("tracks"); setDetail(null); }} role="tab" type="button">歌曲</button>
-              <button aria-selected={favoriteView === "albums"} className={`border-b-2 px-0.5 py-2 text-sm font-semibold transition-colors ${favoriteView === "albums" ? "border-accent text-foreground" : "border-transparent text-foreground-muted hover:text-foreground"}`} onClick={() => setFavoriteView("albums")} role="tab" type="button">专辑</button>
-              <button aria-selected={favoriteView === "artists"} className={`border-b-2 px-0.5 py-2 text-sm font-semibold transition-colors ${favoriteView === "artists" ? "border-accent text-foreground" : "border-transparent text-foreground-muted hover:text-foreground"}`} onClick={() => { setFavoriteView("artists"); setDetail(null); }} role="tab" type="button">歌手</button>
+            <div aria-label="收藏内容类型" className="flex items-center gap-1 rounded-xl border border-surface-border/80 bg-surface/40 p-1 shadow-2xs backdrop-blur-md" role="tablist">
+              <button
+                aria-selected={favoriteView === "tracks"}
+                className={`flex items-center justify-center rounded-lg px-3 py-1 text-xs transition-all duration-150 cursor-pointer ${
+                  favoriteView === "tracks"
+                    ? "bg-surface-elevated text-foreground font-semibold shadow-xs border border-surface-border"
+                    : "border border-transparent text-foreground-muted hover:text-foreground hover:bg-surface-hover/40"
+                }`}
+                onClick={() => { setFavoriteView("tracks"); setDetail(null); }}
+                role="tab"
+                type="button"
+              >
+                歌曲
+              </button>
+              <button
+                aria-selected={favoriteView === "albums"}
+                className={`flex items-center justify-center rounded-lg px-3 py-1 text-xs transition-all duration-150 cursor-pointer ${
+                  favoriteView === "albums"
+                    ? "bg-surface-elevated text-foreground font-semibold shadow-xs border border-surface-border"
+                    : "border border-transparent text-foreground-muted hover:text-foreground hover:bg-surface-hover/40"
+                }`}
+                onClick={() => setFavoriteView("albums")}
+                role="tab"
+                type="button"
+              >
+                专辑
+              </button>
+              <button
+                aria-selected={favoriteView === "artists"}
+                className={`flex items-center justify-center rounded-lg px-3 py-1 text-xs transition-all duration-150 cursor-pointer ${
+                  favoriteView === "artists"
+                    ? "bg-surface-elevated text-foreground font-semibold shadow-xs border border-surface-border"
+                    : "border border-transparent text-foreground-muted hover:text-foreground hover:bg-surface-hover/40"
+                }`}
+                onClick={() => { setFavoriteView("artists"); setDetail(null); }}
+                role="tab"
+                type="button"
+              >
+                歌手
+              </button>
             </div>
             {embedded && onBack ? <Button onClick={onBack} size="sm" type="button" variant="outline">返回我的</Button> : null}
           </div>

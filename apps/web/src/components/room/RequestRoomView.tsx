@@ -517,14 +517,14 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
                   aria-selected={isActive}
                   className={`flex-1 flex min-h-7 min-w-fit items-center justify-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold transition-all duration-150 ${
                     isActive
-                      ? "bg-accent text-white shadow-xs"
-                      : "text-foreground-muted hover:text-foreground hover:bg-surface-hover/60"
+                      ? "bg-surface-elevated text-foreground font-semibold shadow-xs border border-surface-border"
+                      : "border border-transparent text-foreground-muted hover:text-foreground hover:bg-surface-hover/40"
                   }`}
                   onClick={() => setMobileTab(tab.id)}
                   role="tab"
                   type="button"
                 >
-                  <IconComp className="w-3.5 h-3.5 shrink-0" />
+                  <IconComp className={`w-3.5 h-3.5 shrink-0 transition-colors ${isActive ? "text-accent" : "text-foreground-muted"}`} />
                   <span>{tab.label}</span>
                 </button>
               );
@@ -689,8 +689,8 @@ function RequestWorkspaceTabs<T extends string>({
               aria-selected={isActive}
               className={`flex-1 flex min-h-7 sm:min-h-7.5 items-center justify-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold transition-all duration-150 ${
                 isActive
-                  ? "bg-accent text-white shadow-xs"
-                  : "text-foreground-muted hover:text-foreground hover:bg-surface-hover/60"
+                      ? "bg-surface-elevated text-foreground font-semibold shadow-xs border border-surface-border"
+                      : "border border-transparent text-foreground-muted hover:text-foreground hover:bg-surface-hover/40"
               }`}
               onClick={() => onChange(tab.id)}
               role="tab"

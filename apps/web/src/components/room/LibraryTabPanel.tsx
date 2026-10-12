@@ -86,35 +86,35 @@ function LibraryTabPanelBase({
       {roomPlaylists !== undefined ? (
         <div
           aria-label="曲库视图切换"
-          className="flex items-center gap-1 rounded-lg border border-surface-border/60 bg-surface/60 p-0.5"
+          className="flex items-center gap-1 rounded-xl border border-surface-border/80 bg-surface/40 p-1 shadow-2xs"
           role="tablist"
         >
           <button
             aria-selected={subTab === "tracks"}
             className={`flex-1 flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-all ${
               subTab === "tracks"
-                ? "bg-accent text-white shadow-xs"
-                : "text-foreground-muted hover:text-foreground hover:bg-surface-hover/60"
+                ? "bg-surface-elevated text-foreground font-semibold shadow-xs border border-surface-border"
+                : "border border-transparent text-foreground-muted hover:text-foreground hover:bg-surface-hover/40"
             }`}
             onClick={() => setSubTab("tracks")}
             role="tab"
             type="button"
           >
-            <MusicIcon className="w-3.5 h-3.5" />
+            <MusicIcon className={`w-3.5 h-3.5 transition-colors ${subTab === "tracks" ? "text-accent" : "text-foreground-muted"}`} />
             <span>单曲 ({tracks.length})</span>
           </button>
           <button
             aria-selected={subTab === "playlists"}
             className={`flex-1 flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-all ${
               subTab === "playlists"
-                ? "bg-accent text-white shadow-xs"
-                : "text-foreground-muted hover:text-foreground hover:bg-surface-hover/60"
+                ? "bg-surface-elevated text-foreground font-semibold shadow-xs border border-surface-border"
+                : "border border-transparent text-foreground-muted hover:text-foreground hover:bg-surface-hover/40"
             }`}
             onClick={() => setSubTab("playlists")}
             role="tab"
             type="button"
           >
-            <FolderIcon className="w-3.5 h-3.5" />
+            <FolderIcon className={`w-3.5 h-3.5 transition-colors ${subTab === "playlists" ? "text-accent" : "text-foreground-muted"}`} />
             <span>歌单 ({roomPlaylists.length})</span>
           </button>
         </div>

@@ -78,10 +78,12 @@ function LocalStorageTabPanelBase({
   return (
     <div className="animate-fade-in flex w-full flex-col gap-5 max-w-4xl mx-auto">
       <div className="flex w-full justify-center">
-        <div className="flex w-full max-w-xl gap-1 rounded-xl border border-surface-border bg-surface/40 p-1" role="tablist" aria-label="歌单类型">
+        <div className="flex w-full max-w-xl gap-1 rounded-xl border border-surface-border/80 bg-surface/40 p-1 shadow-2xs" role="tablist" aria-label="歌单类型">
         <button
           aria-selected={playlistTab === "local"}
-          className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${playlistTab === "local" ? "bg-accent text-white" : "text-foreground-muted hover:bg-surface-hover hover:text-foreground"}`}
+          className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${playlistTab === "local"
+            ? "bg-surface-elevated text-foreground font-semibold shadow-xs border border-surface-border"
+            : "border border-transparent text-foreground-muted hover:text-foreground hover:bg-surface-hover/40"}`}
           onClick={() => setPlaylistTab("local")}
           role="tab"
           type="button"
@@ -90,7 +92,9 @@ function LocalStorageTabPanelBase({
         </button>
         <button
           aria-selected={playlistTab === "network"}
-          className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${playlistTab === "network" ? "bg-accent text-white" : "text-foreground-muted hover:bg-surface-hover hover:text-foreground"}`}
+          className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${playlistTab === "network"
+            ? "bg-surface-elevated text-foreground font-semibold shadow-xs border border-surface-border"
+            : "border border-transparent text-foreground-muted hover:text-foreground hover:bg-surface-hover/40"}`}
           onClick={() => setPlaylistTab("network")}
           role="tab"
           type="button"
@@ -99,7 +103,9 @@ function LocalStorageTabPanelBase({
         </button>
         <button
           aria-selected={playlistTab === "favorites"}
-          className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${playlistTab === "favorites" ? "bg-accent text-white" : "text-foreground-muted hover:bg-surface-hover hover:text-foreground"}`}
+          className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${playlistTab === "favorites"
+            ? "bg-surface-elevated text-foreground font-semibold shadow-xs border border-surface-border"
+            : "border border-transparent text-foreground-muted hover:text-foreground hover:bg-surface-hover/40"}`}
           onClick={() => setPlaylistTab("favorites")}
           role="tab"
           type="button"

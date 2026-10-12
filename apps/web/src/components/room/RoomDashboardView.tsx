@@ -222,7 +222,7 @@ function InteractiveRoomLayout(props: RoomLayoutProps) {
             />
           </div>
 
-          <div aria-label="房间视图" className="flex items-center gap-1 rounded-xl bg-surface/50 p-1 border border-surface-border backdrop-blur-md" role="tablist">
+          <div aria-label="房间视图" className="flex items-center gap-1 rounded-xl bg-surface/40 p-1 border border-surface-border/80 backdrop-blur-md shadow-2xs" role="tablist">
             {tabConfigs.map(({ id: tab, label, icon: IconComp }) => {
               const isActive = activeTab === tab;
               return (
@@ -236,14 +236,14 @@ function InteractiveRoomLayout(props: RoomLayoutProps) {
                   onKeyDown={(event) => handleTabKeyDown(event, tab)}
                   role="tab"
                   tabIndex={isActive ? 0 : -1}
-                  className={`flex-1 flex min-h-8 sm:min-h-8 whitespace-nowrap items-center justify-center gap-1 sm:gap-1.5 rounded-lg px-2 sm:px-3 py-1 text-xs font-medium transition-colors cursor-pointer ${
+                  className={`flex-1 flex min-h-8 sm:min-h-8 whitespace-nowrap items-center justify-center gap-1.5 rounded-lg px-2.5 sm:px-3 py-1 text-xs transition-all duration-150 cursor-pointer ${
                     isActive
-                      ? "bg-surface-elevated text-foreground font-medium shadow-xs border border-surface-border"
-                      : "text-foreground-muted hover:text-foreground hover:bg-surface/50"
+                      ? "bg-surface-elevated text-foreground font-semibold shadow-xs border border-surface-border"
+                      : "border border-transparent text-foreground-muted hover:text-foreground hover:bg-surface-hover/40"
                   }`}
                   type="button"
                 >
-                  <IconComp className="w-3.5 h-3.5 shrink-0" />
+                  <IconComp className={`w-3.5 h-3.5 shrink-0 transition-colors ${isActive ? "text-accent" : "text-foreground-muted"}`} />
                   <span className="truncate">{label}</span>
                 </button>
               );

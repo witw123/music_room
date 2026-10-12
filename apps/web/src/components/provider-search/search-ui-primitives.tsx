@@ -13,15 +13,19 @@ export function SearchTab({ active, onClick, children }: { active: boolean; onCl
   return (
     <button
       aria-selected={active}
-      className={`relative min-h-10 px-1 pb-2.5 text-xs sm:text-sm font-semibold transition-colors ${
-        active ? "text-foreground" : "text-foreground-muted hover:text-foreground"
+      className={`relative min-h-10 px-2.5 pb-2 text-xs sm:text-sm font-semibold transition-all duration-150 cursor-pointer ${
+        active ? "text-foreground font-semibold" : "text-foreground-muted hover:text-foreground"
       }`}
       onClick={onClick}
       role="tab"
       type="button"
     >
-      {children}
-      {active ? <span className="absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-accent" /> : null}
+      <span>{children}</span>
+      <span
+        className={`absolute inset-x-2 -bottom-px h-0.5 rounded-full transition-all duration-200 ${
+          active ? "bg-accent opacity-100 scale-100" : "bg-transparent opacity-0 scale-75"
+        }`}
+      />
     </button>
   );
 }

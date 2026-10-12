@@ -35,16 +35,16 @@ export function PlaylistsLibraryPage() {
                 <button
                   key={id}
                   aria-selected={isActive}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-colors duration-150 ${
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all duration-150 cursor-pointer ${
                     isActive
-                      ? "bg-surface-elevated text-foreground font-semibold shadow-xs"
-                      : "text-foreground-muted hover:text-foreground hover:bg-surface-hover"
+                      ? "bg-surface-elevated text-foreground font-semibold shadow-xs border border-surface-border"
+                      : "border border-transparent text-foreground-muted hover:text-foreground hover:bg-surface-hover/40"
                   }`}
                   onClick={() => setActiveTab(id)}
                   role="tab"
                   type="button"
                 >
-                  <IconComp className="w-3.5 h-3.5" />
+                  <IconComp className={`w-3.5 h-3.5 transition-colors ${isActive ? "text-accent" : "text-foreground-muted"}`} />
                   <span>{label}</span>
                 </button>
               );

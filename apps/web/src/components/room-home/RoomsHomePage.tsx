@@ -270,16 +270,16 @@ export function RoomsHomePage({
         </header>
 
         {/* Mobile Filter Tabs directly under header */}
-        <div className="flex items-center gap-1 rounded-xl p-1 border border-surface-border bg-surface-elevated/70 shadow-xs backdrop-blur-xl md:hidden" role="tablist" aria-label="房间类型筛选">
+        <div className="flex items-center gap-1 rounded-xl p-1 border border-surface-border/80 bg-surface/40 shadow-2xs backdrop-blur-md md:hidden" role="tablist" aria-label="房间类型筛选">
           {(["all", "interactive", "request", "radio"] as const).map((roomType) => {
             const isSelected = roomTypeFilter === roomType;
             return (
               <button
                 aria-selected={isSelected}
-                className={`flex-1 flex min-h-8 whitespace-nowrap items-center justify-center rounded-lg px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer ${
+                className={`flex-1 flex min-h-8 whitespace-nowrap items-center justify-center rounded-lg px-2.5 py-1 text-xs transition-all duration-150 cursor-pointer ${
                   isSelected
-                    ? "bg-surface text-foreground font-medium shadow-xs border border-surface-border"
-                    : "text-foreground-muted hover:text-foreground hover:bg-surface/50"
+                    ? "bg-surface-elevated text-foreground font-semibold shadow-xs border border-surface-border"
+                    : "border border-transparent text-foreground-muted hover:text-foreground hover:bg-surface-hover/40"
                 }`}
                 key={roomType}
                 onClick={() => setRoomTypeFilter(roomType)}
@@ -294,16 +294,16 @@ export function RoomsHomePage({
 
         {/* Desktop Filter Tabs & Action Buttons */}
         <div className="hidden items-center justify-between gap-4 md:flex">
-          <div className="flex items-center gap-1 rounded-xl border border-surface-border p-1 bg-surface-elevated/70 shadow-xs backdrop-blur-xl" role="tablist" aria-label="房间类型筛选">
+          <div className="flex items-center gap-1 rounded-xl border border-surface-border/80 p-1 bg-surface/40 shadow-2xs backdrop-blur-md" role="tablist" aria-label="房间类型筛选">
             {(["all", "interactive", "request", "radio"] as const).map((roomType) => {
               const isSelected = roomTypeFilter === roomType;
               return (
                 <button
                   aria-selected={isSelected}
-                  className={`flex h-8 whitespace-nowrap items-center justify-center rounded-lg px-3.5 text-xs font-medium transition-colors ${
+                  className={`flex h-8 whitespace-nowrap items-center justify-center rounded-lg px-3.5 text-xs transition-all duration-150 cursor-pointer ${
                     isSelected
-                      ? "bg-surface text-foreground font-medium shadow-xs border border-surface-border"
-                      : "text-foreground-muted hover:text-foreground hover:bg-surface/50"
+                      ? "bg-surface-elevated text-foreground font-semibold shadow-xs border border-surface-border"
+                      : "border border-transparent text-foreground-muted hover:text-foreground hover:bg-surface-hover/40"
                   }`}
                   key={roomType}
                   onClick={() => setRoomTypeFilter(roomType)}
