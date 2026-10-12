@@ -28,10 +28,13 @@ export type PlayerQueueListProps = {
   className?: string;
 };
 
+export type PlayerQueuePlacement = "default" | "immersive-desktop" | "bottom-sheet";
+
 type PlayerQueueDrawerProps = Omit<PlayerQueueListProps, "className"> & {
   accentSoft?: string;
   compactMobile?: boolean;
   testId?: string;
+  placement?: PlayerQueuePlacement;
 };
 
 type TouchReorderState = {
@@ -86,7 +89,8 @@ export function PlayerQueueDrawer({
   accentColor = "rgb(0 148 255)",
   accentSoft = "rgba(0, 148, 255, 0.16)",
   compactMobile = false,
-  testId = "player-queue-button"
+  testId = "player-queue-button",
+  placement = compactMobile ? "bottom-sheet" : "default"
 }: PlayerQueueDrawerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -117,18 +121,42 @@ export function PlayerQueueDrawer({
 
   useBackHandler(() => setIsOpen(false), isOpen);
 
+  const isImmersiveDesktop = placement === "immersive-desktop";
+  const isBottomSheet = placement === "bottom-sheet";
+
+  const buttonClasses = isImmersiveDesktop
+    ? `relative inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-colors hover:bg-white/10 active:bg-white/10 hover:text-white active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+        isOpen ? "bg-white/15 text-white shadow-sm" : "text-foreground-muted"
+      }`
+    : compactMobile
+    ? `relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-[transform,color,background-color] active:scale-95 focus-visible:outline-none ${
+        isOpen ? "bg-white/15 text-white" : "text-white/80 hover:text-white"
+      }`
+    : `relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-foreground-muted transition-colors hover:text-[var(--hover-color)] hover:bg-[var(--hover-bg)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+        isOpen ? "bg-[var(--hover-bg)] text-[var(--hover-color)]" : ""
+      }`;
+
+  const buttonStyle = isImmersiveDesktop
+    ? ({
+        color: accentColor,
+        ...(isOpen ? { backgroundColor: accentSoft, color: "#ffffff" } : {})
+      } as React.CSSProperties)
+    : compactMobile
+    ? undefined
+    : ({
+        "--hover-color": accentColor,
+        "--hover-bg": accentSoft,
+        color: accentColor,
+        ...(isOpen ? { backgroundColor: accentSoft } : {})
+      } as React.CSSProperties);
+
   return (
     <div ref={rootRef} className="relative">
       <button
         type="button"
         data-testid={testId}
-        className={compactMobile ? "relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/80 transition-[transform,color] hover:text-white active:scale-95 focus-visible:outline-none" : "relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-foreground-muted transition-colors hover:text-[var(--hover-color)] hover:bg-[var(--hover-bg)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"}
-        style={compactMobile ? undefined : ({
-          "--hover-color": accentColor,
-          "--hover-bg": accentSoft,
-          color: accentColor,
-          ...(isOpen ? { backgroundColor: accentSoft } : {})
-        } as React.CSSProperties)}
+        className={buttonClasses}
+        style={buttonStyle}
         onClick={toggleDrawer}
         aria-expanded={isOpen}
         aria-label="歌曲队列"
@@ -147,19 +175,62 @@ export function PlayerQueueDrawer({
 
       {isOpen ? (
         <>
-          <div
-            aria-hidden="true"
-            className="fixed inset-0 z-[95] bg-black/60 backdrop-blur-sm sm:hidden"
-            onClick={() => setIsOpen(false)}
-          />
+          {isImmersiveDesktop ? (
+            <div
+              aria-hidden="true"
+              className="fixed inset-0 z-[85] bg-black/35 backdrop-blur-[1px]"
+              onClick={() => setIsOpen(false)}
+            />
+          ) : isBottomSheet ? (
+            <div
+              aria-hidden="true"
+              className="fixed inset-0 z-[95] bg-black/60 backdrop-blur-sm"
+              onClick={() => setIsOpen(false)}
+            />
+          ) : (
+            <div
+              aria-hidden="true"
+              className="fixed inset-0 z-[95] bg-black/60 backdrop-blur-sm sm:hidden"
+              onClick={() => setIsOpen(false)}
+            />
+          )}
+
           <aside
             aria-label="播放队列"
             data-testid="player-queue-drawer"
-            className="light-player-queue absolute bottom-full right-0 z-50 mb-3 flex max-h-[60vh] w-[min(500px,calc(100vw-1rem))] flex-col overflow-hidden rounded-xl border border-surface-border bg-surface-elevated text-foreground shadow-2xl animate-slide-up origin-bottom-right max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:top-auto max-sm:z-[100] max-sm:mb-0 max-sm:w-full max-sm:max-h-[calc(75*var(--app-dvh))] max-sm:rounded-b-none max-sm:rounded-t-2xl max-sm:border-x-0 max-sm:border-b-0 max-sm:border-t max-sm:border-surface-border max-sm:pb-[calc(0.5rem+env(safe-area-inset-bottom))]"
+            className={
+              isImmersiveDesktop
+                ? "light-player-queue fixed bottom-10 right-6 lg:right-10 xl:right-14 z-[90] flex max-h-[min(72vh,560px)] w-[min(460px,calc(100vw-3rem))] flex-col overflow-hidden rounded-2xl border border-surface-border bg-background-secondary text-foreground shadow-2xl animate-slide-up origin-bottom-right"
+                : isBottomSheet
+                ? "light-player-queue fixed inset-x-0 bottom-0 top-auto z-[100] mb-0 flex w-full max-h-[calc(75*var(--app-dvh))] flex-col overflow-hidden rounded-t-2xl border-t border-surface-border bg-background-secondary text-foreground shadow-2xl animate-slide-up pb-[calc(0.5rem+env(safe-area-inset-bottom))]"
+                : "light-player-queue absolute bottom-full right-0 z-50 mb-3 flex max-h-[60vh] w-[min(500px,calc(100vw-1rem))] flex-col overflow-hidden rounded-xl border border-surface-border bg-background-secondary text-foreground shadow-2xl animate-slide-up origin-bottom-right max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:top-auto max-sm:z-[100] max-sm:mb-0 max-sm:w-full max-sm:max-h-[calc(75*var(--app-dvh))] max-sm:rounded-b-none max-sm:rounded-t-2xl max-sm:border-x-0 max-sm:border-b-0 max-sm:border-t max-sm:border-surface-border max-sm:pb-[calc(0.5rem+env(safe-area-inset-bottom))]"
+            }
           >
-            <div className="flex shrink-0 items-center justify-center pt-2.5 pb-1 sm:hidden">
-              <div className="h-1 w-10 rounded-full bg-surface-border" />
+            {isBottomSheet || !isImmersiveDesktop ? (
+              <div className="flex shrink-0 items-center justify-center pt-2 pb-1 sm:hidden">
+                <div className="h-1 w-10 rounded-full bg-surface-border" />
+              </div>
+            ) : null}
+
+            <div className="flex shrink-0 items-center justify-between border-b border-surface-border/70 px-3.5 py-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-foreground">播放队列</span>
+                <span className="text-[11px] tabular-nums text-foreground-muted">({queue.length} 首)</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsOpen(false)}
+                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-foreground-muted transition-colors hover:bg-surface-hover hover:text-foreground active:scale-95 focus-visible:outline-none"
+                aria-label="关闭播放队列"
+                title="关闭"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="18" x2="18" y2="6" />
+                </svg>
+              </button>
             </div>
+
             <PlayerQueueList
               roomId={roomId}
               accentColor={accentColor}
@@ -623,7 +694,7 @@ export function PlayerQueueList({
             
             {isPending ? (
               <div className="light-player-queue-pending absolute inset-0 z-10 flex items-center justify-center bg-background/80 backdrop-blur-sm">
-                 <div className="light-player-queue-pending-pill flex items-center gap-2 rounded-full border border-surface-border bg-surface-elevated px-4 py-1.5 shadow-lg">
+                 <div className="light-player-queue-pending-pill flex items-center gap-2 rounded-full border border-surface-border bg-background-secondary px-4 py-1.5 shadow-lg">
                     <div className="w-2 h-2 rounded-full bg-accent animate-ping" />
                     <span className="text-xs text-foreground">更新队列中...</span>
                  </div>

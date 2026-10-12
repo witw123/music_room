@@ -550,6 +550,7 @@ function MobileImmersivePlayer({
             onPlayNextQueueItem={onPlayNextQueueItem}
             onRemoveQueueItem={onRemoveQueueItem}
             onReorderQueue={onReorderQueue}
+            placement="bottom-sheet"
             queue={queue}
             tracks={tracks}
             members={members}
@@ -727,6 +728,7 @@ function DesktopImmersivePlayer({
           onPlayNextQueueItem={onPlayNextQueueItem}
           onRemoveQueueItem={onRemoveQueueItem}
           onReorderQueue={onReorderQueue}
+          placement="immersive-desktop"
           queue={queue}
           tracks={tracks}
           members={members}

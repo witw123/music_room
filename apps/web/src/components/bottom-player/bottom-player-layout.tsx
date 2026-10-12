@@ -493,6 +493,7 @@ export function MobileBottomPlayerLayout({
             onRemoveQueueItem={onRemoveQueueItem}
             onReorderQueue={onReorderQueue}
             compactMobile
+            placement="bottom-sheet"
           />
         </div>
       </div>

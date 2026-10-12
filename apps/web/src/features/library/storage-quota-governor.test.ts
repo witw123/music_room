@@ -21,6 +21,11 @@ function makeSummary(partial: Partial<CachedLibraryTrackSummaryRecord> & { fileH
     artist: "Mock Artist",
     album: null,
     durationMs: 1000,
+    sourceTrackIds: [],
+    sourceRoomIds: [],
+    lastSourceTrackId: null,
+    lastSourceRoomId: null,
+    lastOwnerNickname: null,
     ...partial
   };
 }

@@ -1158,6 +1158,31 @@
     background-color: var(--surface-hover) !important;
   }
 
+  .light-player-queue {
+    background-color: var(--background-secondary) !important;
+    border-color: var(--surface-border) !important;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55) !important;
+  }
+
+  .light-player-queue .light-player-queue-content {
+    background-color: var(--background-secondary) !important;
+  }
+
+  .light-player-queue-artwork {
+    background-color: var(--surface) !important;
+    border-color: var(--surface-border) !important;
+  }
+
+  .light-player-queue-pending {
+    background-color: color-mix(in srgb, var(--background-secondary) 86%, transparent) !important;
+  }
+
+  .light-player-queue-pending-pill {
+    background-color: var(--background-secondary) !important;
+    border-color: var(--surface-border) !important;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4) !important;
+  }
+
   html[data-theme="light"] .light-player-queue {
     background-color: var(--background-secondary) !important;
     border-color: var(--surface-border) !important;
