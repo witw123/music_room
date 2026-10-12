@@ -259,10 +259,10 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
 
       {/* Mobile Streamlined View */}
       <div className="flex flex-1 min-h-0 flex-col overflow-hidden lg:hidden pt-1">
-        <div className="material-surface-header shrink-0 px-2 pb-1 pt-0">
+        <div className="material-surface-header sticky top-0 z-30 shrink-0 border-b border-surface-border bg-surface/30 backdrop-blur-md">
           <div
             aria-label="电台功能"
-            className="flex items-center gap-0.5 rounded-lg bg-surface/70 p-0.5 border border-surface-border/40 backdrop-blur-md overflow-x-auto hide-scrollbar"
+            className="flex w-full items-center overflow-x-auto hide-scrollbar"
             role="tablist"
           >
             {mobileTabs.map((tab) => {
@@ -272,17 +272,20 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
                 <button
                   key={tab.id}
                   aria-selected={isActive}
-                  className={`flex-1 flex min-h-7 min-w-fit items-center justify-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold transition-all duration-150 ${
+                  className={`relative flex-1 flex h-10 min-w-fit items-center justify-center gap-1.5 px-3 text-xs transition-colors cursor-pointer select-none ${
                     isActive
-                      ? "bg-surface-elevated text-foreground font-semibold shadow-xs border border-surface-border"
-                      : "border border-transparent text-foreground-muted hover:text-foreground hover:bg-surface-hover/40"
+                      ? "text-foreground font-semibold"
+                      : "text-foreground-muted hover:text-foreground hover:bg-surface-hover/30"
                   }`}
                   onClick={() => setMobileTab(tab.id)}
                   role="tab"
                   type="button"
                 >
                   <IconComp className={`w-3.5 h-3.5 shrink-0 transition-colors ${isActive ? "text-accent" : "text-foreground-muted"}`} />
-                  <span>{tab.label}</span>
+                  <span className="whitespace-nowrap">{tab.label}</span>
+                  {isActive ? (
+                    <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-accent shadow-[0_0_8px_var(--accent-glow)]" />
+                  ) : null}
                 </button>
               );
             })}
@@ -364,10 +367,10 @@ function RadioWorkspaceTabs<T extends string>({
   tabs: Array<{ id: T; label: string; icon?: React.ComponentType<{ className?: string }> }>;
 }) {
   return (
-    <div className="material-surface-header shrink-0 px-2.5 py-1 sm:px-3 sm:py-1.5">
+    <div className="material-surface-header sticky top-0 z-20 shrink-0 border-b border-surface-border bg-surface/20 backdrop-blur-md">
       <div
         aria-label={ariaLabel}
-        className="flex items-center gap-0.5 rounded-lg bg-surface/70 p-0.5 border border-surface-border/40 backdrop-blur-md"
+        className="flex w-full items-center"
         role="tablist"
       >
         {tabs.map((tab) => {
@@ -379,18 +382,21 @@ function RadioWorkspaceTabs<T extends string>({
               id={`${panelPrefix}-tab-${tab.id}`}
               aria-controls={`${panelPrefix}-panel-${tab.id}`}
               aria-selected={isActive}
-              className={`flex-1 flex min-h-7 sm:min-h-7.5 items-center justify-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold transition-all duration-150 ${
+              className={`relative flex-1 flex h-10 items-center justify-center gap-1.5 px-2.5 text-xs transition-colors cursor-pointer select-none ${
                 isActive
-                      ? "bg-surface-elevated text-foreground font-semibold shadow-xs border border-surface-border"
-                      : "border border-transparent text-foreground-muted hover:text-foreground hover:bg-surface-hover/40"
+                  ? "text-foreground font-semibold"
+                  : "text-foreground-muted hover:text-foreground hover:bg-surface-hover/30"
               }`}
               onClick={() => onChange(tab.id)}
               role="tab"
               tabIndex={isActive ? 0 : -1}
               type="button"
             >
-              {IconComp && <IconComp className="w-3.5 h-3.5 shrink-0" />}
-              <span>{tab.label}</span>
+              {IconComp && <IconComp className={`w-3.5 h-3.5 shrink-0 transition-colors ${isActive ? "text-accent" : "text-foreground-muted"}`} />}
+              <span className="truncate">{tab.label}</span>
+              {isActive ? (
+                <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-accent shadow-[0_0_8px_var(--accent-glow)]" />
+              ) : null}
             </button>
           );
         })}
@@ -605,12 +611,12 @@ function HostBroadcastDesk(props: RoomDashboardViewProps) {
 
       <section className="mt-3 pt-2" data-testid="radio-room-imports">
         <h3 className="text-xs sm:text-sm font-bold text-foreground mb-1.5">导入电台曲目</h3>
-        <div aria-label="导入歌曲方式" className="grid grid-cols-2 rounded-lg border border-surface-border/40 p-0.5 bg-surface/70" role="tablist">
+        <div aria-label="导入歌曲方式" className="grid grid-cols-2 rounded-lg border border-surface-border/50 p-0.5 bg-surface/40" role="tablist">
           <button
             aria-controls="radio-import-local"
             aria-selected={importTab === "local"}
-            className={`min-h-7 sm:min-h-7.5 rounded-md px-2.5 py-1 text-xs font-semibold transition-all ${
-              importTab === "local" ? "bg-accent text-white shadow-xs" : "text-foreground-muted hover:text-foreground hover:bg-surface-hover/60"
+            className={`min-h-7 sm:min-h-7.5 rounded-md px-2.5 py-1 text-xs font-medium transition-all cursor-pointer ${
+              importTab === "local" ? "bg-surface-elevated text-foreground font-semibold shadow-2xs" : "text-foreground-muted hover:text-foreground hover:bg-surface-hover/30"
             }`}
             onClick={() => setImportTab("local")}
             role="tab"
@@ -621,8 +627,8 @@ function HostBroadcastDesk(props: RoomDashboardViewProps) {
           <button
             aria-controls="radio-import-playlists"
             aria-selected={importTab === "playlists"}
-            className={`min-h-7 sm:min-h-7.5 rounded-md px-2.5 py-1 text-xs font-semibold transition-all ${
-              importTab === "playlists" ? "bg-accent text-white shadow-xs" : "text-foreground-muted hover:text-foreground hover:bg-surface-hover/60"
+            className={`min-h-7 sm:min-h-7.5 rounded-md px-2.5 py-1 text-xs font-medium transition-all cursor-pointer ${
+              importTab === "playlists" ? "bg-surface-elevated text-foreground font-semibold shadow-2xs" : "text-foreground-muted hover:text-foreground hover:bg-surface-hover/30"
             }`}
             onClick={() => setImportTab("playlists")}
             role="tab"

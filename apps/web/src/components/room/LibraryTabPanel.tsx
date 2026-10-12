@@ -86,15 +86,15 @@ function LibraryTabPanelBase({
       {roomPlaylists !== undefined ? (
         <div
           aria-label="曲库视图切换"
-          className="flex items-center gap-1 rounded-xl border border-surface-border/80 bg-surface/40 p-1 shadow-2xs"
+          className="flex items-center gap-1 rounded-lg border border-surface-border/60 bg-surface/30 p-0.5"
           role="tablist"
         >
           <button
             aria-selected={subTab === "tracks"}
-            className={`flex-1 flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-all ${
+            className={`flex-1 flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all cursor-pointer ${
               subTab === "tracks"
-                ? "bg-surface-elevated text-foreground font-semibold shadow-xs border border-surface-border"
-                : "border border-transparent text-foreground-muted hover:text-foreground hover:bg-surface-hover/40"
+                ? "bg-surface-elevated text-foreground font-semibold shadow-2xs"
+                : "text-foreground-muted hover:text-foreground hover:bg-surface-hover/30"
             }`}
             onClick={() => setSubTab("tracks")}
             role="tab"
@@ -105,10 +105,10 @@ function LibraryTabPanelBase({
           </button>
           <button
             aria-selected={subTab === "playlists"}
-            className={`flex-1 flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-all ${
+            className={`flex-1 flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all cursor-pointer ${
               subTab === "playlists"
-                ? "bg-surface-elevated text-foreground font-semibold shadow-xs border border-surface-border"
-                : "border border-transparent text-foreground-muted hover:text-foreground hover:bg-surface-hover/40"
+                ? "bg-surface-elevated text-foreground font-semibold shadow-2xs"
+                : "text-foreground-muted hover:text-foreground hover:bg-surface-hover/30"
             }`}
             onClick={() => setSubTab("playlists")}
             role="tab"

@@ -453,10 +453,10 @@ export function RoomProviderTrackSearch({
                 role="tab"
                 aria-selected={isCurrent}
                 onClick={() => setProvider(item)}
-                className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-semibold transition-all ${
+                className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-all cursor-pointer ${
                   isCurrent
-                    ? "bg-accent text-white shadow-xs"
-                    : "text-foreground-muted hover:bg-surface-hover/60 hover:text-foreground"
+                    ? "bg-surface-elevated text-foreground font-semibold shadow-2xs"
+                    : "text-foreground-muted hover:bg-surface-hover/50 hover:text-foreground"
                 }`}
               >
                 <span className={`h-1.5 w-1.5 rounded-full ${

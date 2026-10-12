@@ -434,10 +434,10 @@ function TrackListSectionBase({
               key={option.value}
               aria-pressed={trackFilter === option.value}
               data-testid={`library-filter-${option.value}`}
-              className={`flex min-w-0 whitespace-nowrap items-center justify-center gap-1 rounded-md px-1.5 py-1 text-[10px] font-semibold transition-colors sm:px-2.5 ${
+              className={`flex min-w-0 whitespace-nowrap items-center justify-center gap-1 rounded-md px-1.5 py-1 text-[11px] font-medium transition-colors sm:px-2.5 cursor-pointer ${
                 trackFilter === option.value
-                  ? "bg-accent text-white shadow-xs"
-                  : "text-foreground-muted hover:bg-surface-hover hover:text-foreground"
+                  ? "bg-surface-elevated text-foreground font-semibold shadow-2xs"
+                  : "text-foreground-muted hover:bg-surface-hover/50 hover:text-foreground"
               }`}
               onClick={() => setTrackFilter(option.value)}
               type="button"
@@ -445,7 +445,7 @@ function TrackListSectionBase({
               <span className="truncate">{option.label}</span>
               <span
                 className={`font-mono text-[10px] ${
-                  trackFilter === option.value ? "text-white/75" : "text-foreground-muted/70"
+                  trackFilter === option.value ? "text-accent font-semibold" : "text-foreground-muted/70"
                 }`}
               >
                 {option.count}
