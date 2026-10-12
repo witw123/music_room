@@ -10,6 +10,7 @@ import {
   appSettingsChangeEvent,
   getAppSettings,
   isCustomLayoutSidebarCollapsed,
+  isDarkTheme,
   resolveAppTheme,
   updateAppSettings,
   type ThemePreference
@@ -121,11 +122,24 @@ export function AppSidebar({
 
   function handleThemeToggle() {
     const resolvedTheme = resolveAppTheme(themePreference);
-    const nextTheme = resolvedTheme === "light" ? "dark" : "light";
+    const isDark = isDarkTheme(resolvedTheme);
+    let nextTheme: ThemePreference;
+    if (isDark) {
+      if (themePreference === "sage-dark") nextTheme = "sage-light";
+      else if (themePreference === "midnight-dark") nextTheme = "midnight-light";
+      else if (themePreference === "obsidian") nextTheme = "paper";
+      else nextTheme = "light";
+    } else {
+      if (themePreference === "sage-light") nextTheme = "sage-dark";
+      else if (themePreference === "midnight-light") nextTheme = "midnight-dark";
+      else if (themePreference === "paper") nextTheme = "obsidian";
+      else nextTheme = "dark";
+    }
     startThemeTransition(nextTheme);
   }
 
-  const themeActionLabel = resolveAppTheme(themePreference) === "light" ? "深色模式" : "浅色模式";
+  const isCurrentDark = isDarkTheme(resolveAppTheme(themePreference));
+  const themeActionLabel = isCurrentDark ? "浅色模式" : "深色模式";
   const footerControlSizeClass = collapsed
     ? "h-10 w-10 shrink-0 rounded-lg px-0"
     : "w-full rounded-xl px-3 py-3 text-sm";

@@ -61,9 +61,27 @@ const playbackModeLabels: Record<PlaybackMode, string> = {
 };
 
 const themeLabels: Record<ThemePreference, string> = {
+  system: "跟随系统",
   dark: "深色",
   light: "浅色",
-  system: "跟随系统"
+  "sage-dark": "灰绿深色",
+  "sage-light": "灰绿浅色",
+  obsidian: "石墨黑",
+  "midnight-dark": "深蓝",
+  "midnight-light": "浅蓝",
+  paper: "暖白"
+};
+
+const themePreviewColors: Record<ThemePreference, { bg: string; accent: string; border: string }> = {
+  system: { bg: "#1f2428", accent: "#007aff", border: "#3b424a" },
+  dark: { bg: "#0d0f12", accent: "#007aff", border: "#252b36" },
+  light: { bg: "#f6f7f8", accent: "#006ee6", border: "#d5dbe3" },
+  "sage-dark": { bg: "#141716", accent: "#528570", border: "#2a332f" },
+  "sage-light": { bg: "#f2f5f3", accent: "#3d6d5a", border: "#d5ddd7" },
+  obsidian: { bg: "#090a0c", accent: "#fa233b", border: "#282c37" },
+  "midnight-dark": { bg: "#0a0f18", accent: "#38bdf8", border: "#1f3047" },
+  "midnight-light": { bg: "#eef3f9", accent: "#0284c7", border: "#d1deed" },
+  paper: { bg: "#f5f2eb", accent: "#b45309", border: "#e4ddd3" }
 };
 
 const playerStyleLabels: Record<PlayerStyle, string> = {
@@ -242,27 +260,39 @@ export function SettingsPage() {
     // ---------------- 通用 (general) ----------------
     {
       id: "theme",
-      categoryId: "general",
-      sectionTitle: "界面与外观偏好",
-      label: "主题",
-      description: "选择应用的颜色主题，也可以跟随操作系统设置。",
-      keywords: ["主题", "颜色", "色彩", "深色", "浅色", "系统", "暗色", "明亮", "theme", "dark", "light"],
+      categoryId: "appearance",
+      sectionTitle: "主题与色彩风格",
+      label: "主题风格",
+      description: "选择应用的外观配色方案，包含高对比度护眼色彩与声学调色预设。",
+      keywords: ["主题", "颜色", "色彩", "深色", "浅色", "系统", "灰绿", "石墨", "深蓝", "浅蓝", "暖白", "theme", "dark", "light", "sage", "obsidian", "midnight", "paper"],
       render: () => (
-        <SettingRow key="theme" label="主题" description="选择应用的颜色主题，也可以跟随操作系统设置。">
-          <div aria-label="主题" className="grid grid-cols-3 rounded-lg border border-surface-border bg-surface/60 p-1" role="group">
-            {(Object.entries(themeLabels) as Array<[ThemePreference, string]>).map(([theme, label]) => (
-              <button
-                aria-pressed={settings.theme === theme}
-                className={`min-w-16 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                  settings.theme === theme ? "bg-accent text-white shadow-xs" : "text-foreground-muted hover:bg-surface-hover hover:text-foreground"
-                }`}
-                key={theme}
-                onClick={() => patchSettings({ theme })}
-                type="button"
-              >
-                {label}
-              </button>
-            ))}
+        <SettingRow key="theme" label="主题风格" description="选择应用的外观配色方案，包含高对比度护眼色彩与声学调色预设。">
+          <div aria-label="主题预设" className="grid grid-cols-2 sm:grid-cols-3 gap-2 w-full max-w-xl" role="group">
+            {(Object.entries(themeLabels) as Array<[ThemePreference, string]>).map(([themeKey, label]) => {
+              const isSelected = settings.theme === themeKey;
+              const preview = themePreviewColors[themeKey];
+              return (
+                <button
+                  key={themeKey}
+                  type="button"
+                  aria-pressed={isSelected}
+                  onClick={() => patchSettings({ theme: themeKey })}
+                  className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium transition-all duration-150 border cursor-pointer ${
+                    isSelected
+                      ? "border-accent bg-surface-elevated text-foreground shadow-xs font-semibold"
+                      : "border-surface-border/80 bg-surface/40 text-foreground-muted hover:border-surface-border hover:bg-surface-hover/40 hover:text-foreground"
+                  }`}
+                >
+                  <span
+                    className="w-3.5 h-3.5 rounded-full shrink-0 border flex items-center justify-center"
+                    style={{ backgroundColor: preview.bg, borderColor: preview.border }}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: preview.accent }} />
+                  </span>
+                  <span className="truncate">{label}</span>
+                </button>
+              );
+            })}
           </div>
         </SettingRow>
       )

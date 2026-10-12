@@ -5,8 +5,38 @@ import { EQUALIZER_PRESETS, type EqualizerPresetId } from "../playback/audio-equ
 export const appSettingsStorageKey = "music-room-settings-v1";
 export const appSettingsChangeEvent = "music-room-settings-change";
 
-export type ThemePreference = "dark" | "light" | "system";
+export type ThemePreference =
+  | "system"
+  | "dark"
+  | "light"
+  | "sage-dark"
+  | "sage-light"
+  | "obsidian"
+  | "midnight-dark"
+  | "midnight-light"
+  | "paper";
 export type ResolvedTheme = Exclude<ThemePreference, "system">;
+
+export const themePreferences: ThemePreference[] = [
+  "system",
+  "dark",
+  "light",
+  "sage-dark",
+  "sage-light",
+  "obsidian",
+  "midnight-dark",
+  "midnight-light",
+  "paper"
+];
+
+export function isDarkTheme(theme: ResolvedTheme): boolean {
+  return (
+    theme === "dark" ||
+    theme === "sage-dark" ||
+    theme === "obsidian" ||
+    theme === "midnight-dark"
+  );
+}
 export type PlayerStyle = "vinyl" | "square-cover";
 export type AudioQualityPreference = "standard" | "high" | "exhigh" | "lossless" | "hires";
 export type CustomLayoutPageId = "home" | "discover" | "playlists" | "favorites" | "profile" | "settings" | "room";
@@ -240,9 +270,14 @@ export function normalizeSettings(value: unknown): AppSettings {
       ? quality
       : "exhigh";
 
+  const rawTheme = input.theme;
+  const theme: ThemePreference = typeof rawTheme === "string" && (themePreferences as string[]).includes(rawTheme)
+    ? (rawTheme as ThemePreference)
+    : "dark";
+
   return {
     version: 1,
-    theme: input.theme === "light" || input.theme === "system" ? input.theme : "dark",
+    theme,
     layout: {
       sidebarCollapsed: layout.sidebarCollapsed !== false,
       reduceMotion: layout.reduceMotion === true,
@@ -435,7 +470,6 @@ function normalizeLayoutNumber(value: unknown, fallback: number, minimum: number
 }
 
 export function resolveAppTheme(preference: ThemePreference, prefersLight?: boolean): ResolvedTheme {
-  if (preference === "light") return "light";
   if (preference === "system") {
     const systemPrefersLight = prefersLight ?? (
       typeof window !== "undefined" && typeof window.matchMedia === "function"
@@ -444,15 +478,28 @@ export function resolveAppTheme(preference: ThemePreference, prefersLight?: bool
     );
     return systemPrefersLight ? "light" : "dark";
   }
-  return "dark";
+  return preference;
 }
 
 export function applyAppTheme(preference: ThemePreference): ResolvedTheme {
   const resolved = resolveAppTheme(preference);
   if (typeof document !== "undefined") {
+    const isDark = isDarkTheme(resolved);
     document.documentElement.dataset.theme = resolved;
-    document.documentElement.style.colorScheme = resolved;
-    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", resolved === "light" ? "#f5f7fb" : "#09090b");
+    document.documentElement.dataset.themeMode = isDark ? "dark" : "light";
+    document.documentElement.style.colorScheme = isDark ? "dark" : "light";
+
+    const metaThemeColors: Record<ResolvedTheme, string> = {
+      dark: "#0d0f12",
+      light: "#f6f7f8",
+      "sage-dark": "#141716",
+      "sage-light": "#f2f5f3",
+      obsidian: "#090a0c",
+      "midnight-dark": "#0a0f18",
+      "midnight-light": "#eef3f9",
+      paper: "#f5f2eb"
+    };
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", metaThemeColors[resolved] ?? "#0d0f12");
   }
   return resolved;
 }

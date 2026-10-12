@@ -1,7 +1,7 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
-  darkMode: ["selector", '[data-theme="dark"]'],
+  darkMode: ["selector", '[data-theme-mode="dark"], [data-theme="dark"]'],
   content: [
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
@@ -18,9 +18,9 @@ const config: Config = {
         foreground: "var(--foreground)",
         "foreground-muted": "var(--foreground-muted)",
         accent: {
-          DEFAULT: "rgb(0 122 255 / <alpha-value>)",
-          hover: "rgb(51 149 255 / <alpha-value>)",
-          glow: "rgba(0, 122, 255, 0.42)",
+          DEFAULT: "rgb(var(--accent-rgb) / <alpha-value>)",
+          hover: "rgb(var(--accent-hover-rgb) / <alpha-value>)",
+          glow: "var(--accent-glow)",
         },
         surface: {
           DEFAULT: "var(--surface)",

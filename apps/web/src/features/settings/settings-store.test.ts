@@ -36,12 +36,17 @@ describe("app settings store", () => {
     });
   });
 
-  it("normalizes and resolves light and system themes", () => {
+  it("normalizes and resolves light, system and custom preset themes", () => {
     expect(normalizeSettings({ theme: "light" }).theme).toBe("light");
     expect(normalizeSettings({ theme: "system" }).theme).toBe("system");
+    expect(normalizeSettings({ theme: "sage-dark" }).theme).toBe("sage-dark");
+    expect(normalizeSettings({ theme: "obsidian" }).theme).toBe("obsidian");
+    expect(normalizeSettings({ theme: "paper" }).theme).toBe("paper");
     expect(normalizeSettings({ theme: "unknown" }).theme).toBe("dark");
     expect(resolveAppTheme("dark", true)).toBe("dark");
     expect(resolveAppTheme("light", false)).toBe("light");
+    expect(resolveAppTheme("sage-dark", false)).toBe("sage-dark");
+    expect(resolveAppTheme("obsidian", true)).toBe("obsidian");
     expect(resolveAppTheme("system", true)).toBe("light");
     expect(resolveAppTheme("system", false)).toBe("dark");
   });
