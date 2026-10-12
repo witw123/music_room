@@ -318,15 +318,14 @@ function VolumeControl({
     <div ref={rootRef} className="relative shrink-0 flex items-center h-8">
       {isOpen ? (
         <div className="absolute bottom-full right-1/2 z-[60] mb-2 flex translate-x-1/2 flex-col items-center">
-          <div className="light-popover-surface flex h-[9.25rem] w-14 flex-col items-center rounded-2xl border border-surface-border bg-background-secondary px-2.5 py-2.5 shadow-[0_14px_32px_rgba(0,0,0,0.45)] backdrop-blur-xl dark:bg-[#17181c]">
+          <div className="light-popover-surface flex h-[9.25rem] w-14 flex-col items-center rounded-2xl border border-surface-border bg-background-secondary px-2.5 py-2.5 shadow-lg backdrop-blur-xl">
             <div className="relative h-24 w-5 shrink-0">
               <div className="absolute left-1/2 top-0 h-full w-1.5 -translate-x-1/2 overflow-hidden rounded-full bg-white/10">
                 <div
                   className="absolute inset-x-0 bottom-0 rounded-full transition-[height,background-color] duration-150"
                   style={{
                     height: `${percentage}%`,
-                    backgroundColor: accentColor,
-                    boxShadow: `0 0 10px ${accentColor}`
+                    backgroundColor: accentColor
                   }}
                 />
               </div>
@@ -349,7 +348,7 @@ function VolumeControl({
             </div>
             <span className="mt-2 text-xs tabular-nums text-foreground-muted">{percentage}%</span>
           </div>
-          <div className="light-popover-surface-arrow h-0 w-0 border-x-[7px] border-t-[7px] border-x-transparent border-t-[#17181c]" aria-hidden="true" />
+          <div className="light-popover-surface-arrow h-0 w-0 border-x-[7px] border-t-[7px] border-x-transparent border-t-background-secondary" aria-hidden="true" />
         </div>
       ) : null}
       <button
@@ -628,7 +627,7 @@ export function TopEdgeScrubber({
       {/* Floating time tooltip bubble: 00:53 / 05:00 */}
       {(isHovering || isDragging) && hoverData !== null && durationMs > 0 && (
         <div
-          className="pointer-events-none absolute -top-8 -translate-x-1/2 rounded-full border border-white/15 bg-white px-2.5 py-0.5 text-[11px] font-semibold tabular-nums text-zinc-900 shadow-[0_4px_12px_rgba(0,0,0,0.3)] animate-fade-in"
+          className="pointer-events-none absolute -top-8 -translate-x-1/2 rounded-full border border-surface-border bg-background-secondary px-2.5 py-0.5 text-[11px] font-semibold tabular-nums text-foreground shadow-md animate-fade-in"
           style={{
             left: `${Math.max(0.04, Math.min(0.96, hoverData.ratio)) * 100}%`
           }}
@@ -774,7 +773,7 @@ export function QualityBadge({
 
       {isOpen && (
         <div
-          className={`light-popover-surface absolute bottom-full z-[70] mb-2 w-48 rounded-xl border border-surface-border bg-[#17181c] p-1.5 shadow-[0_16px_36px_rgba(0,0,0,0.85)] animate-in fade-in zoom-in-95 duration-150 ${
+          className={`light-popover-surface absolute bottom-full z-[70] mb-2 w-48 rounded-xl border border-surface-border bg-background-secondary p-1.5 shadow-lg animate-in fade-in zoom-in-95 duration-150 ${
             popoverPlacement === "center" ? "left-1/2 -translate-x-1/2" : "right-0"
           }`}
           onClick={(e) => e.stopPropagation()}

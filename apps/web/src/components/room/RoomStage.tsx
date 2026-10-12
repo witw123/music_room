@@ -124,10 +124,10 @@ function RoomStageBase({
   const artworkPalette = useArtworkPalette(artworkUrl);
   const playerStyle = usePlayerStyle();
   const recordSize = ultraCompactStage
-    ? "clamp(9.5rem, min(26vh, 44vw), 12rem)"
+    ? "clamp(8.5rem, min(22vh, 38vw), 10.5rem)"
     : compactStage
-      ? "clamp(10rem, min(28vh, 42vw), 14rem)"
-      : "clamp(12rem, min(36vh, 42vw), 20rem)";
+      ? "clamp(9.5rem, min(25vh, 38vw), 12.5rem)"
+      : "clamp(11rem, min(30vh, 36vw), 16rem)";
   const stageContentOffset = hideRoomMetadata
       ? "translate-y-0"
     : ultraCompactStage
@@ -382,17 +382,17 @@ function RoomStageBase({
               </div>
             <div
                 className={`relative z-30 flex shrink-0 flex-col items-center text-center ${
-                  ultraCompactStage ? "gap-3 pt-4" : compactStage ? "gap-4 pt-5" : "gap-5 pt-6 sm:gap-6 sm:pt-7"
+                  ultraCompactStage ? "gap-2 pt-3" : compactStage ? "gap-2.5 pt-3.5" : "gap-3 pt-4 sm:gap-3.5 sm:pt-5"
                 }`}
               >
                 {currentTrack ? (
                   <>
-                    <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-3">
+                    <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2.5">
                       <span
-                        className={`rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.22em] ${
+                        className={`rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${
                           isPlaying
-                            ? "border border-accent/30 bg-accent/20 text-accent"
-                            : "border border-surface-border/60 bg-surface/60 text-foreground-muted"
+                            ? "border border-accent/40 bg-accent/15 text-accent"
+                            : "border border-surface-border bg-surface text-foreground-muted"
                         }`}
                       >
                         {playbackBarrier?.blocked ? "缓存中" : isPlaying ? "正在播放" : "准备就绪"}
@@ -409,12 +409,12 @@ function RoomStageBase({
                     </div>
 
                     <h2
-                      className={`max-w-[18ch] font-extrabold tracking-tight text-foreground ${
+                      className={`max-w-[20ch] font-semibold tracking-tight text-foreground ${
                         ultraCompactStage
-                          ? "text-[1.55rem] leading-[1]"
+                          ? "text-lg leading-tight"
                           : compactStage
-                            ? "text-[1.85rem] leading-[1]"
-                            : "text-2xl leading-[1.06] sm:text-3xl md:text-[38px] lg:text-[44px]"
+                            ? "text-xl leading-tight"
+                            : "text-xl sm:text-2xl leading-tight"
                       }`}
                       data-testid="stage-track-title"
                       title={currentTrack.title}
@@ -425,10 +425,10 @@ function RoomStageBase({
                     <p
                       className={`font-medium tracking-wide text-foreground-muted ${
                         ultraCompactStage
-                          ? "max-w-[24ch] text-[13px] leading-snug"
+                          ? "max-w-[26ch] text-xs leading-snug"
                           : compactStage
-                            ? "max-w-[24ch] text-[15px] leading-snug"
-                            : "max-w-[26ch] text-sm leading-relaxed sm:text-base md:text-[17px]"
+                            ? "max-w-[26ch] text-xs leading-snug"
+                            : "max-w-[28ch] text-xs sm:text-sm leading-relaxed"
                       }`}
                       data-testid="stage-track-artist"
                     >
@@ -436,7 +436,7 @@ function RoomStageBase({
                     </p>
                   </>
                 ) : (
-                  <p className="max-w-[26ch] text-center text-sm leading-relaxed text-foreground-muted sm:text-base">
+                  <p className="max-w-[26ch] text-center text-xs sm:text-sm leading-relaxed text-foreground-muted">
                     从曲库添加音乐，或导入本地音频，马上开始这场协作收听。
                   </p>
                 )}

@@ -6,10 +6,7 @@ import type { Route } from "next";
 import { AppSidebar } from "./AppSidebar";
 import { AwayRoomReturnButton } from "@/components/room-home";
 import { MobileAppNavigation } from "./MobileAppNavigation";
-import { useSessionIdentity } from "@/features/session/use-session-identity";
-import { buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
-import { awayRoomChangeEvent, clearAwayRoomId, readAwayRoomId, requestAwayRoomResume } from "@/lib/domain/away-room";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import { awayRoomChangeEvent, readAwayRoomId, requestAwayRoomResume } from "@/lib/domain/away-room";
 import { useCustomLayoutRuntime } from "@/features/settings/use-custom-layout-runtime";
 import { WorkspacePageActivity } from "@/features/workspace/page-activity";
 
@@ -17,13 +14,6 @@ export function AppRouteShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   useCustomLayoutRuntime(pathname);
-  const authEntryHref = buildWorkspaceAuthHref({
-    redirectTo: pathname || "/app"
-  });
-  const { clearIdentity } = useSessionIdentity({
-    sessionStorageKey: "music-room-session",
-    initialStatusMessage: ""
-  });
   const [awayRoomId, setAwayRoomId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -37,17 +27,6 @@ export function AppRouteShell({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  async function handleLogout() {
-    try {
-      await musicRoomApi.logout();
-    } catch {
-      // Clear the local identity even if the server is unavailable.
-    }
-    clearAwayRoomId();
-    clearIdentity();
-    router.replace(authEntryHref as Route);
-  }
-
   function handleResumeAwayRoom() {
     if (!awayRoomId) return;
     requestAwayRoomResume(awayRoomId);
@@ -55,11 +34,10 @@ export function AppRouteShell({ children }: { children: ReactNode }) {
   }
 
   return (
-      <div className="min-h-[calc(100*var(--app-dvh))] overflow-x-hidden bg-background">
+      <div className="min-h-[calc(100*var(--app-dvh))] overflow-x-hidden bg-background text-foreground">
         <div className="hidden md:contents">
           <AppSidebar
             hasBottomPlayer
-            onLogout={handleLogout}
           />
         </div>
         {awayRoomId ? <AwayRoomReturnButton onClick={handleResumeAwayRoom} /> : null}

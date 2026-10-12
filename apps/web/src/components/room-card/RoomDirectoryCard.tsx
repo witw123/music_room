@@ -80,7 +80,7 @@ export function RoomDirectoryCard({ room: directoryItem, onOpen }: RoomDirectory
 
       {/* Room Visual Cover: Integrates Room Type Badge and Online Status inside the cover */}
       <section
-        className="relative w-full aspect-[2.4/1] shrink-0 overflow-hidden rounded-lg border border-surface-border bg-slate-100 dark:bg-[#07090e] shadow-xs"
+        className="relative w-full aspect-[2.4/1] shrink-0 overflow-hidden rounded-lg border border-surface-border bg-surface shadow-xs"
         data-card-scene={room.roomType}
         data-testid="room-directory-stage"
       >

@@ -1,10 +1,13 @@
-import React from "react";
+"use client";
+
+import React, { useState } from "react";
 import type { LocalPlaylistTrackRecord } from "@/features/playlist/local-playlist";
 import { formatDuration } from "@/lib/domain/music-room-ui";
 import type { AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
 import { getAnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
 import { FavoriteTrackButton } from "@/components/ui/FavoriteTrackButton";
 import { Button } from "@/components/ui/button";
+import { TrackContextMenu, type ContextMenuItem } from "@/components/ui/TrackContextMenu";
 import {
   Artwork,
   Icon,
@@ -38,6 +41,71 @@ export function SongsResults({
   onPlay?: (track: Track) => Promise<void> | void;
   onOpenBilibiliParts?: (track: Track) => void;
 }) {
+  const [contextMenu, setContextMenu] = useState<{
+    track: Track;
+    position: { x: number; y: number };
+  } | null>(null);
+
+  const contextMenuItems: ContextMenuItem[] = contextMenu ? [
+    ...(onPlay ? [{
+      id: "play",
+      label: "立即播放",
+      icon: (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M8 5v14l11-7z" />
+        </svg>
+      ),
+      onSelect: () => {
+        if (contextMenu.track) void onPlay(contextMenu.track);
+      }
+    }] : []),
+    ...(contextMenu.track.album && onAlbum ? [{
+      id: "album",
+      label: `查看专辑《${contextMenu.track.album}》`,
+      icon: (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10" />
+          <circle cx="12" cy="12" r="3" />
+        </svg>
+      ),
+      onSelect: () => {
+        if (contextMenu.track) void onAlbum(contextMenu.track);
+      }
+    }] : []),
+    {
+      id: "favorite",
+      label: isFavorite(contextMenu.track) ? "取消收藏" : "收藏单曲",
+      icon: (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill={isFavorite(contextMenu.track) ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
+        </svg>
+      ),
+      onSelect: () => onToggleFavorite(contextMenu.track)
+    },
+    {
+      id: "download",
+      label: localTracks.some(t => t.provider === contextMenu.track.provider && t.providerTrackId === contextMenu.track.providerTrackId && t.availableOffline) ? "已下载" : "下载到本地",
+      disabled: localTracks.some(t => t.provider === contextMenu.track.provider && t.providerTrackId === contextMenu.track.providerTrackId && t.availableOffline) || pending !== null,
+      icon: <Icon name="download" />,
+      onSelect: () => void onDownload(contextMenu.track)
+    },
+    {
+      id: "copy",
+      label: "复制歌曲信息",
+      icon: (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+          <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+        </svg>
+      ),
+      onSelect: () => {
+        if (typeof navigator !== "undefined" && navigator.clipboard) {
+          void navigator.clipboard.writeText(`${contextMenu.track.title} - ${contextMenu.track.artist}`);
+        }
+      }
+    }
+  ] : [];
+
   return (
     <section className="mt-4 sm:mt-6">
       {results.length ? (
@@ -76,6 +144,13 @@ export function SongsResults({
                   key={`${track.provider}-${track.providerTrackId}`}
                   className="group relative transition-colors hover:bg-surface-hover/60 active:bg-surface-hover/80"
                   data-testid="search-track-row"
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setContextMenu({
+                      track,
+                      position: { x: e.clientX, y: e.clientY }
+                    });
+                  }}
                 >
                   {/* Mobile Row Design: Modern single-line ergonomic flex layout */}
                   <div
@@ -271,7 +346,7 @@ export function SongsResults({
                     <span className="text-xs font-mono tabular-nums text-foreground-muted/50">{formatDuration(track.durationMs)}</span>
 
                     <div
-                      className="flex items-center justify-end gap-0.5 opacity-80 sm:opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-150"
                       onClick={(e) => e.stopPropagation()}
                     >
                       {/* Bilibili Multi-Part Entrance */}
@@ -337,6 +412,14 @@ export function SongsResults({
       ) : (
         <SearchEmptyState description="输入关键词后按回车开始搜索。" title="还没有搜索结果" />
       )}
+
+      <TrackContextMenu
+        position={contextMenu?.position ?? null}
+        title={contextMenu?.track.title}
+        subtitle={contextMenu?.track.artist}
+        items={contextMenuItems}
+        onClose={() => setContextMenu(null)}
+      />
     </section>
   );
 }

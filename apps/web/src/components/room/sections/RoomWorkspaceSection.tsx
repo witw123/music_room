@@ -146,7 +146,6 @@ function RoomWorkspaceSectionComponent({
       isNavigatingRoomExit={isNavigatingRoomExit}
       isRecoveringRoom={isRecoveringRoom}
       isRoomTransitionPending={workspaceViewModel.isRoomTransitionPending}
-      onLogout={roomActions.handleLogout}
       onClearIdentity={roomActions.handleClearIdentity}
       onCopyJoinCode={clipboardActions.handleCopyJoinCode}
       onShareRoom={clipboardActions.handleShareRoom}

@@ -74,7 +74,6 @@ type RoomWorkspaceProps = {
   isNavigatingRoomExit: boolean;
   isRecoveringRoom: boolean;
   isRoomTransitionPending: boolean;
-  onLogout: () => void;
   onClearIdentity: () => void;
   onCopyJoinCode: () => Promise<void>;
   onShareRoom: () => Promise<void>;
@@ -146,7 +145,6 @@ function RoomWorkspaceBase({
   isNavigatingRoomExit,
   isRecoveringRoom,
   isRoomTransitionPending,
-  onLogout,
   onClearIdentity,
   onCopyJoinCode,
   onShareRoom,
@@ -193,7 +191,7 @@ function RoomWorkspaceBase({
           hasBottomPlayer
           compactMobile
           roomId={roomId}
-          onLogout={onLogout}
+          onAwayRoom={onAwayRoom}
         />
       </div>
 

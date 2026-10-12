@@ -26,7 +26,6 @@ import { JoinCodeDialogModal } from "./JoinCodeDialogModal";
 import { SelectedRoomDialogModal } from "./SelectedRoomDialogModal";
 import { roomTypeLabel, type CreateRoomForm } from "./room-home-types";
 import {
-  clearAwayRoomId,
   readAwayRoomId,
   requestAwayRoomResume
 } from "@/lib/domain/away-room";
@@ -58,7 +57,6 @@ export function RoomsHomePage({
     hydrated,
     statusMessage,
     setStatusMessage,
-    clearIdentity
   } = useSessionIdentity({
     sessionStorageKey: "music-room-session",
     initialStatusMessage: ""
@@ -202,18 +200,6 @@ export function RoomsHomePage({
     setDialogError(null);
   }
 
-  async function handleLogout() {
-    try {
-      await musicRoomApi.logout();
-    } catch {
-      // Ignore logout network errors and always clear local state.
-    }
-
-    clearAwayRoomId();
-    clearIdentity();
-    router.replace(authEntryHref as Route);
-  }
-
   const visibleRooms = useMemo(
     () => availableRooms
       .filter((room) => roomTypeFilter === "all" || room.room.roomType === roomTypeFilter)
@@ -234,7 +220,6 @@ export function RoomsHomePage({
         <AppSidebar
           activeItem="home"
           hasBottomPlayer={hasBottomPlayer}
-          onLogout={handleLogout}
         />
       ) : null}
 
@@ -285,16 +270,16 @@ export function RoomsHomePage({
         </header>
 
         {/* Mobile Filter Tabs directly under header */}
-        <div className="flex items-center gap-1 rounded-xl p-1 bg-white/[0.04] md:hidden" role="tablist" aria-label="房间类型筛选">
+        <div className="flex items-center gap-1 rounded-xl p-1 border border-surface-border bg-surface-elevated/70 shadow-xs backdrop-blur-xl md:hidden" role="tablist" aria-label="房间类型筛选">
           {(["all", "interactive", "request", "radio"] as const).map((roomType) => {
             const isSelected = roomTypeFilter === roomType;
             return (
               <button
                 aria-selected={isSelected}
-                className={`flex-1 flex min-h-8 whitespace-nowrap items-center justify-center rounded-lg px-2.5 py-1 text-xs font-medium transition-all ${
+                className={`flex-1 flex min-h-8 whitespace-nowrap items-center justify-center rounded-lg px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer ${
                   isSelected
-                    ? "bg-white/[0.12] text-white"
-                    : "text-foreground-muted hover:text-white"
+                    ? "bg-surface text-foreground font-medium shadow-xs border border-surface-border"
+                    : "text-foreground-muted hover:text-foreground hover:bg-surface/50"
                 }`}
                 key={roomType}
                 onClick={() => setRoomTypeFilter(roomType)}

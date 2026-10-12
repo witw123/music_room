@@ -647,13 +647,20 @@ function DesktopImmersivePlayer({
     <section className="flex min-h-0 w-[min(58vh,34rem)] max-w-full flex-col justify-center justify-self-center">
       <ImmersiveVinyl artworkUrl={artworkUrl} desktop frozen={playbackBarrierBlocked} isPlaying={isPlaying} palette={artworkPalette} playerStyle={playerStyle} />
 
-      <div className="mt-5 flex items-start gap-4">
+      <div className="mt-5 flex items-start gap-3">
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-[clamp(1.1rem,1.55vw,1.35rem)] font-semibold leading-7 text-white">
+          <h1 className="truncate text-xl sm:text-2xl font-semibold tracking-tight text-white leading-snug">
             {currentTrack?.title ?? "等待选择歌曲"}
           </h1>
-          <p className="mt-0.5 truncate text-sm text-white/65">{currentTrack?.artist ?? "从歌单中选择一首歌曲"}</p>
-          <p className="mt-1 truncate text-xs text-white/40">{currentTrack?.album ?? "未知专辑"}</p>
+          <div className="mt-1 flex items-center gap-2 truncate text-xs sm:text-sm text-white/70">
+            <span className="truncate">{currentTrack?.artist ?? "从歌单中选择一首歌曲"}</span>
+            {currentTrack?.album ? (
+              <>
+                <span className="opacity-40">·</span>
+                <span className="truncate text-white/50">{currentTrack.album}</span>
+              </>
+            ) : null}
+          </div>
         </div>
         <FavoriteTrackButton
           accentColor={artworkPalette.accent}
@@ -662,7 +669,7 @@ function DesktopImmersivePlayer({
           pending={favoriteTrackIsPending}
           size="large"
           track={favoriteTrack}
-          className="text-white/70 hover:bg-white/10 hover:text-white focus-visible:ring-white"
+          className="text-white/70 hover:bg-white/10 hover:text-white focus-visible:ring-white shrink-0"
         />
       </div>
 
@@ -685,7 +692,7 @@ function DesktopImmersivePlayer({
       <div className="mt-4 flex items-center justify-center gap-2.5 sm:gap-3.5">
         <button
           aria-label="切换播放模式"
-          className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-foreground-muted transition-colors hover:bg-white/10 active:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-35"
+          className="inline-flex h-8.5 w-8.5 items-center justify-center rounded-lg text-foreground-muted transition-colors hover:bg-white/10 active:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-35 cursor-pointer"
           disabled={!canControlPlayback}
           onClick={() => void onCyclePlaybackMode()}
           style={{ color: artworkPalette.accent }}
@@ -765,7 +772,7 @@ function TrackDetails({ currentTrack, mobile = false }: { currentTrack: TrackMet
 }
 
 function TransportButton({ accentColor, ariaLabel, children, disabled, onClick }: { accentColor: string; ariaLabel: string; children: ReactNode; disabled: boolean; onClick: () => void }) {
-  return <button aria-label={ariaLabel} className="inline-flex h-9 w-9 items-center justify-center rounded-full text-foreground-muted transition-colors hover:bg-white/10 hover:text-white active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-35" disabled={disabled} onClick={onClick} style={{ color: accentColor }} title={ariaLabel} type="button">{children}</button>;
+  return <button aria-label={ariaLabel} className="inline-flex h-8.5 w-8.5 items-center justify-center rounded-lg text-foreground-muted transition-colors hover:bg-white/10 hover:text-white active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-35 cursor-pointer" disabled={disabled} onClick={onClick} style={{ color: accentColor }} title={ariaLabel} type="button">{children}</button>;
 }
 
 function LyricsGlyph() {

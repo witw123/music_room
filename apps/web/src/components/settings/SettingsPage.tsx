@@ -715,7 +715,7 @@ function SettingRow({
 
 function Toggle({ checked, disabled = false, label, onChange }: { checked: boolean; disabled?: boolean; label: string; onChange: (checked: boolean) => void }) {
   return (
-    <label className={`inline-flex min-h-8 min-w-10 items-center justify-center ${disabled ? "cursor-not-allowed opacity-45" : "cursor-pointer"}`} title={label}>
+    <label className={`inline-flex min-h-8 min-w-10 items-center justify-center select-none ${disabled ? "cursor-not-allowed opacity-45" : "cursor-pointer"}`} title={label}>
       <input
         aria-label={label}
         checked={checked}
@@ -724,7 +724,9 @@ function Toggle({ checked, disabled = false, label, onChange }: { checked: boole
         onChange={(event) => onChange(event.target.checked)}
         type="checkbox"
       />
-      <span className="relative h-5 w-9 rounded-full bg-surface-hover transition peer-checked:bg-accent peer-focus-visible:ring-2 peer-focus-visible:ring-accent after:absolute after:left-0.75 after:top-0.75 after:h-3.5 after:w-3.5 after:rounded-full after:bg-white after:transition-transform peer-checked:after:translate-x-4" />
+      <span className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-transparent transition-colors duration-200 ease-in-out peer-focus-visible:ring-2 peer-focus-visible:ring-accent ${checked ? "bg-accent" : "bg-surface-hover"}`}>
+        <span className={`pointer-events-none inline-block h-3.5 w-3.5 rounded-full bg-white shadow-xs transition-transform duration-200 ease-in-out ${checked ? "translate-x-[19px]" : "translate-x-[3px]"}`} />
+      </span>
     </label>
   );
 }

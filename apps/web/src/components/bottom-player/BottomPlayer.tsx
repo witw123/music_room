@@ -247,7 +247,7 @@ function BottomPlayerBase({
   const progressRenderIntervalMs = resolveProgressRenderIntervalMs({ isPageVisible });
   const progressCommitThresholdMs = isImmersiveOpen ? 30 : 200;
   const footerClassName =
-    "fixed inset-x-2.5 bottom-[calc(3.75rem+env(safe-area-inset-bottom))] z-[80] box-border flex h-14 flex-col justify-center overflow-visible rounded-2xl border border-surface-border bg-[#121216]/97 px-2.5 shadow-[0_8px_24px_rgba(0,0,0,0.45)] transition-[background-color,border-color,transform,opacity] duration-300 ease-out md:inset-x-0 md:bottom-0 md:h-16 md:rounded-none md:border-x-0 md:border-b-0 md:border-t md:border-surface-border md:bg-[#101216]/95 md:backdrop-blur-xl md:px-0 md:py-0";
+    "fixed inset-x-2.5 bottom-[calc(3.75rem+env(safe-area-inset-bottom))] z-[80] box-border flex h-14 flex-col justify-center overflow-visible rounded-2xl border border-surface-border bg-background-secondary/95 px-2.5 shadow-[0_8px_24px_rgba(0,0,0,0.45)] transition-[background-color,border-color,transform,opacity] duration-300 ease-out md:inset-x-0 md:bottom-0 md:h-16 md:rounded-none md:border-x-0 md:border-b-0 md:border-t md:border-surface-border md:bg-background-secondary/95 md:backdrop-blur-xl md:px-0 md:py-0";
 
   useEffect(() => {
     if (typeof document === "undefined") {

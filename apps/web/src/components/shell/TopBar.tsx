@@ -25,24 +25,24 @@ function TopBarBase({ activeSession, onLogout, variant = "app" }: TopBarProps) {
             </svg>
           </div>
           <div className="min-w-0 leading-none">
-            <span className="block truncate text-sm font-bold tracking-tight text-white">Music Room</span>
-            <span className="hidden text-[11px] text-white/[0.45] sm:block">实时协作听歌空间</span>
+            <span className="block truncate text-sm font-bold tracking-tight text-foreground">Music Room</span>
+            <span className="hidden text-[11px] text-foreground-muted sm:block">实时协作听歌空间</span>
           </div>
         </div>
 
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
           {isMarketing ? (
             <>
-              <nav className="hidden items-center gap-5 text-sm text-white/[0.55] md:flex">
-                <a className="transition-colors hover:text-white" href="#project">产品概览</a>
-                <a className="transition-colors hover:text-white" href="#features">核心特性</a>
-                <a className="transition-colors hover:text-white" href="#architecture">技术架构</a>
+              <nav className="hidden items-center gap-5 text-sm text-foreground-muted md:flex">
+                <a className="transition-colors hover:text-foreground" href="#project">产品概览</a>
+                <a className="transition-colors hover:text-foreground" href="#features">核心特性</a>
+                <a className="transition-colors hover:text-foreground" href="#architecture">技术架构</a>
               </nav>
               <a
                 href="https://example.test/music-room"
                 target="_blank"
                 rel="noreferrer"
-                className="rounded-lg border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-sm font-medium text-white/[0.72] transition-colors hover:bg-white/[0.08] hover:text-white"
+                className="rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm font-medium text-foreground-muted transition-colors hover:bg-surface-hover hover:text-foreground"
               >
                 GitHub
               </a>
@@ -55,7 +55,7 @@ function TopBarBase({ activeSession, onLogout, variant = "app" }: TopBarProps) {
               size="sm"
               onClick={onLogout}
               type="button"
-              className="px-2 text-white/[0.55] hover:bg-white/5 hover:text-white sm:px-3"
+              className="px-2 text-foreground-muted hover:bg-surface hover:text-foreground sm:px-3"
             >
               退出
             </Button>

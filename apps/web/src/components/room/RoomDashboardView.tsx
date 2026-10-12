@@ -188,7 +188,7 @@ function InteractiveRoomLayout(props: RoomLayoutProps) {
   }, [handleTabChange]);
 
   return (
-    <div className="custom-scrollbar relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-y-auto overscroll-contain md:grid md:h-full md:grid-cols-[minmax(0,1.12fr)_minmax(20rem,0.88fr)] md:overflow-hidden md:gap-0" data-custom-layout-room-root="true">
+    <div className="custom-scrollbar relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-y-auto overscroll-contain md:grid md:h-full md:grid-cols-[minmax(0,1.05fr)_minmax(22rem,0.95fr)] md:overflow-hidden md:gap-0" data-custom-layout-room-root="true">
       <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
         {props.isPlaying ? <div className="absolute left-1/2 top-24 h-[58vw] w-[58vw] -translate-x-1/2 rounded-full bg-accent/6 blur-[110px] sm:h-[46vw] sm:w-[46vw] md:left-[28%] md:top-1/4" /> : null}
       </div>
@@ -222,7 +222,7 @@ function InteractiveRoomLayout(props: RoomLayoutProps) {
             />
           </div>
 
-          <div aria-label="房间视图" className="flex items-center gap-1 rounded-xl bg-surface/50 p-1 border border-surface-border/60 backdrop-blur-md" role="tablist">
+          <div aria-label="房间视图" className="flex items-center gap-1 rounded-xl bg-surface/50 p-1 border border-surface-border backdrop-blur-md" role="tablist">
             {tabConfigs.map(({ id: tab, label, icon: IconComp }) => {
               const isActive = activeTab === tab;
               return (
@@ -238,7 +238,7 @@ function InteractiveRoomLayout(props: RoomLayoutProps) {
                   tabIndex={isActive ? 0 : -1}
                   className={`flex-1 flex min-h-8 sm:min-h-8 whitespace-nowrap items-center justify-center gap-1 sm:gap-1.5 rounded-lg px-2 sm:px-3 py-1 text-xs font-medium transition-colors cursor-pointer ${
                     isActive
-                      ? "bg-surface-elevated text-foreground font-medium shadow-xs border border-surface-border/60"
+                      ? "bg-surface-elevated text-foreground font-medium shadow-xs border border-surface-border"
                       : "text-foreground-muted hover:text-foreground hover:bg-surface/50"
                   }`}
                   type="button"

@@ -10,6 +10,7 @@ import { reorderWithPosition } from "@/components/bottom-player/PlayerQueueDrawe
 import { findScrollableContainer, useDragAutoScroll } from "@/features/room/hooks/use-drag-auto-scroll";
 import { LocalAudioImport } from "./LocalAudioImport";
 import { TrackDistributionBadge } from "./TrackDistributionBadge";
+import { TrackContextMenu, type ContextMenuItem } from "@/components/ui/TrackContextMenu";
 
 type TrackListSectionProps = {
   roomId?: string | null;
@@ -76,7 +77,76 @@ function TrackListSectionBase({
     trackId: string;
     position: "before" | "after";
   } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    track: TrackMeta;
+    position: { x: number; y: number };
+    canDelete: boolean;
+    isSaved: boolean;
+  } | null>(null);
   const canReorderTracks = canManageLibrary && Boolean(onReorderTracks);
+
+  const contextMenuItems: ContextMenuItem[] = contextMenu ? [
+    {
+      id: "play",
+      label: "立即播放",
+      icon: (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M8 5v14l11-7z" />
+        </svg>
+      ),
+      disabled: pendingAction !== null,
+      onSelect: () => void runAction(`play:${contextMenu.track.id}`, () => onPlayTrack(contextMenu.track.id))
+    },
+    {
+      id: "queue",
+      label: "加入播放队列",
+      icon: (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+      ),
+      disabled: !canAddToQueue || pendingAction !== null,
+      onSelect: () => void runAction(`queue:${contextMenu.track.id}`, () => onAddToQueue(contextMenu.track.id))
+    },
+    ...(contextMenu.isSaved ? [] : [{
+      id: "save-local",
+      label: "保存到本地",
+      icon: (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M5 4h11l3 3v13H5z" /><path d="M8 4v5h8V4" /><path d="M8 20v-5h8v5" />
+        </svg>
+      ),
+      disabled: pendingAction !== null,
+      onSelect: () => void runAction(`save:${contextMenu.track.id}`, () => onSaveTrackToLocal(contextMenu.track))
+    }]),
+    {
+      id: "copy",
+      label: "复制歌曲信息",
+      icon: (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+          <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+        </svg>
+      ),
+      onSelect: () => {
+        if (typeof navigator !== "undefined" && navigator.clipboard) {
+          void navigator.clipboard.writeText(`${contextMenu.track.title} - ${contextMenu.track.artist}`);
+        }
+      }
+    },
+    ...(contextMenu.canDelete ? [{
+      id: "delete",
+      label: "从房间移除",
+      destructive: true,
+      icon: (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M4 7h16M10 11v6M14 11v6M9 7V4h6v3M6 7l1 13h10l1-13" />
+        </svg>
+      ),
+      disabled: !canManageLibrary || pendingAction !== null,
+      onSelect: () => void runAction(`delete:${contextMenu.track.id}`, () => onDeleteTrack(contextMenu.track.id))
+    }] : [])
+  ] : [];
 
   const sectionRef = useRef<HTMLElement>(null);
   const draggingTrackIdRef = useRef<string | null>(null);
@@ -414,6 +484,15 @@ function TrackListSectionBase({
                   data-testid="track-card"
                   data-track-id={track.id}
                   draggable={canReorderTracks}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    setContextMenu({
+                      track,
+                      position: { x: event.clientX, y: event.clientY },
+                      canDelete: canDeleteTrack,
+                      isSaved: isSavedLocally
+                    });
+                  }}
                   onDragStart={(event) => {
                     if (!canReorderTracks) return;
                     setDraggingTrackId(track.id);
@@ -632,6 +711,14 @@ function TrackListSectionBase({
           <span className="text-xs text-foreground">处理中...</span>
         </div>
       ) : null}
+
+      <TrackContextMenu
+        position={contextMenu?.position ?? null}
+        title={contextMenu?.track.title}
+        subtitle={contextMenu?.track.artist}
+        items={contextMenuItems}
+        onClose={() => setContextMenu(null)}
+      />
     </section>
   );
 }
