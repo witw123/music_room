@@ -266,8 +266,8 @@ export function SettingsPage() {
       description: "选择应用的外观配色方案，包含高对比度护眼色彩与声学调色预设。",
       keywords: ["主题", "颜色", "色彩", "深色", "浅色", "系统", "灰绿", "石墨", "深蓝", "浅蓝", "暖白", "theme", "dark", "light", "sage", "obsidian", "midnight", "paper"],
       render: () => (
-        <SettingRow key="theme" label="主题风格" description="选择应用的外观配色方案，包含高对比度护眼色彩与声学调色预设。">
-          <div aria-label="主题预设" className="grid grid-cols-2 sm:grid-cols-3 gap-2 w-full max-w-xl" role="group">
+        <SettingRow key="theme" label="主题风格" description="选择应用的外观配色方案，包含高对比度护眼色彩与声学调色预设。" stacked>
+          <div aria-label="主题预设" className="grid grid-cols-2 sm:grid-cols-3 gap-2 w-full" role="group">
             {(Object.entries(themeLabels) as Array<[ThemePreference, string]>).map(([themeKey, label]) => {
               const isSelected = settings.theme === themeKey;
               const preview = themePreviewColors[themeKey];
@@ -380,8 +380,8 @@ export function SettingsPage() {
       description: "接收切歌、点歌、曲库更新和聊天消息的系统 Toast 通知。",
       keywords: ["通知", "系统通知", "权限", "toast", "弹窗", "推送", "授权", "notification", "permission"],
       render: () => (
-        <SettingRow key="notificationPermission" label="系统通知权限" description="接收切歌、点歌、曲库更新和聊天消息的系统 Toast 通知。">
-          <div className="flex flex-col items-end gap-2 w-full sm:w-auto">
+        <SettingRow key="notificationPermission" label="系统通知权限" description="接收切歌、点歌、曲库更新和聊天消息的系统 Toast 通知。" stacked>
+          <div className="flex flex-col items-start sm:items-end gap-2 w-full">
             <div className="flex flex-wrap items-center gap-2">
               <span
                 className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border ${
@@ -600,7 +600,7 @@ export function SettingsPage() {
       keywords: ["音量", "声音", "默认音量", "大小", "volume"],
       render: () => (
         <SettingRow key="defaultVolume" label="默认音量" description="应用进入时使用的本地播放器音量。">
-          <div className="flex w-44 items-center gap-3">
+          <div className="flex w-36 sm:w-44 items-center gap-2 sm:gap-3">
             <input
               aria-label="默认音量"
               className="min-w-0 flex-1 accent-accent cursor-pointer"
@@ -707,7 +707,7 @@ export function SettingsPage() {
       keywords: ["歌词", "桌面歌词", "悬浮窗", "字号", "缩放", "lyric size"],
       render: () => (
         <SettingRow key="desktopLyricScale" label="桌面歌词大小" description="缩放悬浮桌面歌词的字号与窗口尺寸。">
-          <div className="flex w-44 items-center gap-3">
+          <div className="flex w-36 sm:w-44 items-center gap-2 sm:gap-3">
             <input
               aria-label="桌面歌词大小"
               className="min-w-0 flex-1 accent-accent cursor-pointer"
@@ -868,9 +868,9 @@ export function SettingsPage() {
             description: "调整客户端界面的显示大小，适配不同分辨率与显示器尺寸。",
             keywords: ["缩放", "比例", "界面大小", "显示大小", "放大", "缩小", "ui scale", "zoom"],
             render: () => (
-              <SettingRow key="uiScale" label="缩放比例" description="调整客户端界面的显示大小，适配不同分辨率与显示器尺寸。">
-                <div className="flex flex-col items-end gap-1.5">
-                  <div className="flex w-44 items-center gap-2.5 sm:w-48">
+              <SettingRow key="uiScale" label="缩放比例" description="调整客户端界面的显示大小，适配不同分辨率与显示器尺寸。" stacked>
+                <div className="flex flex-col gap-2 w-full max-w-sm">
+                  <div className="flex w-full items-center gap-2.5">
                     <input
                       aria-label="缩放比例"
                       className="min-w-0 flex-1 accent-accent cursor-pointer"
@@ -881,30 +881,30 @@ export function SettingsPage() {
                       type="range"
                       value={settings.layout.uiScale}
                     />
-                    <span className="w-10 text-right text-xs font-mono tabular-nums text-foreground-muted">
+                    <span className="w-12 text-right text-xs font-mono tabular-nums text-foreground-muted">
                       {Math.round(settings.layout.uiScale * 100)}%
                     </span>
                     {settings.layout.uiScale !== 1 ? (
                       <button
                         type="button"
                         onClick={() => patchSettings({ layout: { uiScale: 1 } })}
-                        className="rounded px-1.5 py-0.5 text-[11px] text-accent hover:bg-accent/10 transition-colors"
+                        className="rounded px-1.5 py-0.5 text-[11px] text-accent hover:bg-accent/10 transition-colors cursor-pointer"
                         title="重置为 100%"
                       >
                         重置
                       </button>
                     ) : null}
                   </div>
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     {[0.8, 0.9, 1, 1.1, 1.25].map((preset) => (
                       <button
                         key={preset}
                         type="button"
                         onClick={() => patchSettings({ layout: { uiScale: preset } })}
-                        className={`rounded px-1.5 py-0.5 text-[11px] transition-colors ${
+                        className={`rounded-md px-2 py-0.5 text-xs font-mono transition-colors cursor-pointer ${
                           Math.abs(settings.layout.uiScale - preset) < 0.01
-                            ? "bg-accent text-white font-medium shadow-xs"
-                            : "text-foreground-muted hover:bg-surface-hover hover:text-foreground"
+                            ? "bg-surface-elevated text-foreground font-semibold shadow-2xs border border-surface-border"
+                            : "text-foreground-muted hover:bg-surface-hover/60 hover:text-foreground border border-transparent"
                         }`}
                       >
                         {Math.round(preset * 100)}%
@@ -1019,8 +1019,8 @@ export function SettingsPage() {
             description: "这些歌曲不会出现在个性化推荐中。",
             keywords: ["排除推荐", "不喜欢的歌", "屏蔽", "推荐黑名单", "exclusions"],
             render: () => (
-              <SettingRow key="recommendationExclusions" label="已排除的推荐" description="这些歌曲不会出现在个性化推荐中。">
-                <div className="flex max-w-sm flex-wrap justify-end gap-2">
+              <SettingRow key="recommendationExclusions" label="已排除的推荐" description="这些歌曲不会出现在个性化推荐中。" stacked>
+                <div className="flex w-full flex-wrap gap-2">
                   {recommendationExclusions.map((item) => (
                     <Button
                       key={`${item.kind}:${item.key}`}
@@ -1182,15 +1182,15 @@ export function SettingsPage() {
   }
 
   const content = (
-    <div className="workspace-page__inner pt-6 sm:pt-10 md:pt-14">
+    <div className="workspace-page__inner pt-[calc(0.75rem+env(safe-area-inset-top))] pb-[calc(var(--room-mobile-bottom-inset)+2.5rem)] sm:pt-8 md:pt-12 md:pb-24">
       {/* 顶部标题栏与即时搜索框 */}
-      <header className="workspace-page__header flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <header className="workspace-page__header flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <h1 className="workspace-page__title">设置</h1>
           <p className="workspace-page__description">调整播放和界面偏好。</p>
         </div>
 
-        <div className="flex w-full items-center gap-2.5 sm:w-auto">
+        <div className="flex w-full items-center gap-2 sm:w-auto">
           {/* 轻量级即时搜索过滤框 */}
           <div className="relative flex-1 sm:w-60 sm:flex-initial">
             <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-foreground-muted">
@@ -1214,7 +1214,7 @@ export function SettingsPage() {
             />
             {searchQuery ? (
               <button
-                className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-foreground-muted hover:text-foreground transition-colors"
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-foreground-muted hover:text-foreground transition-colors cursor-pointer"
                 onClick={() => setSearchQuery("")}
                 title="清空搜索 (Esc)"
                 type="button"
@@ -1225,29 +1225,30 @@ export function SettingsPage() {
           </div>
 
           <Link
-            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-surface-border bg-surface px-3 text-xs font-medium text-foreground-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-surface-border bg-surface px-2.5 sm:px-3 text-xs font-medium text-foreground-muted transition-colors hover:bg-surface-hover hover:text-foreground"
             href="/app/profile"
           >
             <ChevronLeftIcon className="h-3.5 w-3.5" />
-            返回到我的页
+            <span className="hidden sm:inline">返回到我的页</span>
+            <span className="sm:hidden">返回</span>
           </Link>
         </div>
       </header>
 
       {/* 移动端横向分类滑动导航 (< md) */}
-      <div className="mt-4 -mx-1 flex items-center gap-1.5 overflow-x-auto px-1 pb-1 md:hidden scrollbar-none">
+      <div className="mt-3.5 -mx-1 flex items-center gap-1.5 overflow-x-auto px-1 pb-1 md:hidden scrollbar-none">
         {isSearching ? (
           <button
-            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium border transition-colors ${
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium border transition-colors cursor-pointer ${
               selectedSearchCategory === "all"
-                ? "border-accent bg-accent text-white shadow-xs"
-                : "border-surface-border bg-surface/70 text-foreground-muted hover:text-foreground"
+                ? "border-surface-border bg-surface-elevated text-foreground font-semibold shadow-2xs"
+                : "border-surface-border/60 bg-surface/40 text-foreground-muted hover:text-foreground hover:bg-surface-hover/30"
             }`}
             onClick={() => setSelectedSearchCategory("all")}
             type="button"
           >
             <span>全部结果</span>
-            <span className="rounded-full bg-black/20 px-1.5 py-0.2 text-[10px] tabular-nums">
+            <span className="rounded-full bg-surface-hover px-1.5 py-0.2 text-[10px] tabular-nums font-mono">
               {matchingItems.length}
             </span>
           </button>
@@ -1263,10 +1264,10 @@ export function SettingsPage() {
 
           return (
             <button
-              className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium border transition-colors ${
+              className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium border transition-colors cursor-pointer ${
                 isSelected
-                  ? "border-accent bg-accent text-white shadow-xs"
-                  : "border-surface-border bg-surface/70 text-foreground-muted hover:text-foreground"
+                  ? "border-surface-border bg-surface-elevated text-foreground font-semibold shadow-2xs"
+                  : "border-surface-border/60 bg-surface/40 text-foreground-muted hover:text-foreground hover:bg-surface-hover/30"
               }`}
               key={cat.id}
               onClick={() => {
@@ -1281,7 +1282,7 @@ export function SettingsPage() {
               <cat.icon className="h-3.5 w-3.5" />
               <span>{cat.label}</span>
               {isSearching ? (
-                <span className="rounded-full bg-black/20 px-1.5 py-0.2 text-[10px] tabular-nums">
+                <span className="rounded-full bg-surface-hover px-1.5 py-0.2 text-[10px] tabular-nums font-mono">
                   {matchCount}
                 </span>
               ) : null}
@@ -1480,7 +1481,7 @@ export function SettingsPage() {
   ) : null;
 
   return (
-    <main className="workspace-page settings-page-scroll overflow-y-auto md:pl-60 lg:pb-28">
+    <main className="workspace-page settings-page-scroll overflow-y-auto pb-[calc(var(--room-mobile-bottom-inset)+2.5rem)] md:pl-60 md:pb-24 lg:pb-28">
       {content}
       {editor}
     </main>
@@ -1514,15 +1515,29 @@ function SettingsSection({
 function SettingRow({
   label,
   description,
-  children
+  children,
+  stacked = false
 }: {
   label: string;
   description: string;
   children: ReactNode;
+  stacked?: boolean;
 }) {
+  if (stacked) {
+    return (
+      <div className="py-3 sm:py-3.5">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-foreground">{label}</p>
+          <p className="mt-0.5 text-xs leading-relaxed text-foreground-muted">{description}</p>
+        </div>
+        <div className="mt-2.5 w-full">{children}</div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex min-h-12 items-center justify-between gap-4 py-2.5">
-      <div className="min-w-0 pr-2">
+    <div className="flex min-h-12 items-center justify-between gap-3 py-2.5 sm:gap-4">
+      <div className="min-w-0 pr-1 sm:pr-2">
         <p className="text-sm font-medium text-foreground">{label}</p>
         <p className="mt-0.5 text-xs leading-relaxed text-foreground-muted">{description}</p>
       </div>

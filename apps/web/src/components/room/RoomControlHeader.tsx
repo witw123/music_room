@@ -236,63 +236,101 @@ export function RoomControlHeader({
                   <MoreVerticalIcon className="w-3.5 h-3.5" />
                 </Button>
 
-                {showSettings ? (
-                  <>
-                    <div
-                      className="fixed inset-0 z-[65]"
-                      onClick={() => setShowSettings(false)}
-                    />
-                    <div className="animate-fade-in absolute right-0 top-9 z-[70] flex w-52 origin-top-right flex-col rounded-2xl border border-surface-border bg-background-secondary p-1.5 shadow-2xl">
-                      {canDeleteRoom && onUpdateRoom ? (
-                        <button
-                          data-testid="mobile-edit-room-button"
-                          className="w-full cursor-pointer rounded-xl px-3 py-2 text-left text-xs text-foreground transition-colors hover:bg-surface-hover"
-                          onClick={openEditRoom}
-                          type="button"
-                        >
-                          编辑房间
-                        </button>
-                      ) : null}
-                      {onAwayRoom ? (
-                        <button
-                          data-testid="mobile-away-room-button"
-                          className="w-full cursor-pointer rounded-xl px-3 py-2 text-left text-xs text-amber-500 transition-colors hover:bg-amber-500/10"
-                          onClick={() => {
-                            setShowSettings(false);
-                            onAwayRoom();
-                          }}
-                          type="button"
-                        >
-                          暂离房间
-                        </button>
-                      ) : null}
-                      <button
-                        data-testid="mobile-leave-room-button"
-                        className="w-full cursor-pointer rounded-xl px-3 py-2 text-left text-xs text-foreground-muted transition-colors hover:bg-surface-hover hover:text-foreground"
-                        onClick={() => {
-                          setShowSettings(false);
-                          void onLeaveRoom?.();
-                        }}
-                        type="button"
+                {showSettings && typeof document !== "undefined"
+                  ? createPortal(
+                      <div
+                        className="fixed inset-0 z-[var(--z-modal)] flex flex-col justify-end bg-black/60 backdrop-blur-xs animate-fade-in"
+                        onClick={() => setShowSettings(false)}
+                        role="presentation"
                       >
-                        离开房间
-                      </button>
-                      {(canDeleteRoom || canDisbandRoom) && onDeleteRoom ? (
-                        <button
-                          data-testid="mobile-delete-room-button"
-                          className="my-1 w-full cursor-pointer rounded-xl px-3 py-2 text-left text-xs text-red-500 transition-colors hover:bg-red-500/10"
-                          onClick={() => {
-                            setShowSettings(false);
-                            setShowDeleteConfirmation(true);
-                          }}
-                          type="button"
+                        <div
+                          aria-label="房间快捷操作"
+                          className="w-full max-w-lg mx-auto rounded-t-2xl border-t border-surface-border bg-background-secondary p-3.5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-2xl animate-slide-up flex flex-col gap-1.5"
+                          onClick={(e) => e.stopPropagation()}
+                          role="menu"
                         >
-                          解散房间
-                        </button>
-                      ) : null}
-                    </div>
-                  </>
-                ) : null}
+                          <div className="flex items-center justify-between px-3 py-1.5 border-b border-surface-border/50 mb-1">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="truncate text-xs font-semibold text-foreground">
+                                {roomSnapshot.room.name || "当前房间"}
+                              </span>
+                              <span className="text-[10px] text-foreground-muted font-mono">
+                                #{roomSnapshot.room.joinCode}
+                              </span>
+                            </div>
+                            <button
+                              aria-label="关闭操作面板"
+                              className="text-xs text-foreground-muted hover:text-foreground p-1 cursor-pointer"
+                              onClick={() => setShowSettings(false)}
+                              type="button"
+                            >
+                              ✕
+                            </button>
+                          </div>
+
+                          {canDeleteRoom && onUpdateRoom ? (
+                            <button
+                              data-testid="mobile-edit-room-button"
+                              className="w-full flex items-center justify-start rounded-xl px-3.5 py-2.5 text-xs font-medium text-foreground transition-colors hover:bg-surface-hover active:bg-surface-hover cursor-pointer"
+                              onClick={openEditRoom}
+                              type="button"
+                            >
+                              编辑房间
+                            </button>
+                          ) : null}
+
+                          {onAwayRoom ? (
+                            <button
+                              data-testid="mobile-away-room-button"
+                              className="w-full flex items-center justify-start rounded-xl px-3.5 py-2.5 text-xs font-medium text-amber-500 transition-colors hover:bg-amber-500/10 active:bg-amber-500/10 cursor-pointer"
+                              onClick={() => {
+                                setShowSettings(false);
+                                onAwayRoom();
+                              }}
+                              type="button"
+                            >
+                              暂离房间
+                            </button>
+                          ) : null}
+
+                          <button
+                            data-testid="mobile-leave-room-button"
+                            className="w-full flex items-center justify-start rounded-xl px-3.5 py-2.5 text-xs font-medium text-foreground-muted transition-colors hover:bg-surface-hover hover:text-foreground active:bg-surface-hover cursor-pointer"
+                            onClick={() => {
+                              setShowSettings(false);
+                              void onLeaveRoom?.();
+                            }}
+                            type="button"
+                          >
+                            离开房间
+                          </button>
+
+                          {(canDeleteRoom || canDisbandRoom) && onDeleteRoom ? (
+                            <button
+                              data-testid="mobile-delete-room-button"
+                              className="w-full flex items-center justify-start rounded-xl px-3.5 py-2.5 text-xs font-medium text-red-500 transition-colors hover:bg-red-500/10 active:bg-red-500/10 cursor-pointer"
+                              onClick={() => {
+                                setShowSettings(false);
+                                setShowDeleteConfirmation(true);
+                              }}
+                              type="button"
+                            >
+                              解散房间
+                            </button>
+                          ) : null}
+
+                          <button
+                            className="mt-1 w-full flex items-center justify-center rounded-xl bg-surface/80 py-2 text-xs font-medium text-foreground-muted hover:bg-surface-hover hover:text-foreground transition-colors cursor-pointer"
+                            onClick={() => setShowSettings(false)}
+                            type="button"
+                          >
+                            取消
+                          </button>
+                        </div>
+                      </div>,
+                      document.body
+                    )
+                  : null}
               </div>
             </div>
           </div>

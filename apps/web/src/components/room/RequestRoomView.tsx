@@ -535,7 +535,7 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
           <RoomImportProgressBar />
         </div>
 
-        <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
+        <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto pb-[calc(var(--room-mobile-bottom-inset)+1rem)]">
           {message ? (
             <div className="px-3 pt-2">
               <p className="rounded-xl border border-surface-border/60 bg-surface/80 px-3 py-1.5 text-xs text-foreground backdrop-blur-md shadow-xs" role="status">

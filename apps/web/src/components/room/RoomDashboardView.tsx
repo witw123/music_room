@@ -254,7 +254,7 @@ function InteractiveRoomLayout(props: RoomLayoutProps) {
           </div>
           <RoomImportProgressBar />
         </div>
-        <div aria-labelledby={`room-tab-${activeTab}`} className="custom-scrollbar min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-3 py-3 sm:px-5 sm:py-4 md:pb-24 lg:pb-24" id={`room-panel-${activeTab}`} role="tabpanel">
+        <div aria-labelledby={`room-tab-${activeTab}`} className="custom-scrollbar min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-3 pt-3 pb-[calc(var(--room-mobile-bottom-inset)+1.5rem)] sm:px-5 sm:py-4 md:pb-24 lg:pb-24" id={`room-panel-${activeTab}`} role="tabpanel">
           {panelsReady ? (
             <RoomManagementContent {...props} activeTab={activeTab} />
           ) : (

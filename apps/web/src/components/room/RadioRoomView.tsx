@@ -293,7 +293,7 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
           <RoomImportProgressBar />
         </div>
 
-        <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
+        <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto pb-[calc(var(--room-mobile-bottom-inset)+1rem)]">
           {panelsReady ? (
             mobileTab === "queue" ? (
               <div className="flex h-full min-h-0 flex-col p-2 gap-2">
