@@ -1183,56 +1183,50 @@ export function SettingsPage() {
 
   const content = (
     <div className="workspace-page__inner pt-[calc(0.75rem+env(safe-area-inset-top))] pb-[calc(var(--room-mobile-bottom-inset)+2.5rem)] sm:pt-8 md:pt-12 md:pb-24">
-      {/* 顶部标题栏与即时搜索框 */}
-      <header className="workspace-page__header flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <h1 className="workspace-page__title">设置</h1>
-          <p className="workspace-page__description">调整播放和界面偏好。</p>
+      {/* 顶部搜索栏与返回入口 */}
+      <header className="flex items-center justify-between gap-2.5 pb-2 sm:pb-3">
+        <h1 className="sr-only">设置</h1>
+        {/* 轻量级即时搜索过滤框 */}
+        <div className="relative flex-1 max-w-sm">
+          <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-foreground-muted">
+            <SearchIcon className="h-3.5 w-3.5" />
+          </span>
+          <input
+            aria-label="搜索设置"
+            className="h-8 w-full rounded-lg border border-surface-border bg-surface/60 pl-8 pr-7 text-xs text-foreground placeholder:text-foreground-muted/70 focus:border-accent focus:bg-surface focus:outline-none transition-colors"
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setSelectedSearchCategory("all");
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                setSearchQuery("");
+              }
+            }}
+            placeholder="搜索设置…"
+            type="search"
+            value={searchQuery}
+          />
+          {searchQuery ? (
+            <button
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-foreground-muted hover:text-foreground transition-colors cursor-pointer"
+              onClick={() => setSearchQuery("")}
+              title="清空搜索 (Esc)"
+              type="button"
+            >
+              <ClearIcon className="h-3 w-3" />
+            </button>
+          ) : null}
         </div>
 
-        <div className="flex w-full items-center gap-2 sm:w-auto">
-          {/* 轻量级即时搜索过滤框 */}
-          <div className="relative flex-1 sm:w-60 sm:flex-initial">
-            <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-foreground-muted">
-              <SearchIcon className="h-3.5 w-3.5" />
-            </span>
-            <input
-              aria-label="搜索设置"
-              className="h-8 w-full rounded-lg border border-surface-border bg-surface/60 pl-8 pr-7 text-xs text-foreground placeholder:text-foreground-muted/70 focus:border-accent focus:bg-surface focus:outline-none transition-colors"
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setSelectedSearchCategory("all");
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Escape") {
-                  setSearchQuery("");
-                }
-              }}
-              placeholder="搜索设置…"
-              type="search"
-              value={searchQuery}
-            />
-            {searchQuery ? (
-              <button
-                className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-foreground-muted hover:text-foreground transition-colors cursor-pointer"
-                onClick={() => setSearchQuery("")}
-                title="清空搜索 (Esc)"
-                type="button"
-              >
-                <ClearIcon className="h-3 w-3" />
-              </button>
-            ) : null}
-          </div>
-
-          <Link
-            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-surface-border bg-surface px-2.5 sm:px-3 text-xs font-medium text-foreground-muted transition-colors hover:bg-surface-hover hover:text-foreground"
-            href="/app/profile"
-          >
-            <ChevronLeftIcon className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">返回到我的页</span>
-            <span className="sm:hidden">返回</span>
-          </Link>
-        </div>
+        <Link
+          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-surface-border bg-surface px-2.5 sm:px-3 text-xs font-medium text-foreground-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+          href="/app/profile"
+        >
+          <ChevronLeftIcon className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">返回到我的页</span>
+          <span className="sm:hidden">返回</span>
+        </Link>
       </header>
 
       {/* 移动端横向分类滑动导航 (< md) */}
