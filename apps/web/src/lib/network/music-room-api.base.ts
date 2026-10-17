@@ -7,6 +7,12 @@ import {
   type QueueItem,
   type RoomType
 } from "@music-room/shared";
+import {
+  isTauriRuntime,
+  isCapacitorRuntime,
+  invokeTauri,
+  capacitorPlugin
+} from "../desktop/tauri";
 
 export class MusicRoomApiError extends Error {
   constructor(
@@ -553,12 +559,28 @@ async function downloadDirectBlobInParallelRanges(
   }
 }
 
-export async function downloadWithDirectFallback(input: {
+function base64ToBlob(base64: string, mimeType: string): Blob {
+  const binaryString = atob(base64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return new Blob([bytes], { type: mimeType });
+}
+
+export type DirectAudioDownloadInput = {
   resolve: () => Promise<ProviderAudioResolveResponse | DirectAudioResolveResult>;
-  fallback: () => Promise<{ blob: Blob; contentType: string }>;
+  fallback?: () => Promise<{ blob: Blob; contentType: string }>;
+  headers?: Record<string, string>;
   signal?: AbortSignal;
   onProgress?: (loaded: number, total: number | null) => void;
-}) {
+};
+
+export async function downloadDirectTrack(input: DirectAudioDownloadInput): Promise<{
+  blob: Blob;
+  contentType: string;
+}> {
   try {
     const resolved = await input.resolve();
     const candidateUrls = Array.isArray((resolved as { urls?: string[] }).urls) && (resolved as { urls: string[] }).urls.length > 0
@@ -569,6 +591,82 @@ export async function downloadWithDirectFallback(input: {
     const candidates = candidateUrls
       .slice(0, DIRECT_CANDIDATE_LIMIT)
       .map(upgradeDirectUrl);
+
+    // 1. 桌面端 (Tauri)：Rust 原生多线程并发直连下载，完全绕过浏览器 CORS 与 Referer 防盗链限制
+    if (isTauriRuntime()) {
+      let lastError: unknown = null;
+      for (const directUrl of candidates) {
+        if (input.signal?.aborted) throw new Error("Download aborted");
+        try {
+          const res = await invokeTauri<{
+            dataBase64: string;
+            contentType: string;
+            contentLength: number;
+          }>("download_direct_native", {
+            url: directUrl,
+            headers: input.headers,
+            concurrentParts: 4
+          });
+          if (res && res.dataBase64) {
+            const rawBlob = base64ToBlob(res.dataBase64, res.contentType || resolved.mimeType || "audio/mpeg");
+            const contentType = await resolveDownloadedAudioMimeType(
+              rawBlob,
+              res.contentType || resolved.mimeType || ""
+            );
+            if (input.onProgress) {
+              input.onProgress(rawBlob.size, rawBlob.size);
+            }
+            return { blob: rawBlob, contentType };
+          }
+        } catch (err) {
+          lastError = err;
+        }
+      }
+      if (lastError && !input.fallback) {
+        throw lastError instanceof Error ? lastError : new Error(String(lastError));
+      }
+    }
+
+    // 2. 移动端 (Capacitor Android)：CapacitorHttp 原生层请求，跳过 WebView CORS 并允许设置 Referer
+    if (isCapacitorRuntime()) {
+      const capHttp = capacitorPlugin("CapacitorHttp");
+      if (capHttp && typeof capHttp.request === "function") {
+        let lastError: unknown = null;
+        for (const directUrl of candidates) {
+          if (input.signal?.aborted) throw new Error("Download aborted");
+          try {
+            const res = (await capHttp.request({
+              method: "GET",
+              url: directUrl,
+              headers: input.headers,
+              responseType: "blob"
+            })) as { data?: string | Blob; status: number; headers?: Record<string, string> };
+
+            if (res && (res.status === 200 || res.status === 206) && res.data) {
+              const rawBlob =
+                typeof res.data === "string"
+                  ? base64ToBlob(res.data, resolved.mimeType || "audio/mpeg")
+                  : res.data;
+              const contentType = await resolveDownloadedAudioMimeType(
+                rawBlob,
+                res.headers?.["content-type"] ?? resolved.mimeType ?? ""
+              );
+              if (input.onProgress) {
+                input.onProgress(rawBlob.size, rawBlob.size);
+              }
+              return { blob: rawBlob, contentType };
+            }
+          } catch (err) {
+            lastError = err;
+          }
+        }
+        if (lastError && !input.fallback) {
+          throw lastError instanceof Error ? lastError : new Error(String(lastError));
+        }
+      }
+    }
+
+    // 3. 网页端 (Web 浏览器)：直接向 CDN 发起跨域直连探测与多并发分段拉取（如网易云）
     const winner = await resolveFirstHealthyProbe(
       candidates.map((candidateUrl) => probeDirectCandidate(candidateUrl, input.signal))
     );
@@ -599,14 +697,24 @@ export async function downloadWithDirectFallback(input: {
     if (input.signal?.aborted) {
       throw error;
     }
+    if (!input.fallback) {
+      throw error;
+    }
   }
 
-  const fallback = await input.fallback();
-  return {
-    ...fallback,
-    contentType: await resolveDownloadedAudioMimeType(
-      fallback.blob,
-      fallback.contentType
-    )
-  };
+  if (input.fallback) {
+    const fallback = await input.fallback();
+    return {
+      ...fallback,
+      contentType: await resolveDownloadedAudioMimeType(
+        fallback.blob,
+        fallback.contentType
+      )
+    };
+  }
+
+  throw new Error("本地下载未成功。若受浏览器跨域或防盗链限制，请使用 Music Room 桌面客户端或移动客户端以享受本地不限速下载。");
 }
+
+export const downloadWithDirectFallback = downloadDirectTrack;
+

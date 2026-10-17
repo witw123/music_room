@@ -402,7 +402,7 @@ export class NeteaseService {
 
   async resolveAudio(userId: string, trackId: string, quality: NeteaseQuality) {
     this.assertEnabled();
-    this.assertRateLimit(`audio:${userId}`, 6, 60_000);
+    this.assertRateLimit(`audio:${userId}`, 120, 60_000);
     const source = await this.resolveAudioSource(userId, trackId, quality);
     const mimeType = resolveAudioMimeType(source.type, source.url.pathname);
     return {

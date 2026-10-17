@@ -58,6 +58,7 @@ import type {
 } from "@music-room/shared";
 import { apiBaseUrl } from "./api-client";
 import {
+  downloadDirectTrack,
   downloadWithDirectFallback,
   notifyPlaylistsChanged,
   request,
@@ -124,10 +125,13 @@ async function downloadQualityProviderTrack(
   signal?: AbortSignal,
   onProgress?: (loaded: number, total: number | null) => void
 ) {
-  return downloadWithDirectFallback({
+  const headers: Record<string, string> = {};
+  if (provider === "qqmusic") {
+    headers.Referer = "https://y.qq.com/";
+  }
+  return downloadDirectTrack({
     resolve: () => resolveQualityProviderAudio(provider, trackId, quality, signal),
-    fallback: () =>
-      requestBlob(`${providerTrackPath(provider, trackId)}/audio?quality=${quality}`, { signal }, onProgress),
+    headers,
     signal,
     onProgress
   });
@@ -614,11 +618,16 @@ export const musicRoomApi = {
     signal?: AbortSignal,
     onProgress?: (loaded: number, total: number | null) => void
   ) =>
-    requestBlob(
-      `/v1/providers/bilibili/tracks/${encodeURIComponent(trackId)}/audio`,
-      { signal },
+    downloadDirectTrack({
+      resolve: () => musicRoomApi.resolveBilibiliAudio(trackId, signal),
+      headers: {
+        Referer: "https://www.bilibili.com/",
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      },
+      signal,
       onProgress
-    ),
+    }),
   testAlistConnection: (config: { url: string; mountPath: string; token?: string }) =>
     request<AlistTestResponse>("/v1/storage/alist/test", {
       method: "POST",

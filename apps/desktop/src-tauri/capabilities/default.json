@@ -26,6 +26,7 @@
     "process:allow-restart",
     "allow-desktop-lyrics",
     "allow-app-management",
-    "allow-system-media"
+    "allow-system-media",
+    "allow-native-download"
   ]
 }

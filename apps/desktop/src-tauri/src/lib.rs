@@ -1,5 +1,6 @@
 mod system_media;
 mod local_storage;
+mod native_downloader;
 
 use tauri::{
     command,
@@ -209,6 +210,15 @@ fn position_lyrics_window(window: &tauri::WebviewWindow) {
     let _ = window.set_position(PhysicalPosition::new(x, y));
 }
 
+#[command]
+async fn download_direct_native(
+    url: String,
+    headers: Option<std::collections::HashMap<String, String>>,
+    concurrent_parts: Option<usize>,
+) -> Result<native_downloader::NativeDownloadResponse, String> {
+    native_downloader::download_direct_native(url, headers, concurrent_parts).await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -252,7 +262,8 @@ pub fn run() {
             get_app_version,
             set_ui_zoom,
             focus_main_window,
-            open_external_url
+            open_external_url,
+            download_direct_native
         ])
         .setup(|app| {
             use tauri_plugin_global_shortcut::GlobalShortcutExt;

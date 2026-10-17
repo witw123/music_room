@@ -340,7 +340,8 @@ export class QqMusicService {
     };
   }
   async resolveAudio(userId: string, trackId: string, quality: QqMusicQuality) {
-    this.assertEnabled(); this.assertRateLimit(`audio:${userId}`, 6);
+    this.assertEnabled();
+    this.assertRateLimit(`audio:${userId}`, 120);
     const source = await this.resolveAudioSource(userId, trackId, quality);
     const mimeType = resolveMime(null, source.url.toString());
     return {

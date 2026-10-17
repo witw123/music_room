@@ -26,3 +26,10 @@ commands.allow = [
     "system_media_update_playback",
     "system_media_clear"
 ]
+
+[[permission]]
+identifier = "allow-native-download"
+description = "Allow direct native CDN downloads"
+commands.allow = [
+    "download_direct_native"
+]
