@@ -59,7 +59,6 @@ import type {
 import { apiBaseUrl } from "./api-client";
 import {
   downloadDirectTrack,
-  downloadWithDirectFallback,
   notifyPlaylistsChanged,
   request,
   requestBlob,
