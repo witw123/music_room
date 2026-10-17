@@ -11,10 +11,12 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.PowerManager;
 import android.support.v4.media.MediaMetadataCompat;
 import android.support.v4.media.session.MediaSessionCompat;
 import android.support.v4.media.session.PlaybackStateCompat;
@@ -34,9 +36,8 @@ import java.util.concurrent.Executors;
  * transport. The webview pushes state through SystemMediaControlsPlugin;
  * transport commands flow back via SystemMediaControlsPlugin.emitCommand.
  *
- * The notification's transport actions dispatch through the media session
- * token on Android 13+, and through a local broadcast receiver on older
- * versions where MediaStyle renders the manually added actions.
+ * Holds PARTIAL_WAKE_LOCK and WifiLock to prevent CPU suspend and WiFi sleep
+ * while active in a room or playing media, avoiding WebSocket/WebRTC disconnections.
  */
 public class SystemMediaService extends Service {
     private static final String CHANNEL_ID = "music_room_media";
@@ -46,6 +47,11 @@ public class SystemMediaService extends Service {
     private MediaSessionCompat session;
     private final ExecutorService imageExecutor = Executors.newSingleThreadExecutor();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
+
+    private PowerManager.WakeLock wakeLock;
+    private WifiManager.WifiLock wifiLock;
+    private boolean isKeepAlive;
+    private String roomName = "";
 
     private String currentTitle = "";
     private String currentArtist = "";
@@ -62,6 +68,7 @@ public class SystemMediaService extends Service {
     public void onCreate() {
         super.onCreate();
         createChannel();
+        acquireLocks();
         session = new MediaSessionCompat(this, "MusicRoomMediaSession");
         session.setCallback(new MediaSessionCompat.Callback() {
             @Override
@@ -110,13 +117,35 @@ public class SystemMediaService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        startForeground(NOTIFICATION_ID, buildNotification());
+        acquireLocks();
         if (intent != null) {
+            if (intent.hasExtra("keepAlive")) {
+                isKeepAlive = intent.getBooleanExtra("keepAlive", false);
+            }
+            if (intent.hasExtra("roomName")) {
+                roomName = intent.getStringExtra("roomName");
+                if (roomName == null) roomName = "";
+            }
+            if (intent.getBooleanExtra("clearTrack", false)) {
+                currentTitle = "";
+                currentArtist = "";
+                currentAlbum = "";
+                currentArtworkUrl = "";
+                loadedArtworkUrl = null;
+                artwork = null;
+                durationMs = 0L;
+                isPlaying = false;
+                positionMs = 0L;
+            }
             if (intent.hasExtra("title")) {
                 currentTitle = intent.getStringExtra("title");
+                if (currentTitle == null) currentTitle = "";
                 currentArtist = intent.getStringExtra("artist");
+                if (currentArtist == null) currentArtist = "";
                 currentAlbum = intent.getStringExtra("album");
+                if (currentAlbum == null) currentAlbum = "";
                 currentArtworkUrl = intent.getStringExtra("artworkUrl");
+                if (currentArtworkUrl == null) currentArtworkUrl = "";
                 durationMs = intent.getLongExtra("durationMs", 0L);
                 loadArtwork();
             }
@@ -125,9 +154,67 @@ public class SystemMediaService extends Service {
                 positionMs = intent.getLongExtra("positionMs", 0L);
             }
         }
+        try {
+            Notification notification = buildNotification();
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIFICATION_ID, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
+            } else {
+                startForeground(NOTIFICATION_ID, notification);
+            }
+        } catch (Exception error) {
+            // Guard against MissingForegroundServiceTypeException / BadNotificationException on Android 14+
+        }
         publishSessionState();
         NotificationManagerCompatHolder.notify(this, NOTIFICATION_ID, buildNotification());
-        return START_NOT_STICKY;
+        return START_STICKY;
+    }
+
+    private void acquireLocks() {
+        try {
+            if (wakeLock == null) {
+                PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+                if (pm != null) {
+                    wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MusicRoom:MediaPlaybackWakeLock");
+                    wakeLock.setReferenceCounted(false);
+                }
+            }
+            if (wakeLock != null && !wakeLock.isHeld()) {
+                wakeLock.acquire();
+            }
+        } catch (Exception ignored) {
+        }
+
+        try {
+            if (wifiLock == null) {
+                WifiManager wm = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+                if (wm != null) {
+                    wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "MusicRoom:MediaPlaybackWifiLock");
+                    wifiLock.setReferenceCounted(false);
+                }
+            }
+            if (wifiLock != null && !wifiLock.isHeld()) {
+                wifiLock.acquire();
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void releaseLocks() {
+        try {
+            if (wakeLock != null && wakeLock.isHeld()) {
+                wakeLock.release();
+            }
+        } catch (Exception ignored) {
+        }
+        wakeLock = null;
+
+        try {
+            if (wifiLock != null && wifiLock.isHeld()) {
+                wifiLock.release();
+            }
+        } catch (Exception ignored) {
+        }
+        wifiLock = null;
     }
 
     @Override
@@ -145,6 +232,7 @@ public class SystemMediaService extends Service {
 
     @Override
     public void onDestroy() {
+        releaseLocks();
         if (commandReceiver != null) {
             unregisterReceiver(commandReceiver);
             commandReceiver = null;
@@ -240,27 +328,40 @@ public class SystemMediaService extends Service {
     }
 
     private Notification buildNotification() {
+        boolean hasTrack = !currentTitle.isEmpty();
+        String title = hasTrack ? currentTitle : (roomName.isEmpty() ? getString(R.string.app_name) : roomName);
+        String text = hasTrack ? subtitle() : "正在后台保持房间连接 · 点击返回";
+
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setSmallIcon(R.mipmap.ic_launcher)
-                .setContentTitle(currentTitle.isEmpty() ? getString(R.string.app_name) : currentTitle)
-                .setContentText(subtitle())
-                .setLargeIcon(artwork)
+                .setContentTitle(title)
+                .setContentText(text)
+                .setLargeIcon(hasTrack ? artwork : null)
                 .setContentIntent(launchIntent())
                 .setShowWhen(false)
                 .setOnlyAlertOnce(true)
                 .setOngoing(true)
-                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-                .setStyle(new androidx.media.app.NotificationCompat.MediaStyle()
-                        .setMediaSession(session != null ? session.getSessionToken() : null)
-                        .setShowActionsInCompactView(0, 1, 2));
-        builder.addAction(new NotificationCompat.Action(
-                android.R.drawable.ic_media_previous, "Previous", commandPendingIntent("prev")));
-        builder.addAction(new NotificationCompat.Action(
-                isPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play,
-                "PlayPause",
-                commandPendingIntent("toggle")));
-        builder.addAction(new NotificationCompat.Action(
-                android.R.drawable.ic_media_next, "Next", commandPendingIntent("next")));
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC);
+
+        androidx.media.app.NotificationCompat.MediaStyle mediaStyle =
+                new androidx.media.app.NotificationCompat.MediaStyle()
+                        .setMediaSession(session != null ? session.getSessionToken() : null);
+
+        if (hasTrack) {
+            mediaStyle.setShowActionsInCompactView(0, 1, 2);
+            builder.setStyle(mediaStyle);
+            builder.addAction(new NotificationCompat.Action(
+                    android.R.drawable.ic_media_previous, "Previous", commandPendingIntent("prev")));
+            builder.addAction(new NotificationCompat.Action(
+                    isPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play,
+                    "PlayPause",
+                    commandPendingIntent("toggle")));
+            builder.addAction(new NotificationCompat.Action(
+                    android.R.drawable.ic_media_next, "Next", commandPendingIntent("next")));
+        } else {
+            builder.setStyle(mediaStyle);
+        }
+
         return builder.build();
     }
 

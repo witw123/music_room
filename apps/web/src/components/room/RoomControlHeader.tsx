@@ -179,42 +179,30 @@ export function RoomControlHeader({
     return (
       <>
         {/* Mobile Streamlined Room Control Header */}
-        <div className={`flex w-full flex-col gap-2 ${className}`}>
-          <div className="flex w-full items-center justify-between gap-2">
-            {/* Mobile Left: Tag + Join Code + Member count */}
-            <div className="flex items-center gap-1.5 min-w-0">
-              <div className="flex items-center gap-1 rounded-full bg-accent/10 border border-accent/25 px-2 py-0.5 text-[11px] font-semibold text-accent shrink-0">
-                <RoomTypeIcon className="w-3 h-3 shrink-0" />
-                <span>{roomTypeConfig.label}</span>
-              </div>
-
-              <button
-                data-testid="mobile-room-code-button"
-                aria-label="复制房间码"
-                className="group flex items-center gap-1.5 rounded-full border border-surface-border/70 bg-surface/80 px-2 py-0.5 text-[11px] font-mono font-bold tracking-wider text-foreground hover:bg-surface-hover transition-colors shrink-0"
-                disabled={isCopying || !onCopyJoinCode}
-                onClick={() => void handleCopyJoinCode()}
-                type="button"
-              >
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shrink-0" />
-                <span>{roomSnapshot.room.joinCode}</span>
-                <CopyIcon className="w-2.5 h-2.5 text-foreground-muted shrink-0" />
-                {isCopying ? <span className="text-[9px] font-sans font-medium text-accent">已复制</span> : null}
-              </button>
-
-              <span className="flex items-center gap-0.5 text-[11px] text-foreground-muted shrink-0">
-                <UsersIcon className="w-3 h-3" />
-                <span data-testid="mobile-online-member-count">{onlineMemberCount}</span>
-              </span>
+        <div className={`flex w-full flex-col gap-1.5 ${className}`}>
+          {/* Row 1: Room Name (flex-1 truncate) + Action Buttons (shrink-0) */}
+          <div className="flex w-full items-center justify-between gap-2 min-w-0">
+            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+              <h1 className="truncate text-sm font-semibold tracking-tight text-foreground">
+                {roomSnapshot.room.name || "当前房间"}
+              </h1>
+              {roomSnapshot.room.visibility === "private" ? (
+                <span className="shrink-0 text-amber-500/90" title="私密房间">
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                </span>
+              ) : null}
             </div>
 
-            {/* Mobile Right: Share + Settings */}
+            {/* Mobile Right Actions: Share + Settings */}
             <div className="flex items-center gap-1.5 shrink-0">
               {onShareRoom ? (
                 <button
                   data-testid="mobile-share-room-button"
                   aria-label="分享房间"
-                  className="inline-flex h-7 items-center justify-center gap-1 rounded-full border border-surface-border/70 bg-surface/80 px-2 text-[11px] font-medium text-foreground-muted hover:text-foreground"
+                  className="inline-flex h-7 items-center justify-center gap-1 rounded-full border border-surface-border/70 bg-surface/80 px-2 text-[11px] font-medium text-foreground-muted hover:text-foreground active:scale-95 transition-transform"
                   disabled={isSharing}
                   onClick={() => void handleShareRoom()}
                   type="button"
@@ -229,7 +217,7 @@ export function RoomControlHeader({
                   data-testid="mobile-room-settings-button"
                   variant="ghost"
                   size="icon"
-                  className="h-7 w-7 rounded-full border border-surface-border/70 bg-surface/80 text-foreground-muted hover:text-foreground"
+                  className="h-7 w-7 rounded-full border border-surface-border/70 bg-surface/80 text-foreground-muted hover:text-foreground active:scale-95 transition-transform"
                   onClick={() => setShowSettings((value) => !value)}
                   type="button"
                 >
@@ -335,13 +323,39 @@ export function RoomControlHeader({
             </div>
           </div>
 
-          {/* Mobile Sub-line Metadata */}
-          {!hideRoomMetadata ? (
-            <div className="flex items-center gap-1.5 text-[10px] text-foreground-muted truncate">
-              <span>{roomSnapshot.room.visibility === "public" ? "公开房间" : "私密房间"}</span>
-              {host ? <span>· 房主 {host.nickname}</span> : null}
+          {/* Row 2: Metadata (Room Type, Join Code, Member Count, Host) */}
+          <div className="flex w-full items-center gap-1.5 min-w-0 flex-wrap text-[11px]">
+            <div className="flex items-center gap-1 rounded-full bg-accent/10 border border-accent/25 px-2 py-0.5 font-semibold text-accent shrink-0">
+              <RoomTypeIcon className="w-3 h-3 shrink-0" />
+              <span>{roomTypeConfig.label}</span>
             </div>
-          ) : null}
+
+            <button
+              data-testid="mobile-room-code-button"
+              aria-label="复制房间码"
+              className="group flex items-center gap-1.5 rounded-full border border-surface-border/70 bg-surface/80 px-2 py-0.5 font-mono font-bold tracking-wider text-foreground hover:bg-surface-hover active:scale-95 transition-all shrink-0 cursor-pointer"
+              disabled={isCopying || !onCopyJoinCode}
+              onClick={() => void handleCopyJoinCode()}
+              type="button"
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shrink-0" />
+              <span>{roomSnapshot.room.joinCode}</span>
+              <CopyIcon className="w-2.5 h-2.5 text-foreground-muted shrink-0" />
+              {isCopying ? <span className="text-[9px] font-sans font-medium text-accent">已复制</span> : null}
+            </button>
+
+            <span className="flex items-center gap-0.5 text-foreground-muted shrink-0">
+              <UsersIcon className="w-3 h-3" />
+              <span data-testid="mobile-online-member-count">{onlineMemberCount}</span>
+              <span className="text-[10px] text-foreground-muted/70">在线</span>
+            </span>
+
+            {host ? (
+              <span className="text-[10px] text-foreground-muted truncate max-w-[130px]">
+                · 房主 {host.nickname}
+              </span>
+            ) : null}
+          </div>
         </div>
 
         <ConfirmDialog

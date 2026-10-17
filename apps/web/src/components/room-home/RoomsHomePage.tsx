@@ -214,7 +214,7 @@ export function RoomsHomePage({
   }
 
   return (
-    <main className="workspace-page home-workspace-page hide-scrollbar relative flex flex-col overflow-y-auto selection:bg-accent/30 selection:text-white md:pb-[calc(12rem+env(safe-area-inset-bottom))] md:pl-[var(--app-sidebar-width)]">
+    <main className="workspace-page home-workspace-page hide-scrollbar relative flex flex-col overflow-y-auto selection:bg-accent/30 selection:text-white pb-[calc(var(--room-mobile-bottom-inset)+2rem)] md:pb-[calc(12rem+env(safe-area-inset-bottom))] md:pl-[var(--app-sidebar-width)]">
 
       {showSidebar ? (
         <AppSidebar

@@ -496,7 +496,7 @@ export function FavoriteAlbumsPage({
         ? fixedHeight
           ? "flex h-[29rem] min-w-0 flex-col overflow-hidden sm:h-[32rem] lg:h-[34rem]"
           : "flex min-w-0 flex-col"
-        : "workspace-page__inner workspace-page__inner--wide pt-6 sm:pt-10 md:pt-20"}>
+        : "workspace-page__inner workspace-page__inner--wide pt-[calc(0.75rem+env(safe-area-inset-top))] pb-[calc(var(--room-mobile-bottom-inset)+2rem)] sm:pt-6 md:pt-10 md:pb-24"}>
         <header className={`flex flex-wrap items-center gap-3 ${showTitle ? "workspace-page__header" : "justify-start pb-3 pt-1"}`}>
           {showTitle ? (
             <div>

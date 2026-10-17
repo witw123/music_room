@@ -277,7 +277,7 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
   return (
     <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-background" data-room-view="request">
       {/* Mobile Top Room Control Header */}
-      <div className="relative z-30 shrink-0 px-3 pt-[calc(0.45rem+env(safe-area-inset-top,0px))] pb-2 lg:hidden">
+      <div className="relative z-30 shrink-0 px-3 pt-[calc(0.45rem+env(safe-area-inset-top,0px))] pb-2 lg:hidden border-b border-surface-border/50 bg-background/95 backdrop-blur-md">
         <RoomControlHeader
           isMobile
           roomSnapshot={props.roomSnapshot}

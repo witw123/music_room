@@ -229,6 +229,7 @@ export function useRoomRuntimeLifecycle(input: {
       // Background tabs can outlive the server's realtime lease while the
       // browser keeps Socket.IO in a connected-looking state. Re-subscribe
       // before refreshing presence so the lease and peer topology are rebuilt.
+      void roomAudioOutput.resumeSharedAudioContext();
       resubscribeRoomRef.current?.();
       emitPresence();
       void requestRoomSnapshotResync(

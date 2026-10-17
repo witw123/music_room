@@ -584,7 +584,7 @@ export function PlaylistsWorkspacePage({
       {!embedded ? <AppPageBackground /> : null}
       <div className={embedded
         ? "relative z-10 flex w-full flex-col pb-4"
-        : "workspace-page__inner relative z-10 pt-4 sm:pt-6 md:pt-8"}>
+        : "workspace-page__inner relative z-10 pt-[calc(0.75rem+env(safe-area-inset-top))] pb-[calc(var(--room-mobile-bottom-inset)+2rem)] sm:pt-6 md:pt-8 md:pb-24"}>
         {selectedPlaylist ? (
           <PlaylistDetailView
             localTracks={localTracks}

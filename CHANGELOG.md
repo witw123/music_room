@@ -54,7 +54,17 @@
 - provider API 同构端点收敛;房间业务 hooks 归位至 features/room;
   沉浸层进度自驱动(仅歌词/进度叶子重渲染);表情轻量化(单次 groupBy);
   RoomState updatedAt 索引;9 个纯客户端页面静态预渲染
-## [未发布]
+## [0.3.6] - 2026-10-17
+
+### 修复
+
+- **软件端偶发无法登录提示失效**：CSRF 中间件排除公开认证端点，避免遗留 Cookie 导致误拦截；认证与登录接口错误不再误触发全局会话失效事件广播，密码错误精准提示“账号或密码错误”。
+- **移动端特定机型进房闪退**：悬浮桌面歌词增加系统悬浮窗权限检查与异常捕获保护，修复无权限时触发 `BadTokenException` 导致的进程崩溃闪退。
+- **软件端与移动端后台保活防断线**：
+  - 前台服务持有 `PowerManager.PARTIAL_WAKE_LOCK` 与 `WifiManager.WifiLock`，防止熄屏后系统休眠导致 WebSocket/WebRTC 断连；
+  - 前台服务生命周期与房间会话绑定，切歌与无歌曲待机状态下保持常驻运行，展示房间后台保持通知并兼容 Android 14+ `mediaPlayback` 规范；
+  - Android `MainActivity` 在 `onPause` 中恢复 WebView 定时器，确保后台 JavaScript 事件循环正常驱动；
+  - 增加电池优化豁免权限与自动请求通道，播放中启用屏幕防休眠唤醒锁，切回前台立即恢复挂起的音频上下文。
 
 ### 新增与优化
 

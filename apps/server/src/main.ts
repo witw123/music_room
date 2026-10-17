@@ -36,10 +36,14 @@ async function bootstrap() {
   app.use((request: Request, response: Response, next: NextFunction) => {
     const isMutation = !["GET", "HEAD", "OPTIONS"].includes(request.method);
     const hasUserCookie = !!readUserSessionCookie(request.headers.cookie);
+    const isPublicAuthEndpoint =
+      request.path === "/v1/auth/login" ||
+      request.path === "/v1/auth/register";
     if (
       process.env.NODE_ENV === "production" &&
       isMutation &&
       hasUserCookie &&
+      !isPublicAuthEndpoint &&
       !isAllowedOrigin(request.headers.origin, getRequestOrigin(request), corsOrigins)
     ) {
       response.status(403).json({

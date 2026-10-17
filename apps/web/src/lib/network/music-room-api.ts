@@ -144,12 +144,12 @@ export const musicRoomApi = {
     request<AuthSession>("/v1/auth/register", {
       method: "POST",
       body: JSON.stringify({ username, password, nickname, turnstileToken })
-    }),
+    }, { notifyAuthExpired: false }),
   login: (username: string, password: string, turnstileToken?: string) =>
     request<AuthSession>("/v1/auth/login", {
       method: "POST",
       body: JSON.stringify({ username, password, turnstileToken })
-    }),
+    }, { notifyAuthExpired: false }),
   logout: () =>
     request<{ ok: boolean }>("/v1/auth/logout", {
       method: "POST"

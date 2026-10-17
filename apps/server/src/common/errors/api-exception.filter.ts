@@ -143,10 +143,13 @@ export function mapErrorCode(message: string, status?: number): ErrorCode {
     return errorCodes.rateLimited;
   }
 
+  if (message.includes("Invalid username or password")) {
+    return errorCodes.invalidCredentials;
+  }
+
   if (
     message.includes("Unauthorized") ||
-    message.includes("Invalid session token") ||
-    message.includes("Invalid username or password")
+    message.includes("Invalid session token")
   ) {
     return errorCodes.unauthorized;
   }
@@ -184,6 +187,7 @@ export function mapErrorStatus(code: ErrorCode): number {
     case errorCodes.validationFailed:
       return HttpStatus.BAD_REQUEST;
     case errorCodes.unauthorized:
+    case errorCodes.invalidCredentials:
       return HttpStatus.UNAUTHORIZED;
     case errorCodes.rateLimited:
       return HttpStatus.TOO_MANY_REQUESTS;

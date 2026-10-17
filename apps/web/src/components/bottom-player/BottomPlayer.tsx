@@ -16,7 +16,7 @@ import {
   type PendingSeek
 } from "./seek-state";
 import { ImmersivePlayerOverlay } from "./ImmersivePlayerOverlay";
-import { useSystemMediaTransport } from "@/features/playback/system-media-bridge";
+import { useScreenWakeLock, useSystemMediaTransport } from "@/features/playback/system-media-bridge";
 import {
   installBrowserMediaSessionActionHandlers,
   syncBrowserMediaSession
@@ -43,6 +43,7 @@ import {
 
 type BottomPlayerProps = {
   roomId?: string | null;
+  roomTitle?: string | null;
   audioRef: React.RefObject<HTMLAudioElement | null>;
   playback: PlaybackSnapshot | null;
   playbackBarrier?: RoomPlaybackBarrierClock | null;
@@ -106,6 +107,7 @@ function resolveBarrierProgressMs(
 
 function BottomPlayerBase({
   roomId,
+  roomTitle,
   audioRef,
   playback,
   playbackBarrier,
@@ -500,6 +502,8 @@ function BottomPlayerBase({
   // notification) mirror the active track; commands reuse the same handlers
   // as the on-screen transport and the media-key bridge.
   useSystemMediaTransport({
+    roomId,
+    roomTitle,
     snapshot: currentTrack
       ? {
         title: currentTrack.title,
@@ -513,6 +517,8 @@ function BottomPlayerBase({
       : null,
     handlers: mediaHandlers
   });
+
+  useScreenWakeLock(Boolean(isPlaying));
 
   const applyVolume = useCallback(
     (nextVolume: number) => {

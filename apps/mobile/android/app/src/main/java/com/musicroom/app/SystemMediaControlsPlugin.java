@@ -2,7 +2,10 @@ package com.musicroom.app;
 
 import android.content.Context;
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Build;
+import android.os.PowerManager;
+import android.provider.Settings;
 
 import androidx.core.content.ContextCompat;
 
@@ -27,6 +30,9 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 public class SystemMediaControlsPlugin extends Plugin {
     /** Live instance so the service can emit commands without a binder handshake. */
     static volatile SystemMediaControlsPlugin activeInstance;
+
+    private volatile boolean isKeepAliveActive = false;
+    private volatile String keepAliveRoomName = "";
 
     @Override
     public void load() {
@@ -60,6 +66,73 @@ public class SystemMediaControlsPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void enableKeepAlive(PluginCall call) {
+        isKeepAliveActive = true;
+        keepAliveRoomName = call.getString("roomName", "");
+        Intent intent = serviceIntent();
+        if (intent != null) {
+            intent.putExtra("keepAlive", true);
+            intent.putExtra("roomName", keepAliveRoomName);
+            startService(intent);
+        }
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void disableKeepAlive(PluginCall call) {
+        isKeepAliveActive = false;
+        keepAliveRoomName = "";
+        Context context = bridge != null ? bridge.getContext() : null;
+        if (context != null) {
+            context.stopService(new Intent(context, SystemMediaService.class));
+        }
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void isIgnoringBatteryOptimizations(PluginCall call) {
+        JSObject ret = new JSObject();
+        boolean isIgnoring = true;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            Context context = bridge != null ? bridge.getContext() : null;
+            if (context != null) {
+                PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
+                if (pm != null) {
+                    isIgnoring = pm.isIgnoringBatteryOptimizations(context.getPackageName());
+                }
+            }
+        }
+        ret.put("isIgnoring", isIgnoring);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void requestIgnoreBatteryOptimizations(PluginCall call) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            Context context = bridge != null ? bridge.getContext() : null;
+            if (context != null) {
+                PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
+                if (pm != null && !pm.isIgnoringBatteryOptimizations(context.getPackageName())) {
+                    try {
+                        Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+                        intent.setData(Uri.parse("package:" + context.getPackageName()));
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        context.startActivity(intent);
+                    } catch (Exception error) {
+                        try {
+                            Intent fallback = new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);
+                            fallback.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                            context.startActivity(fallback);
+                        } catch (Exception ignored) {
+                        }
+                    }
+                }
+            }
+        }
+        call.resolve();
+    }
+
+    @PluginMethod
     public void updateMetadata(PluginCall call) {
         Intent intent = serviceIntent();
         if (intent == null) {
@@ -72,6 +145,10 @@ public class SystemMediaControlsPlugin extends Plugin {
         intent.putExtra("artworkUrl", call.getString("artworkUrl", ""));
         double durationMs = call.getDouble("durationMs", 0.0);
         intent.putExtra("durationMs", (long) durationMs);
+        if (isKeepAliveActive) {
+            intent.putExtra("keepAlive", true);
+            intent.putExtra("roomName", keepAliveRoomName);
+        }
         startService(intent);
         call.resolve();
     }
@@ -86,14 +163,32 @@ public class SystemMediaControlsPlugin extends Plugin {
         intent.putExtra("isPlaying", call.getBoolean("isPlaying", false));
         double positionMs = call.getDouble("positionMs", 0.0);
         intent.putExtra("positionMs", (long) positionMs);
+        if (isKeepAliveActive) {
+            intent.putExtra("keepAlive", true);
+            intent.putExtra("roomName", keepAliveRoomName);
+        }
         startService(intent);
         call.resolve();
     }
 
     @PluginMethod
     public void hide(PluginCall call) {
-        Context context = bridge.getContext();
-        context.stopService(new Intent(context, SystemMediaService.class));
+        boolean force = call.getBoolean("force", false);
+        if (isKeepAliveActive && !force) {
+            Intent intent = serviceIntent();
+            if (intent != null) {
+                intent.putExtra("clearTrack", true);
+                intent.putExtra("keepAlive", true);
+                intent.putExtra("roomName", keepAliveRoomName);
+                startService(intent);
+            }
+            call.resolve();
+            return;
+        }
+        Context context = bridge != null ? bridge.getContext() : null;
+        if (context != null) {
+            context.stopService(new Intent(context, SystemMediaService.class));
+        }
         call.resolve();
     }
 
@@ -105,11 +200,16 @@ public class SystemMediaControlsPlugin extends Plugin {
     }
 
     private void startService(Intent intent) {
-        Context context = bridge.getContext();
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            ContextCompat.startForegroundService(context, intent);
-        } else {
-            context.startService(intent);
+        try {
+            Context context = bridge != null ? bridge.getContext() : null;
+            if (context == null) return;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                ContextCompat.startForegroundService(context, intent);
+            } else {
+                context.startService(intent);
+            }
+        } catch (Exception error) {
+            // Guard against ForegroundServiceStartNotAllowedException on Android 12+ / 14+
         }
     }
 }

@@ -143,6 +143,7 @@ function BottomPlayerControllerBase({
   return (
     <BottomPlayer
       roomId={roomSnapshot?.room.id}
+      roomTitle={roomSnapshot?.room.name || (roomSnapshot?.room.joinCode ? `房间 ${roomSnapshot.room.joinCode}` : null)}
       desktopLyricsSource="room"
       mobileVariant={mobileVariant}
       audioRef={audioRef}

@@ -66,6 +66,13 @@ function applyCommand(
   }
 }
 
+export type SystemMediaTransportInput = {
+  roomId?: string | null;
+  roomTitle?: string | null;
+  snapshot: SystemMediaSnapshot | null;
+  handlers: SystemMediaHandlers;
+};
+
 /**
  * Bridges playback state to the OS system media player of each shell:
  *
@@ -79,17 +86,33 @@ function applyCommand(
  * The command listener is registered once; metadata/playback pushes are
  * deduplicated (metadata by key, playback state by a 1s throttle).
  */
-export function useSystemMediaTransport(input: {
-  snapshot: SystemMediaSnapshot | null;
-  handlers: SystemMediaHandlers;
-}) {
-  const { snapshot } = input;
+export function useSystemMediaTransport(input: SystemMediaTransportInput) {
+  const { snapshot, roomId, roomTitle } = input;
   const handlersRef = useRef(input.handlers);
   handlersRef.current = input.handlers;
+  const roomIdRef = useRef(roomId);
+  roomIdRef.current = roomId;
   const lastMetaKeyRef = useRef("");
   const lastPositionPushAtRef = useRef(0);
   const lastIsPlayingRef = useRef(false);
   const isNative = isCapacitorRuntime() || isTauriRuntime();
+
+  // Android room keepalive: runs foreground service while inside room to prevent CPU/WiFi sleep
+  useEffect(() => {
+    if (!isCapacitorRuntime()) return;
+    const plugin = capacitorPlugin("SystemMediaControls");
+    if (roomId) {
+      void plugin?.enableKeepAlive?.({ roomName: roomTitle ?? "Music Room" });
+      void plugin?.requestIgnoreBatteryOptimizations?.({});
+    } else {
+      void plugin?.disableKeepAlive?.({});
+    }
+    return () => {
+      if (!roomIdRef.current) {
+        void plugin?.disableKeepAlive?.({});
+      }
+    };
+  }, [roomId, roomTitle]);
 
   // System commands (hardware keys handled separately via "media-key").
   useEffect(() => {
@@ -140,7 +163,7 @@ export function useSystemMediaTransport(input: {
       unlisten?.();
       unlisten = undefined;
       if (isTauriRuntime()) void invokeTauri("system_media_clear");
-      else void capacitorPlugin("SystemMediaControls")?.hide?.({});
+      else void capacitorPlugin("SystemMediaControls")?.hide?.({ force: !roomIdRef.current });
     };
   }, [isNative]);
 
@@ -150,8 +173,11 @@ export function useSystemMediaTransport(input: {
     if (!snapshot) {
       if (lastMetaKeyRef.current === "") return;
       lastMetaKeyRef.current = "";
-      if (isTauriRuntime()) void invokeTauri("system_media_clear");
-      else void capacitorPlugin("SystemMediaControls")?.hide?.({});
+      if (isTauriRuntime()) {
+        void invokeTauri("system_media_clear");
+      } else {
+        void capacitorPlugin("SystemMediaControls")?.hide?.({ force: !roomId });
+      }
       return;
     }
 
@@ -182,7 +208,7 @@ export function useSystemMediaTransport(input: {
         durationMs: snapshot.durationMs
       });
     }
-  }, [isNative, snapshot]);
+  }, [isNative, snapshot, roomId]);
 
   // Playback state: push immediately on play/pause, throttled while playing
   // so the OS timeline tracks the position without flooding the bridge.
@@ -208,4 +234,48 @@ export function useSystemMediaTransport(input: {
       });
     }
   }, [isNative, snapshot]);
+}
+
+/**
+ * Requests a screen wake lock when enabled (e.g. while audio is playing)
+ * so the display does not sleep or throttle prematurely.
+ */
+export function useScreenWakeLock(enabled: boolean) {
+  useEffect(() => {
+    if (!enabled || typeof navigator === "undefined" || !("wakeLock" in navigator)) {
+      return;
+    }
+    let sentinel: { release: () => Promise<void> } | null = null;
+    let cancelled = false;
+
+    const requestLock = async () => {
+      try {
+        if (!cancelled && document.visibilityState === "visible") {
+          sentinel = (await navigator.wakeLock.request("screen")) as unknown as {
+            release: () => Promise<void>;
+          };
+        }
+      } catch {
+        // Ignored if rejected by browser policy or low battery
+      }
+    };
+
+    void requestLock();
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        void requestLock();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", handleVisibility);
+      if (sentinel) {
+        void sentinel.release().catch(() => {});
+        sentinel = null;
+      }
+    };
+  }, [enabled]);
 }

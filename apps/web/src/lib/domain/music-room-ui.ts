@@ -290,6 +290,8 @@ export function toUserFacingError(error: unknown) {
         return "实时同步暂不可用，请稍后再试。";
       case errorCodes.rateLimited:
         return "操作过于频繁，请稍后再试。";
+      case errorCodes.invalidCredentials:
+        return "账号或密码错误。";
       case errorCodes.unauthorized:
         return "当前登录状态已失效，请重新登录。";
       case errorCodes.validationFailed:

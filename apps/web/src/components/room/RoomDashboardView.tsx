@@ -204,7 +204,7 @@ function InteractiveRoomLayout(props: RoomLayoutProps) {
       <section className="material-surface relative z-20 flex min-h-[24rem] w-full min-w-0 flex-1 flex-col md:min-h-0 md:rounded-none md:border-l md:border-surface-border md:shadow-[-6px_0_24px_rgba(0,0,0,0.05)] dark:md:shadow-[-12px_0_36px_rgba(0,0,0,0.3)]" data-custom-layout-item="room-panel">
         <div className="material-surface-header sticky top-0 z-30 shrink-0 border-b border-surface-border bg-surface/30 backdrop-blur-md md:rounded-none">
           {/* Mobile Room Header matching desktop control bar */}
-          <div className="border-b border-surface-border/60 p-2.5 md:hidden">
+          <div className="border-b border-surface-border/60 px-3 pt-[calc(0.45rem+env(safe-area-inset-top,0px))] pb-2 md:hidden bg-background/95 backdrop-blur-md">
             <RoomControlHeader
               isMobile
               roomSnapshot={props.roomSnapshot}
@@ -222,7 +222,7 @@ function InteractiveRoomLayout(props: RoomLayoutProps) {
             />
           </div>
 
-          <div aria-label="房间视图" className="flex w-full items-center shrink-0" role="tablist">
+          <div aria-label="房间视图" className="flex w-full items-center overflow-x-auto hide-scrollbar shrink-0" role="tablist">
             {tabConfigs.map(({ id: tab, label, icon: IconComp }) => {
               const isActive = activeTab === tab;
               return (
@@ -236,15 +236,15 @@ function InteractiveRoomLayout(props: RoomLayoutProps) {
                   onKeyDown={(event) => handleTabKeyDown(event, tab)}
                   role="tab"
                   tabIndex={isActive ? 0 : -1}
-                  className={`relative flex-1 flex h-11 items-center justify-center gap-2 px-3 text-xs sm:text-sm transition-colors cursor-pointer select-none ${
+                  className={`relative flex-1 flex h-10 min-w-fit items-center justify-center gap-1.5 px-3 text-xs sm:text-sm transition-colors cursor-pointer select-none ${
                     isActive
                       ? "text-foreground font-semibold"
                       : "text-foreground-muted hover:text-foreground hover:bg-surface-hover/30"
                   }`}
                   type="button"
                 >
-                  <IconComp className={`w-4 h-4 shrink-0 transition-colors ${isActive ? "text-accent" : "text-foreground-muted"}`} />
-                  <span className="truncate">{label}</span>
+                  <IconComp className={`w-3.5 h-3.5 shrink-0 transition-colors ${isActive ? "text-accent" : "text-foreground-muted"}`} />
+                  <span className="whitespace-nowrap">{label}</span>
                   {isActive ? (
                     <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-accent shadow-[0_0_8px_var(--accent-glow)]" />
                   ) : null}

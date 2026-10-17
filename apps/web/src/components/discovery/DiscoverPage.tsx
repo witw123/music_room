@@ -528,7 +528,7 @@ export function DiscoverPage() {
     return (
       <main className="workspace-page hide-scrollbar relative overflow-y-auto selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
         <AppPageBackground />
-        <div className="workspace-page__inner workspace-page__inner--wide pt-3 sm:pt-6 md:pt-8">
+        <div className="workspace-page__inner workspace-page__inner--wide pt-[calc(0.75rem+env(safe-area-inset-top))] pb-[calc(var(--room-mobile-bottom-inset)+2rem)] sm:pt-6 md:pt-8 md:pb-24">
           <ProviderPlaylistDetailView
             isFavorite={favoritePlaylistKeys.has(providerPlaylistKey(detail.value.provider, detail.value.providerPlaylistId))}
             onBack={() => setDetail(null)}

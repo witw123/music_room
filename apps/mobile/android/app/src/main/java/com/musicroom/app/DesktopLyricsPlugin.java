@@ -67,7 +67,12 @@ public class DesktopLyricsPlugin extends Plugin {
         bridge.executeOnMainThread(new Runnable() {
             @Override
             public void run() {
-                boolean visible = plugin.ensureOverlay().toggle();
+                LyricsOverlayView overlay = plugin.ensureOverlay();
+                if (overlay == null) {
+                    call.resolve(overlayResult(false, false));
+                    return;
+                }
+                boolean visible = overlay.toggle();
                 call.resolve(overlayResult(true, visible));
             }
         });
@@ -94,7 +99,10 @@ public class DesktopLyricsPlugin extends Plugin {
         bridge.executeOnMainThread(new Runnable() {
             @Override
             public void run() {
-                ensureOverlay().setLine(words, translation, romanized);
+                LyricsOverlayView overlay = overlayView;
+                if (overlay != null) {
+                    overlay.setLine(words, translation, romanized);
+                }
                 call.resolve();
             }
         });
@@ -108,7 +116,10 @@ public class DesktopLyricsPlugin extends Plugin {
         bridge.executeOnMainThread(new Runnable() {
             @Override
             public void run() {
-                ensureOverlay().updatePlayback(isPlaying, progressMs, at);
+                LyricsOverlayView overlay = overlayView;
+                if (overlay != null) {
+                    overlay.updatePlayback(isPlaying, progressMs, at);
+                }
                 call.resolve();
             }
         });
@@ -126,26 +137,33 @@ public class DesktopLyricsPlugin extends Plugin {
             return overlayView;
         }
         android.app.Activity activity = bridge.getActivity();
-        WindowManager manager = (WindowManager) activity.getSystemService(Context.WINDOW_SERVICE);
-        LyricsOverlayView view = new LyricsOverlayView(activity);
-        int type = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
-                ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-                : WindowManager.LayoutParams.TYPE_PHONE;
-        int marginPx = dp(16f);
-        WindowManager.LayoutParams params = new WindowManager.LayoutParams(
-                Math.max(0, activity.getResources().getDisplayMetrics().widthPixels - marginPx * 2),
-                WindowManager.LayoutParams.WRAP_CONTENT,
-                type,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                        | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
-                PixelFormat.TRANSLUCENT);
-        params.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
-        params.y = dp(96f);
-        view.bindWindow(manager, params);
-        manager.addView(view, params);
-        windowManager = manager;
-        overlayView = view;
-        return view;
+        if (activity == null || !Settings.canDrawOverlays(activity)) {
+            return null;
+        }
+        try {
+            WindowManager manager = (WindowManager) activity.getSystemService(Context.WINDOW_SERVICE);
+            LyricsOverlayView view = new LyricsOverlayView(activity);
+            int type = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                    ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                    : WindowManager.LayoutParams.TYPE_PHONE;
+            int marginPx = dp(16f);
+            WindowManager.LayoutParams params = new WindowManager.LayoutParams(
+                    Math.max(0, activity.getResources().getDisplayMetrics().widthPixels - marginPx * 2),
+                    WindowManager.LayoutParams.WRAP_CONTENT,
+                    type,
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                            | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                    PixelFormat.TRANSLUCENT);
+            params.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+            params.y = dp(96f);
+            view.bindWindow(manager, params);
+            manager.addView(view, params);
+            windowManager = manager;
+            overlayView = view;
+            return view;
+        } catch (Exception error) {
+            return null;
+        }
     }
 
     private int dp(float value) {

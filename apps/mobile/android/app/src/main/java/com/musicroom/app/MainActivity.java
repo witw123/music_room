@@ -30,5 +30,19 @@ public class MainActivity extends BridgeActivity {
                 );
             }
         }
+
+        // Configure WebView for background media & keepalive
+        if (bridge != null && bridge.getWebView() != null) {
+            bridge.getWebView().getSettings().setMediaPlaybackRequiresUserGesture(false);
+        }
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        // Prevent WebView from freezing JavaScript timers when app is backgrounded
+        if (bridge != null && bridge.getWebView() != null) {
+            bridge.getWebView().resumeTimers();
+        }
     }
 }
