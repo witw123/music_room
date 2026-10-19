@@ -5,9 +5,9 @@ import {
   getRoomMemberPermissions,
   hasCompleteRoomAsset,
   resolveTrackDistributionStatus,
-  roomSnapshotSchema,
-  type TrackMeta
+  roomSnapshotSchema
 } from "./models";
+import type { TrackMeta } from "../playlist/models";
 
 describe("roomSnapshotSchema", () => {
   it("parses a valid room snapshot", () => {
