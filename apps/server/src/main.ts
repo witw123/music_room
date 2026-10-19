@@ -5,7 +5,7 @@ import { Logger } from "@nestjs/common";
 dns.setDefaultResultOrder?.("ipv4first");
 
 import { NestFactory } from "@nestjs/core";
-import { json, urlencoded, type NextFunction, type Request, type Response } from "express";
+import type { NextFunction, Request, Response } from "express";
 import { AppModule } from "./app.module";
 import { validateRuntimeConfig } from "./common/config/runtime-config";
 import { getCorsOrigins, getRequestOrigin, isAllowedOrigin } from "./common/cors/get-cors-origins";
@@ -15,11 +15,7 @@ import { createGlobalRateLimitMiddleware } from "./common/http/global-rate-limit
 
 async function bootstrap() {
   validateRuntimeConfig();
-  const app = await NestFactory.create(AppModule, {
-    bodyParser: false
-  });
-  app.use(json({ limit: "50mb" }));
-  app.use(urlencoded({ extended: true, limit: "50mb" }));
+  const app = await NestFactory.create(AppModule);
   const trustProxy = resolveTrustProxy();
   const corsOrigins = getCorsOrigins();
   if (trustProxy !== false) {
