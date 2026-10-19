@@ -105,7 +105,7 @@ describe("roomSnapshotSchema", () => {
           segmentDurationMs: 2000,
           totalSegments: 10,
           segments: []
-        }
+        } as unknown as TrackMeta["playbackAsset"]
       })).toBe(true);
     });
 
@@ -122,7 +122,7 @@ describe("roomSnapshotSchema", () => {
       durationMs: 1000,
       sourceType: "local_upload",
       fileHash: "hash123",
-      playbackAsset: { assetId: "asset-1" },
+      playbackAsset: { assetId: "asset-1" } as unknown as TrackMeta["playbackAsset"],
       ownerSessionId: "u1",
       ownerNickname: "User 1"
     } as unknown as TrackMeta;
