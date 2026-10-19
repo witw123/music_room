@@ -5,7 +5,8 @@ import {
   getRoomMemberPermissions,
   hasCompleteRoomAsset,
   resolveTrackDistributionStatus,
-  roomSnapshotSchema
+  roomSnapshotSchema,
+  type TrackMeta
 } from "./models";
 
 describe("roomSnapshotSchema", () => {
@@ -76,7 +77,7 @@ describe("roomSnapshotSchema", () => {
         fileHash: "hash123",
         ownerSessionId: "u1",
         ownerNickname: "User"
-      } as any)).toBe(true);
+      } as unknown as TrackMeta)).toBe(true);
     });
 
     it("requires playbackAsset and fileHash for provider tracks", () => {
@@ -89,7 +90,7 @@ describe("roomSnapshotSchema", () => {
         sourceRef: { provider: "netease", trackId: "123" },
         ownerSessionId: "u1",
         ownerNickname: "User"
-      } as any;
+      } as unknown as TrackMeta;
 
       expect(hasCompleteRoomAsset(providerTrack)).toBe(false);
 
@@ -124,7 +125,7 @@ describe("roomSnapshotSchema", () => {
       playbackAsset: { assetId: "asset-1" },
       ownerSessionId: "u1",
       ownerNickname: "User 1"
-    } as any;
+    } as unknown as TrackMeta;
 
     it("returns ready when complete and owner is online", () => {
       const status = resolveTrackDistributionStatus({

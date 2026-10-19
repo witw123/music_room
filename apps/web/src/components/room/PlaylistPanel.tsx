@@ -547,7 +547,8 @@ function PlaylistDetail({
   canManageLibrary,
   tracks,
   remoteLoading,
-  remoteError
+  remoteError,
+  onRefreshRoom
 }: {
   playlist: Playlist;
   onBack: () => void;
