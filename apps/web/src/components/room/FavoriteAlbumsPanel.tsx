@@ -377,7 +377,8 @@ function FavoriteAlbumDetail({
   onImportNeteaseTracks,
   onImportQqMusicTracks,
   onImportBilibiliTracks,
-  canManageLibrary
+  canManageLibrary,
+  onRefreshRoom
 }: {
   album: ProviderAlbumDetail | ProviderAlbumFavorite;
   tracks: FavoriteTrack[];
@@ -396,7 +397,7 @@ function FavoriteAlbumDetail({
   onImportQqMusicTracks?: (tracks: QqMusicTrackCandidate[]) => Promise<void>;
   onImportBilibiliTracks?: (tracks: BilibiliTrackCandidate[]) => Promise<void>;
   canManageLibrary: boolean;
-  onRefreshRoom?: () => Promise<void> | void;
+  onRefreshRoom?: () => Promise<unknown> | unknown;
 }) {
   const [selectedTrackIds, setSelectedTrackIds] = useState<string[]>([]);
   const [pendingTrackIds, setPendingTrackIds] = useState<Set<string>>(new Set());

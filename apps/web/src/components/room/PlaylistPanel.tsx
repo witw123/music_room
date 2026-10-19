@@ -568,7 +568,7 @@ function PlaylistDetail({
   tracks: Array<PlaylistTrackInfo | null>;
   remoteLoading: boolean;
   remoteError: string | null;
-  onRefreshRoom?: () => Promise<void> | void;
+  onRefreshRoom?: () => Promise<unknown> | unknown;
 }) {
   const [selectedTrackKeys, setSelectedTrackKeys] = useState<string[]>([]);
   const [pendingTrackIds, setPendingTrackIds] = useState<Set<string>>(new Set());
