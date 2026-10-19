@@ -18,8 +18,7 @@ type PersistedPlaylistRecord = {
   updatedAt: Date;
 };
 
-const maxPlaylistsPerUser = 100;
-const maxPlaylistTracks = 1000;
+const maxPlaylistsPerUser = 1000;
 
 @Injectable()
 export class PlaylistService {
@@ -97,9 +96,6 @@ export class PlaylistService {
   }) {
     if (!input.title.trim()) {
       throw new BadRequestException("播放列表标题不能为空。");
-    }
-    if ((input.trackIds?.length ?? 0) > maxPlaylistTracks) {
-      throw new BadRequestException("播放列表曲目数量已达到上限。");
     }
     const ownedPlaylists = await this.listPlaylists(input.ownerId);
     if (ownedPlaylists.length >= maxPlaylistsPerUser) {
@@ -186,10 +182,6 @@ export class PlaylistService {
 
     if (current.ownerId !== input.ownerId) {
       throw new Error("Only the playlist owner can update this playlist.");
-    }
-
-    if (input.trackIds && input.trackIds.length > maxPlaylistTracks) {
-      throw new BadRequestException("播放列表曲目数量已达到上限。");
     }
 
     const updated: Playlist = {

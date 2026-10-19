@@ -22,7 +22,7 @@ const optionalNullableText = (max: number) =>
     .optional();
 
 const stringId = trimmedString(160);
-const trackIdListSchema = z.array(stringId).max(1000);
+const trackIdListSchema = z.array(stringId);
 
 export const registerRequestSchema = z
   .object({
@@ -156,7 +156,7 @@ export const registerTrackRequestSchema = z
 
 export const registerTracksRequestSchema = z
   .object({
-    tracks: z.array(registerTrackRequestSchema).min(1).max(500)
+    tracks: z.array(registerTrackRequestSchema).min(1)
   })
   .strict();
 
@@ -196,13 +196,13 @@ export const insertRadioAutopilotNextTrackRequestSchema = z
 
 export const reorderQueueRequestSchema = z
   .object({
-    queueItemIds: z.array(stringId).max(500)
+    queueItemIds: z.array(stringId)
   })
   .strict();
 
 export const reorderTracksRequestSchema = z
   .object({
-    trackIds: z.array(stringId).max(1000)
+    trackIds: z.array(stringId)
   })
   .strict();
 export type ReorderTracksRequest = z.infer<typeof reorderTracksRequestSchema>;

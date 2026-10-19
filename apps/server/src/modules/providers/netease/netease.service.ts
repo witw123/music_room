@@ -63,8 +63,6 @@ import {
   type SongRecord
 } from "./netease.mappers";
 
-const maxProviderPlaylistTracks = 2_000;
-
 @Injectable()
 export class NeteaseService {
   private readonly searchSuggestionCache = new Map<string, SearchTermCache>();
@@ -297,8 +295,7 @@ export class NeteaseService {
     const artistBody = results[3].status === "fulfilled" ? results[3].value : {};
     const likedIds = (Array.isArray(likedBody.ids) ? likedBody.ids : [])
       .map(readString)
-      .filter((id): id is string => !!id && /^\d+$/.test(id))
-      .slice(0, 2_000);
+      .filter((id): id is string => !!id && /^\d+$/.test(id));
     const likedTracks: NeteaseTrackCandidate[] = [];
     for (let offset = 0; offset < likedIds.length; offset += 500) {
       try {
@@ -361,26 +358,23 @@ export class NeteaseService {
     if (!summary) throw this.unavailableError();
     const rawTracks = Array.isArray(playlist.tracks) ? playlist.tracks : [];
     const tracks = rawTracks
-      .slice(0, maxProviderPlaylistTracks)
       .map((item) => this.toTrackCandidate(item))
       .filter((item): item is NeteaseTrackCandidate => !!item);
     const trackIds = Array.isArray(playlist.trackIds)
       ? playlist.trackIds.map((item) => readString(asRecord(item)?.id ?? item)).filter((item): item is string => !!item && /^\d+$/.test(item))
       : [];
-    const boundedTrackCount = Math.min(trackIds.length, maxProviderPlaylistTracks);
-    if (boundedTrackCount > tracks.length) {
-      for (let offset = tracks.length; offset < boundedTrackCount; offset += 1_000) {
+    if (trackIds.length > tracks.length) {
+      for (let offset = tracks.length; offset < trackIds.length; offset += 1_000) {
         const page = await this.callProvider(userId, () => this.api.getPlaylistTracks({ playlistId, limit: 1_000, offset, cookie }));
         const pageTracks = Array.isArray(page.songs) ? page.songs : [];
         tracks.push(
           ...pageTracks
             .map((item) => this.toTrackCandidate(item))
             .filter((item): item is NeteaseTrackCandidate => !!item)
-            .slice(0, maxProviderPlaylistTracks - tracks.length)
         );
       }
     }
-    return { ...summary, tracks: tracks.slice(0, maxProviderPlaylistTracks) };
+    return { ...summary, tracks };
   }
 
   async getAlbum(userId: string, albumId: string): Promise<ProviderAlbumDetail> {

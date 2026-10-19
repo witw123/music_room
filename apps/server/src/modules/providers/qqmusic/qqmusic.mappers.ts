@@ -6,7 +6,6 @@ import type {
   QqMusicTrackCandidate
 } from "@music-room/shared";
 
-export const maxProviderPlaylistTracks = 2_000;
 export const qrTtlSeconds = 180;
 export const accountValidationTtlMs = 5 * 60_000;
 export const qrKeyPrefix = "music-room:qqmusic:qr:";

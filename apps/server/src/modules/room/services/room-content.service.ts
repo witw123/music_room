@@ -10,8 +10,6 @@ import {
   incrementQueueVersion,
   incrementRoomRevision,
   maxAssetUnits,
-  maxRoomQueueItems,
-  maxRoomTracks,
   maxTrackDurationMs,
   maxTrackSizeBytes
 } from "../room-mutation";
@@ -96,9 +94,6 @@ export class RoomContentService {
     if (existingIndex >= 0) {
       record.tracks[existingIndex] = track;
     } else {
-      if (record.tracks.length >= maxRoomTracks) {
-        throw new BadRequestException("房间曲目数量已达到上限。");
-      }
       record.tracks.unshift(track);
     }
 
@@ -146,9 +141,6 @@ export class RoomContentService {
         record.tracks[existingIndex] = { ...existingTrack, ...track, id: existingTrack.id };
         registered.push(record.tracks[existingIndex]);
       } else {
-        if (record.tracks.length >= maxRoomTracks) {
-          throw new BadRequestException("房间曲目数量已达到上限。");
-        }
         record.tracks.unshift(track);
         registered.push(track);
       }
@@ -296,10 +288,6 @@ export class RoomContentService {
     }
     assertPermission(record, sessionId, "queue");
 
-    if (record.queue.length >= maxRoomQueueItems) {
-      throw new BadRequestException("房间播放队列已达到上限。");
-    }
-
     if (!record.tracks.some((track) => track.id === trackId)) {
       throw new Error(`Track not found in room: ${trackId}`);
     }
@@ -348,10 +336,6 @@ export class RoomContentService {
 
     if (validTrackIds.length === 0) {
       throw new Error("No tracks from this playlist are available in the current room.");
-    }
-
-    if (record.queue.length + validTrackIds.length > maxRoomQueueItems) {
-      throw new BadRequestException("导入后房间播放队列将超过上限。");
     }
 
     const nextItems = validTrackIds.map(
@@ -405,9 +389,6 @@ export class RoomContentService {
     assertHost(record, sessionId);
     if (record.room.roomType !== "radio") {
       throw new BadRequestException("只有自由电台可以补充推荐歌曲。");
-    }
-    if (record.queue.length >= maxRoomQueueItems) {
-      throw new BadRequestException("节目单已达到歌曲数量上限。");
     }
 
     const currentQueueItemId = record.room.playback.currentQueueItemId;

@@ -193,10 +193,143 @@ export async function importProviderTracks(input: {
     currentStage: "正在准备获取音频"
   });
 
-  const prepared: PreparedProviderImport[] = [];
+  const CHUNK_SIZE = 10;
+  const currentBatch: PreparedProviderImport[] = [];
+  const currentBatchHeldKeys: string[] = [];
+  let totalSuccessfulCount = 0;
   const failures: unknown[] = [];
-  const heldInFlightKeys: string[] = [];
   for (const key of pendingCandidateKeys) inFlightUploadHashesRef.current.add(key);
+
+  const commitBatch = async (
+    batch: PreparedProviderImport[],
+    batchHeldKeys: string[],
+    currentProcessedCount: number
+  ) => {
+    if (batch.length === 0) return;
+    const registeredItems: Array<{ track: TrackMeta; item: PreparedProviderImport }> = [];
+
+    const batchStartIndex = currentProcessedCount - batch.length + 1;
+    const batchEndIndex = currentProcessedCount;
+    input.setStatusMessage(`正在提交第 ${batchStartIndex} - ${batchEndIndex} / ${pendingCandidates.length} 首歌曲到曲库…`);
+    importTaskStore.updateTaskProgress(taskId, {
+      currentTitle: batch.length === 1 ? batch[0].candidate.title : undefined,
+      currentStage: `正在保存到房间曲库 (${batchStartIndex}-${batchEndIndex}/${pendingCandidates.length})`,
+      currentStagePercent: 90
+    });
+
+    try {
+      const batchRegistered = await musicRoomApi.registerTracks(roomSnapshot.room.id, {
+        tracks: batch.map((item) => buildRegisterTrackPayload(item.draft))
+      });
+      batchRegistered.forEach((track, idx) => {
+        const item = batch[idx];
+        if (item) registeredItems.push({ track, item });
+      });
+    } catch {
+      for (const item of batch) {
+        try {
+          const [singleRegistered] = await musicRoomApi.registerTracks(roomSnapshot.room.id, {
+            tracks: [buildRegisterTrackPayload(item.draft)]
+          });
+          if (singleRegistered) {
+            registeredItems.push({ track: singleRegistered, item });
+          } else {
+            throw new Error("服务端未返回已注册的曲目信息");
+          }
+        } catch (singleError) {
+          URL.revokeObjectURL(item.objectUrl);
+          failures.push(singleError);
+          const itemKey = `${item.candidate.provider}:${item.candidate.providerTrackId}`;
+          importTaskStore.failItem(
+            taskId,
+            itemKey,
+            singleError instanceof Error ? singleError.message : "注册到房间曲库失败",
+            [item.candidate.providerTrackId]
+          );
+        }
+      }
+    }
+
+    if (registeredItems.length === 0) {
+      for (const key of batchHeldKeys) inFlightUploadHashesRef.current.delete(key);
+      return;
+    }
+
+    const chunkUploadEntries: Record<string, UploadedTrack> = {};
+    const persistedObjectUrls = new Set<string>();
+    const persistFailures: Array<{ track: TrackMeta; item: PreparedProviderImport; error: unknown }> = [];
+
+    for (let i = 0; i < registeredItems.length; i++) {
+      const { track, item } = registeredItems[i];
+      input.setStatusMessage(`正在写入本地缓存 (${batchStartIndex + i}/${pendingCandidates.length})：《${item.candidate.title}》…`);
+      importTaskStore.updateTaskProgress(taskId, {
+        currentTitle: item.candidate.title,
+        currentStage: `正在写入本地缓存 (${batchStartIndex + i}/${pendingCandidates.length})`,
+        currentStagePercent: 91 + Math.round(((i + 1) / registeredItems.length) * 7),
+        activeItemKey: `${item.candidate.provider}:${item.candidate.providerTrackId}`,
+        activeItemAliasKeys: [item.candidate.providerTrackId]
+      });
+
+      try {
+        if (track.originalAsset && track.playbackAsset) {
+          await linkTrackAssets({
+            trackId: track.id,
+            originalAssetId: track.originalAsset.assetId,
+            playbackAssetId: track.playbackAsset.assetId
+          });
+        }
+        await input.persistTrackIntoLibrary({
+          track: { ...track, artworkUrl: item.localArtworkUrl },
+          roomId: roomSnapshot.room.id,
+          file: item.file,
+          lyrics: item.lyrics,
+          refreshCache: false
+        });
+        chunkUploadEntries[track.id] = { file: item.file, objectUrl: item.objectUrl, origin: input.origin };
+        persistedObjectUrls.add(item.objectUrl);
+
+        const itemKey = `${item.candidate.provider}:${item.candidate.providerTrackId}`;
+        importTaskStore.completeItem(taskId, itemKey, [item.candidate.providerTrackId]);
+      } catch (error) {
+        persistFailures.push({ track, item, error });
+      }
+    }
+
+    if (persistFailures.length > 0) {
+      const failedTrackIds = new Set(persistFailures.map((failure) => failure.track.id));
+      await Promise.allSettled(
+        [...failedTrackIds].flatMap((trackId) => [
+          input.deleteTrack?.(roomSnapshot.room.id, trackId),
+          input.deleteLocalTrackData?.([trackId])
+        ])
+      );
+      for (const failure of persistFailures) {
+        if (!persistedObjectUrls.has(failure.item.objectUrl)) {
+          URL.revokeObjectURL(failure.item.objectUrl);
+        }
+        failures.push(failure.error);
+        const itemKey = `${failure.item.candidate.provider}:${failure.item.candidate.providerTrackId}`;
+        importTaskStore.failItem(
+          taskId,
+          itemKey,
+          failure.error instanceof Error ? failure.error.message : "写入本地缓存失败",
+          [failure.item.candidate.providerTrackId]
+        );
+      }
+    }
+
+    const chunkSuccessfulCount = Object.keys(chunkUploadEntries).length;
+    if (chunkSuccessfulCount > 0) {
+      totalSuccessfulCount += chunkSuccessfulCount;
+      input.setUploadedTracks((current) => ({ ...current, ...chunkUploadEntries }));
+      await input.syncRoomSnapshot(roomSnapshot.room.id).catch(() => undefined);
+      void input.refreshCacheLibrary().catch(() => undefined);
+    }
+
+    for (const key of batchHeldKeys) {
+      inFlightUploadHashesRef.current.delete(key);
+    }
+  };
   const prefetchedAudio = new Map<number, Promise<PrefetchedProviderAudioResult>>();
   let nextPrefetchIndex = 0;
   let currentProcessingIndex = 0;
@@ -247,9 +380,8 @@ export async function importProviderTracks(input: {
         )
       );
     }
-  };
   fillPrefetchWindow(1);
-
+  let pipelineError: unknown = null;
   try {
     for (let index = 0; index < pendingCandidates.length; index += 1) {
       currentProcessingIndex = index;
@@ -376,7 +508,7 @@ export async function importProviderTracks(input: {
           activeItemAliasKeys: aliasKeys
         });
 
-        prepared.push({
+        currentBatch.push({
           candidate,
           file: prefetched.file,
           objectUrl: createdObjectUrl,
@@ -390,9 +522,7 @@ export async function importProviderTracks(input: {
           localArtworkUrl,
           lyrics
         });
-
-        // The candidate is ready to be committed with the batch
-        heldInFlightKeys.push(key);
+        currentBatchHeldKeys.push(key);
       } catch (error) {
         if (objectUrl) URL.revokeObjectURL(objectUrl);
         failures.push(error);
@@ -400,92 +530,35 @@ export async function importProviderTracks(input: {
         const errDetail = error instanceof Error ? error.message : "获取音频失败";
         importTaskStore.failItem(taskId, activeItemKey, errDetail, aliasKeys);
       }
-    }
-    if (prepared.length === 0) {
-      throw failures[0] ?? new Error("没有可导入的歌曲。");
-    }
 
-    try {
-      input.setStatusMessage(`正在提交 ${prepared.length} 首歌曲到曲库…`);
-      importTaskStore.updateTaskProgress(taskId, {
-        currentTitle: pendingCandidates.length === 1 ? pendingCandidates[0].title : undefined,
-        currentStage: "正在保存到房间曲库",
-        currentStagePercent: 90
-      });
-      let registered: TrackMeta[];
-      try {
-        registered = await musicRoomApi.registerTracks(roomSnapshot.room.id, {
-          tracks: prepared.map((item) => buildRegisterTrackPayload(item.draft))
-        });
-      } catch (error) {
-        for (const item of prepared) URL.revokeObjectURL(item.objectUrl);
-        throw error;
-      }
-
-      importTaskStore.updateTaskProgress(taskId, {
-        currentTitle: pendingCandidates.length === 1 ? pendingCandidates[0].title : undefined,
-        currentStage: "正在写入本地缓存",
-        currentStagePercent: 95
-      });
-
-      const uploadEntries: Record<string, UploadedTrack> = {};
-      const persistedObjectUrls = new Set<string>();
-      const persistFailures: Array<{ track: TrackMeta; error: unknown }> = [];
-      await Promise.all(registered.map(async (track, index) => {
-        const item = prepared[index];
-        if (!item) return;
-        try {
-          if (track.originalAsset && track.playbackAsset) {
-            await linkTrackAssets({ trackId: track.id, originalAssetId: track.originalAsset.assetId, playbackAssetId: track.playbackAsset.assetId });
-          }
-          await input.persistTrackIntoLibrary({ track: { ...track, artworkUrl: item.localArtworkUrl }, roomId: roomSnapshot.room.id, file: item.file, lyrics: item.lyrics, refreshCache: false });
-          uploadEntries[track.id] = { file: item.file, objectUrl: item.objectUrl, origin: input.origin };
-          persistedObjectUrls.add(item.objectUrl);
-        } catch (error) {
-          persistFailures.push({ track, error });
-        }
-      }));
-
-      if (persistFailures.length > 0) {
-        // Roll back only the tracks whose local cache write failed; they would
-        // otherwise sit in the room library with no owner-side asset to stream.
-        const failedTrackIds = new Set(persistFailures.map((failure) => failure.track.id));
-        await Promise.allSettled(
-          [...failedTrackIds].flatMap((trackId) => [
-            input.deleteTrack?.(roomSnapshot.room.id, trackId),
-            input.deleteLocalTrackData?.([trackId])
-          ])
-        );
-        for (const item of prepared) {
-          if (!persistedObjectUrls.has(item.objectUrl)) {
-            URL.revokeObjectURL(item.objectUrl);
-          }
-        }
-        if (Object.keys(uploadEntries).length === 0) {
-          throw persistFailures[0]!.error;
-        }
-      }
-
-      input.setUploadedTracks((current) => ({ ...current, ...uploadEntries }));
-      void input.syncRoomSnapshot(roomSnapshot.room.id).catch(() => undefined);
-      void input.refreshCacheLibrary().catch(() => undefined);
-
-      for (const item of prepared) {
-        const itemKey = `${item.candidate.provider}:${item.candidate.providerTrackId}`;
-        const aliasKeys = [item.candidate.providerTrackId];
-        importTaskStore.completeItem(taskId, itemKey, aliasKeys);
-      }
-
-      const failedCount = failures.length + persistFailures.length;
-      input.setStatusMessage(`已导入 ${Object.keys(uploadEntries).length} 首歌曲${failedCount ? `，${failedCount} 首失败` : ""}。`);
-    } finally {
-      for (const heldKey of heldInFlightKeys) {
-        inFlightUploadHashesRef.current.delete(heldKey);
+      // 当本批攒满 CHUNK_SIZE 或到达最后一首时，立即将本批入库并释放内存
+      const isLastCandidate = index === pendingCandidates.length - 1;
+      if (currentBatch.length >= CHUNK_SIZE || (isLastCandidate && currentBatch.length > 0)) {
+        const batchToCommit = [...currentBatch];
+        const batchKeysToCommit = [...currentBatchHeldKeys];
+        currentBatch.length = 0;
+        currentBatchHeldKeys.length = 0;
+        await commitBatch(batchToCommit, batchKeysToCommit, index + 1);
       }
     }
+
+    if (totalSuccessfulCount === 0) {
+      throw failures[0] ?? new Error("未能成功导入任何歌曲。");
+    }
+
+    input.setStatusMessage(
+      `已导入 ${totalSuccessfulCount} 首歌曲${failures.length > 0 ? `，${failures.length} 首失败` : ""}。`
+    );
+  } catch (error) {
+    pipelineError = error;
+    throw error;
   } finally {
+    for (const key of pendingCandidateKeys) {
+      inFlightUploadHashesRef.current.delete(key);
+    }
+    const errorMsg = pipelineError instanceof Error ? pipelineError.message : pipelineError ? String(pipelineError) : undefined;
     importTaskStore.finishTask(taskId, {
-      error: failures.length > 0 && prepared.length === 0 ? "全部导入失败" : undefined
+      error: errorMsg
     });
   }
 }

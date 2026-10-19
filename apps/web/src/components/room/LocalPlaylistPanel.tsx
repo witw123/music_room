@@ -70,8 +70,7 @@ export function LocalPlaylistPanel({
         .map((t) => t.trim().slice(0, 100))
         .slice(0, 50);
       const trackIds = playlist.trackIds
-        .filter((id) => typeof id === "string" && id.trim().length > 0)
-        .slice(0, 1000);
+        .filter((id) => typeof id === "string" && id.trim().length > 0);
 
       await musicRoomApi.createPlaylist({
         title: (playlist.title || "未命名歌单").trim().slice(0, 160),

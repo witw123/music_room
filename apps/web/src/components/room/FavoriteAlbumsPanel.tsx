@@ -194,8 +194,7 @@ export function FavoriteAlbumsPanel({
         ? albumTracks.map((t) => providerTrackKey(t.provider, t.providerTrackId))
         : Array.from({ length: album.trackCount }, (_, i) => `network:${album.provider}:${album.providerAlbumId}:${i}`);
       const trackIds = rawTrackIds
-        .filter((id) => typeof id === "string" && id.trim().length > 0)
-        .slice(0, 1000);
+        .filter((id) => typeof id === "string" && id.trim().length > 0);
 
       await musicRoomApi.createPlaylist({
         title: (album.title || "未命名专辑").trim().slice(0, 160),
@@ -245,6 +244,7 @@ export function FavoriteAlbumsPanel({
         canManageLibrary={canManageLibrary}
         roomTrackKeys={roomTrackKeys}
         tracks={detail?.tracks ?? []}
+        onRefreshRoom={onRefreshRoom}
       />
     );
   }
@@ -396,6 +396,7 @@ function FavoriteAlbumDetail({
   onImportQqMusicTracks?: (tracks: QqMusicTrackCandidate[]) => Promise<void>;
   onImportBilibiliTracks?: (tracks: BilibiliTrackCandidate[]) => Promise<void>;
   canManageLibrary: boolean;
+  onRefreshRoom?: () => Promise<void> | void;
 }) {
   const [selectedTrackIds, setSelectedTrackIds] = useState<string[]>([]);
   const [pendingTrackIds, setPendingTrackIds] = useState<Set<string>>(new Set());
@@ -436,6 +437,9 @@ function FavoriteAlbumDetail({
         await onImportBilibiliTrack(track as BilibiliTrackCandidate);
       }
       setSelectedTrackIds((current) => current.filter((trackId) => trackId !== key));
+      if (onRefreshRoom) {
+        await onRefreshRoom();
+      }
     } catch (error) {
       setImportError(error instanceof Error ? error.message : "歌曲导入失败。");
     } finally {
@@ -472,6 +476,9 @@ function FavoriteAlbumDetail({
         qqTracks.length > 0 && onImportQqMusicTracks ? onImportQqMusicTracks(qqTracks) : Promise.resolve(),
         biliTracks.length > 0 && onImportBilibiliTracks ? onImportBilibiliTracks(biliTracks) : Promise.resolve()
       ]);
+      if (onRefreshRoom) {
+        await onRefreshRoom();
+      }
       setSelectedTrackIds([]);
     } finally {
       for (const t of selectedTracks) {

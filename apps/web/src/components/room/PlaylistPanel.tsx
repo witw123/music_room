@@ -353,8 +353,7 @@ export function PlaylistPanel({
         ? allCandidates.map((t) => providerTrackKey(t.provider, t.providerTrackId))
         : playlist.trackIds;
       const trackIds = rawTrackIds
-        .filter((id) => typeof id === "string" && id.trim().length > 0)
-        .slice(0, 1000);
+        .filter((id) => typeof id === "string" && id.trim().length > 0);
 
       await musicRoomApi.createPlaylist({
         title: (playlist.title || "未命名歌单").trim().slice(0, 160),
@@ -413,6 +412,7 @@ export function PlaylistPanel({
         remoteError={remoteError}
         remoteLoading={remoteLoading}
         tracks={selectedPlaylistTracks}
+        onRefreshRoom={onRefreshRoom}
       />
     );
   }
@@ -567,6 +567,7 @@ function PlaylistDetail({
   tracks: Array<PlaylistTrackInfo | null>;
   remoteLoading: boolean;
   remoteError: string | null;
+  onRefreshRoom?: () => Promise<void> | void;
 }) {
   const [selectedTrackKeys, setSelectedTrackKeys] = useState<string[]>([]);
   const [pendingTrackIds, setPendingTrackIds] = useState<Set<string>>(new Set());
@@ -658,6 +659,9 @@ function PlaylistDetail({
         await onImportBilibiliTrack(track.providerTrack as BilibiliTrackCandidate);
       }
       setSelectedTrackKeys((current) => current.filter((k) => k !== trackKey && k !== track.id));
+      if (onRefreshRoom) {
+        await onRefreshRoom();
+      }
     } catch {
       // Handled through room status
     } finally {
@@ -668,7 +672,7 @@ function PlaylistDetail({
         return next;
       });
     }
-  }, [canManageLibrary, onImportBilibiliTrack, onImportNeteaseTrack, onImportQqMusicTrack]);
+  }, [canManageLibrary, onImportBilibiliTrack, onImportNeteaseTrack, onImportQqMusicTrack, onRefreshRoom]);
 
   const importSelectedTracks = async () => {
     if (!canManageLibrary || isImportBusy || selectedTracks.length === 0) return;
@@ -686,7 +690,7 @@ function PlaylistDetail({
       .filter((track: PlaylistTrackInfo) => track.providerTrack?.provider === "bilibili")
       .map((track: PlaylistTrackInfo) => track.providerTrack) as BilibiliTrackCandidate[];
     try {
-      const results = await Promise.allSettled([
+      await Promise.allSettled([
         neteaseTracks.length > 0
           ? onImportNeteaseTracks(neteaseTracks)
           : Promise.resolve(),
@@ -697,8 +701,10 @@ function PlaylistDetail({
           ? onImportBilibiliTracks(bilibiliTracks)
           : Promise.resolve()
       ]);
-      const failed = results.some((result) => result.status === "rejected");
-      if (!failed) setSelectedTrackKeys([]);
+      if (onRefreshRoom) {
+        await onRefreshRoom();
+      }
+      setSelectedTrackKeys([]);
     } finally {
       for (const track of selectedTracks) pendingTrackIdsRef.current.delete(track.id);
       setPendingTrackIds(new Set());

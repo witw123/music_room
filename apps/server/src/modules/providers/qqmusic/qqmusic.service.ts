@@ -27,7 +27,6 @@ import {
   dedupeAlbums,
   findFirstArray,
   isAllowedHost,
-  maxProviderPlaylistTracks,
   normalizeQqMusicArtworkUrl,
   normalizeQqMusicAudioUrl,
   qrKeyPrefix,
@@ -304,8 +303,7 @@ export class QqMusicService {
     if (!summary) throw this.unavailableError();
     const tracks = readTrackArray(playlist)
       .map((item) => toTrackCandidate(item))
-      .filter((item): item is QqMusicTrackCandidate => !!item)
-      .slice(0, maxProviderPlaylistTracks);
+      .filter((item): item is QqMusicTrackCandidate => !!item);
     return { ...summary, tracks };
   }
 
