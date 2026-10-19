@@ -380,6 +380,7 @@ export async function importProviderTracks(input: {
         )
       );
     }
+  };
   fillPrefetchWindow(1);
   let pipelineError: unknown = null;
   try {
