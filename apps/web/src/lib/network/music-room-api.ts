@@ -298,6 +298,11 @@ export const musicRoomApi = {
     request<{ ok: boolean }>(`/v1/rooms/${roomId}/tracks/${trackId}`, {
       method: "DELETE"
     }),
+  deleteTracks: (roomId: string, payload: { trackIds: string[] }) =>
+    request<{ ok: boolean; deletedTrackIds: string[] }>(`/v1/rooms/${roomId}/tracks/batch-delete`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
   reorderTracks: (roomId: string, payload: { trackIds: string[] }) =>
     request<TrackMeta[]>(`/v1/rooms/${roomId}/tracks/reorder`, {
       method: "PATCH",
@@ -305,6 +310,11 @@ export const musicRoomApi = {
     }),
   addQueueItem: (roomId: string, payload: { trackId: string }) =>
     request<QueueMutationResponse>(`/v1/rooms/${roomId}/queue`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  addQueueItems: (roomId: string, payload: { trackIds: string[] }) =>
+    request<QueueMutationResponse>(`/v1/rooms/${roomId}/queue/batch`, {
       method: "POST",
       body: JSON.stringify(payload)
     }),
@@ -331,6 +341,11 @@ export const musicRoomApi = {
   removeQueueItem: (roomId: string, queueItemId: string) =>
     request<QueueMutationResponse>(`/v1/rooms/${roomId}/queue/${queueItemId}`, {
       method: "DELETE"
+    }),
+  removeQueueItems: (roomId: string, payload: { queueItemIds: string[] }) =>
+    request<QueueMutationResponse>(`/v1/rooms/${roomId}/queue/batch-remove`, {
+      method: "POST",
+      body: JSON.stringify(payload)
     }),
   updatePlayback: (
     roomId: string,

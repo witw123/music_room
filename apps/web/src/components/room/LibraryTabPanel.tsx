@@ -31,8 +31,10 @@ export type LibraryTabPanelProps = {
   onAddToQueue: (trackId: string) => Promise<unknown>;
   onSaveTrackToLocal: (track: TrackMeta) => Promise<void>;
   onDeleteTrack: (trackId: string) => Promise<void>;
+  onDeleteTracks?: (trackIds: string[]) => Promise<unknown>;
   onPlayTrack: (trackId: string) => Promise<void>;
   onReorderTracks?: (trackIds: string[]) => Promise<void>;
+  onBatchAddToQueue?: (trackIds: string[]) => Promise<unknown>;
   // Room Library Playlists
   roomPlaylists?: Playlist[];
   onDeletePlaylist?: (playlistId: string) => Promise<void>;
@@ -64,8 +66,10 @@ function LibraryTabPanelBase({
   onAddToQueue,
   onSaveTrackToLocal,
   onDeleteTrack,
+  onDeleteTracks,
   onPlayTrack,
   onReorderTracks,
+  onBatchAddToQueue,
   roomPlaylists,
   onDeletePlaylist,
   onLoadPlaylistIntoRoom,
@@ -133,7 +137,9 @@ function LibraryTabPanelBase({
             localSavedFileHashes={localSavedFileHashes}
             members={members}
             onAddToQueue={onAddToQueue}
+            onBatchAddToQueue={onBatchAddToQueue}
             onDeleteTrack={onDeleteTrack}
+            onDeleteTracks={onDeleteTracks}
             onFilesSelected={onFilesSelected}
             onPlayTrack={onPlayTrack}
             onReorderTracks={onReorderTracks}

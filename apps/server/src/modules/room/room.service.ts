@@ -684,8 +684,16 @@ export class RoomService {
     return this.contentService.removeTrack(roomId, sessionId, trackId);
   }
 
+  removeTracks(roomId: string, sessionId: string, trackIds: string[]) {
+    return this.contentService.removeTracks(roomId, sessionId, trackIds);
+  }
+
   addQueueItem(roomId: string, sessionId: string, trackId: string) {
     return this.contentService.addQueueItem(roomId, sessionId, trackId);
+  }
+
+  addQueueItems(roomId: string, sessionId: string, trackIds: string[]) {
+    return this.contentService.addQueueItems(roomId, sessionId, trackIds);
   }
 
   importPlaylistToQueue(roomId: string, sessionId: string, trackIds: string[]) {
@@ -694,6 +702,10 @@ export class RoomService {
 
   removeQueueItem(roomId: string, queueItemId: string, actorSessionId: string) {
     return this.contentService.removeQueueItem(roomId, queueItemId, actorSessionId);
+  }
+
+  removeQueueItems(roomId: string, queueItemIds: string[], actorSessionId: string) {
+    return this.contentService.removeQueueItems(roomId, queueItemIds, actorSessionId);
   }
 
   setNextQueueItem(roomId: string, actorSessionId: string, queueItemId: string) {

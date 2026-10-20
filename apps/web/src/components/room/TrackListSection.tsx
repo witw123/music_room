@@ -28,8 +28,10 @@ type TrackListSectionProps = {
   onAddToQueue: (trackId: string) => Promise<unknown>;
   onSaveTrackToLocal: (track: TrackMeta) => Promise<void>;
   onDeleteTrack: (trackId: string) => Promise<void>;
+  onDeleteTracks?: (trackIds: string[]) => Promise<unknown>;
   onPlayTrack: (trackId: string) => Promise<void>;
   onReorderTracks?: (trackIds: string[]) => Promise<void>;
+  onBatchAddToQueue?: (trackIds: string[]) => Promise<unknown>;
   hideLocalAudioImport?: boolean;
 };
 
@@ -66,11 +68,15 @@ function TrackListSectionBase({
   onAddToQueue,
   onSaveTrackToLocal,
   onDeleteTrack,
+  onDeleteTracks,
   onPlayTrack,
-  onReorderTracks
+  onReorderTracks,
+  onBatchAddToQueue
 }: TrackListSectionProps) {
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [trackFilter, setTrackFilter] = useState<LibraryTrackFilter>("all");
+  const [isSelectMode, setIsSelectMode] = useState(false);
+  const [selectedTrackIds, setSelectedTrackIds] = useState<Set<string>>(new Set());
   const [cachedArtworkByTrackId, setCachedArtworkByTrackId] = useState<Map<string, string>>(new Map());
   const [draggingTrackId, setDraggingTrackId] = useState<string | null>(null);
   const [dragOverTarget, setDragOverTarget] = useState<{
@@ -338,6 +344,91 @@ function TrackListSectionBase({
   const otherTrackCount = tracks.length - ownTrackCount;
   const visibleTracks = filterLibraryTracks(tracks, activeSessionUserId, trackFilter);
 
+  const toggleSelectTrack = (trackId: string) => {
+    setSelectedTrackIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(trackId)) {
+        next.delete(trackId);
+      } else {
+        next.add(trackId);
+      }
+      return next;
+    });
+  };
+
+  const areAllVisibleSelected = visibleTracks.length > 0 && visibleTracks.every((t) => selectedTrackIds.has(t.id));
+  const toggleSelectAll = () => {
+    if (areAllVisibleSelected) {
+      setSelectedTrackIds(new Set());
+    } else {
+      setSelectedTrackIds(new Set(visibleTracks.map((t) => t.id)));
+    }
+  };
+
+  const handleBatchAddToQueue = async () => {
+    if (selectedTrackIds.size === 0 || !canAddToQueue) return;
+    const ids = Array.from(selectedTrackIds);
+    await runAction("batch-queue", async () => {
+      if (onBatchAddToQueue) {
+        await onBatchAddToQueue(ids);
+      } else {
+        for (const id of ids) {
+          await onAddToQueue(id);
+        }
+      }
+      setIsSelectMode(false);
+      setSelectedTrackIds(new Set());
+    });
+  };
+
+  const handleBatchSaveToLocal = async () => {
+    if (selectedTrackIds.size === 0) return;
+    const selectedTracks = tracks.filter((t) => selectedTrackIds.has(t.id));
+    await runAction("batch-save", async () => {
+      for (const track of selectedTracks) {
+        const isSaved = localSavedFileHashes.includes(track.fileHash);
+        const canSave = !!activeSession && (
+          track.ownerSessionId === activeSession.userId ||
+          (track.sourceType !== "local_upload" && !!track.sourceRef)
+        );
+        if (!isSaved && canSave) {
+          await onSaveTrackToLocal(track);
+        }
+      }
+    });
+  };
+
+  const deletableSelectedTracks = tracks.filter((t) =>
+    selectedTrackIds.has(t.id) &&
+    canDeleteLibraryTrack({
+      track: t,
+      activeSessionUserId: activeSession?.userId,
+      isHost: canManageAllTracks,
+      hasLibraryPermission: canManageLibrary
+    })
+  );
+
+  const handleBatchDelete = async () => {
+    if (deletableSelectedTracks.length === 0 || !canManageLibrary) return;
+    const ids = deletableSelectedTracks.map((t) => t.id);
+    const confirmMessage = deletableSelectedTracks.length < selectedTrackIds.size
+      ? `选中的 ${selectedTrackIds.size} 首歌曲中，你有权删除 ${deletableSelectedTracks.length} 首。确定从房间曲库中移除吗？`
+      : `确定将选中的 ${deletableSelectedTracks.length} 首歌曲从房间曲库中移除吗？`;
+    if (!window.confirm(confirmMessage)) return;
+
+    await runAction("batch-delete", async () => {
+      if (onDeleteTracks) {
+        await onDeleteTracks(ids);
+      } else {
+        for (const id of ids) {
+          await onDeleteTrack(id);
+        }
+      }
+      setIsSelectMode(false);
+      setSelectedTrackIds(new Set());
+    });
+  };
+
   const [renderedCount, setRenderedCount] = useState(35);
 
   useEffect(() => {
@@ -419,40 +510,147 @@ function TrackListSectionBase({
         />
       ) : null}
 
-      <div>
-        <div
-          aria-label="曲库来源筛选"
-          className="grid w-full grid-cols-3 gap-0.5 rounded-lg border border-surface-border/60 bg-surface/60 p-0.5"
-          role="group"
-        >
-          {[
-            { value: "all" as const, label: "全部歌曲", count: tracks.length },
-            { value: "mine" as const, label: "本人上传", count: ownTrackCount },
-            { value: "others" as const, label: "其他成员", count: otherTrackCount }
-          ].map((option) => (
-            <button
-              key={option.value}
-              aria-pressed={trackFilter === option.value}
-              data-testid={`library-filter-${option.value}`}
-              className={`flex min-w-0 whitespace-nowrap items-center justify-center gap-1 rounded-md px-1.5 py-1 text-[11px] font-medium transition-colors sm:px-2.5 cursor-pointer ${
-                trackFilter === option.value
-                  ? "bg-surface-elevated text-foreground font-semibold shadow-2xs"
-                  : "text-foreground-muted hover:bg-surface-hover/50 hover:text-foreground"
-              }`}
-              onClick={() => setTrackFilter(option.value)}
-              type="button"
-            >
-              <span className="truncate">{option.label}</span>
-              <span
-                className={`font-mono text-[10px] ${
-                  trackFilter === option.value ? "text-accent font-semibold" : "text-foreground-muted/70"
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center gap-1.5">
+          <div
+            aria-label="曲库来源筛选"
+            className="grid flex-1 grid-cols-3 gap-0.5 rounded-lg border border-surface-border/60 bg-surface/60 p-0.5"
+            role="group"
+          >
+            {[
+              { value: "all" as const, label: "全部歌曲", count: tracks.length },
+              { value: "mine" as const, label: "本人上传", count: ownTrackCount },
+              { value: "others" as const, label: "其他成员", count: otherTrackCount }
+            ].map((option) => (
+              <button
+                key={option.value}
+                aria-pressed={trackFilter === option.value}
+                data-testid={`library-filter-${option.value}`}
+                className={`flex min-w-0 whitespace-nowrap items-center justify-center gap-1 rounded-md px-1.5 py-1 text-[11px] font-medium transition-colors sm:px-2.5 cursor-pointer ${
+                  trackFilter === option.value
+                    ? "bg-surface-elevated text-foreground font-semibold shadow-2xs"
+                    : "text-foreground-muted hover:bg-surface-hover/50 hover:text-foreground"
                 }`}
+                onClick={() => setTrackFilter(option.value)}
+                type="button"
               >
-                {option.count}
-              </span>
+                <span className="truncate">{option.label}</span>
+                <span
+                  className={`font-mono text-[10px] ${
+                    trackFilter === option.value ? "text-accent font-semibold" : "text-foreground-muted/70"
+                  }`}
+                >
+                  {option.count}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          {tracks.length > 0 && (
+            <button
+              type="button"
+              data-testid="library-batch-mode-toggle"
+              aria-pressed={isSelectMode}
+              className={`flex shrink-0 items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-medium transition-colors cursor-pointer ${
+                isSelectMode
+                  ? "border-accent/40 bg-accent/10 text-accent font-semibold"
+                  : "border-surface-border/60 bg-surface/60 text-foreground-muted hover:bg-surface-hover/50 hover:text-foreground"
+              }`}
+              onClick={() => {
+                setIsSelectMode(!isSelectMode);
+                setSelectedTrackIds(new Set());
+              }}
+              title={isSelectMode ? "退出批量操作" : "批量操作"}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect width="18" height="18" x="3" y="3" rx="2" />
+                <path d="m9 12 2 2 4-4" />
+              </svg>
+              <span>{isSelectMode ? "退出" : "批量"}</span>
             </button>
-          ))}
+          )}
         </div>
+
+        {isSelectMode ? (
+          <div
+            data-testid="library-batch-bar"
+            className="animate-fade-in flex flex-wrap items-center justify-between gap-1.5 rounded-lg border border-accent/25 bg-accent/5 px-2.5 py-1.5 text-xs text-foreground"
+          >
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                data-testid="library-batch-select-all"
+                onClick={toggleSelectAll}
+                className="flex items-center gap-1.5 text-[11px] font-medium text-foreground hover:text-accent transition-colors cursor-pointer"
+              >
+                <span
+                  className={`inline-flex h-3.5 w-3.5 items-center justify-center rounded border transition-colors ${
+                    areAllVisibleSelected
+                      ? "border-accent bg-accent text-white"
+                      : selectedTrackIds.size > 0
+                      ? "border-accent/60 bg-accent/20 text-accent"
+                      : "border-surface-border bg-surface"
+                  }`}
+                >
+                  {areAllVisibleSelected ? (
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                  ) : selectedTrackIds.size > 0 ? (
+                    <span className="h-1.5 w-1.5 rounded-xs bg-accent" />
+                  ) : null}
+                </span>
+                <span>{areAllVisibleSelected ? "取消全选" : "全选当前"}</span>
+              </button>
+              <span className="text-[11px] text-foreground-muted">
+                已选 <strong className="font-mono text-accent">{selectedTrackIds.size}</strong> 首
+              </span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                data-testid="library-batch-queue-button"
+                disabled={selectedTrackIds.size === 0 || !canAddToQueue || pendingAction !== null}
+                onClick={() => void handleBatchAddToQueue()}
+                className="h-6.5 px-2 text-[11px] text-foreground-muted hover:text-foreground hover:bg-surface-hover/80"
+                title="将选中的歌曲加入播放队列"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1"><path d="M12 5v14M5 12h14" /></svg>
+                <span>加入队列</span>
+              </Button>
+
+              {localFolderName ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  data-testid="library-batch-save-button"
+                  disabled={selectedTrackIds.size === 0 || pendingAction !== null}
+                  onClick={() => void handleBatchSaveToLocal()}
+                  className="h-6.5 px-2 text-[11px] text-foreground-muted hover:text-foreground hover:bg-surface-hover/80"
+                  title="将选中的歌曲保存到本地目录"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1"><path d="M5 4h11l3 3v13H5z" /><path d="M8 4v5h8V4" /><path d="M8 20v-5h8v5" /></svg>
+                  <span>保存本地</span>
+                </Button>
+              ) : null}
+
+              {canManageLibrary ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  data-testid="library-batch-delete-button"
+                  disabled={deletableSelectedTracks.length === 0 || pendingAction !== null}
+                  onClick={() => void handleBatchDelete()}
+                  className="h-6.5 px-2 text-[11px] text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  title="将选中有权限的歌曲从曲库删除"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1"><path d="M4 7h16M10 11v6M14 11v6M9 7V4h6v3M6 7l1 13h10l1-13" /></svg>
+                  <span>删除 ({deletableSelectedTracks.length})</span>
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div className="flex flex-col gap-1">
@@ -483,7 +681,13 @@ function TrackListSectionBase({
                   key={track.id}
                   data-testid="track-card"
                   data-track-id={track.id}
-                  draggable={canReorderTracks}
+                  draggable={!isSelectMode && canReorderTracks}
+                  onClick={(event) => {
+                    if (isSelectMode) {
+                      if ((event.target as HTMLElement).closest("button")) return;
+                      toggleSelectTrack(track.id);
+                    }
+                  }}
                   onContextMenu={(event) => {
                     event.preventDefault();
                     setContextMenu({
@@ -494,13 +698,13 @@ function TrackListSectionBase({
                     });
                   }}
                   onDragStart={(event) => {
-                    if (!canReorderTracks) return;
+                    if (isSelectMode || !canReorderTracks) return;
                     setDraggingTrackId(track.id);
                     event.dataTransfer.effectAllowed = "move";
                     event.dataTransfer.setData("text/plain", track.id);
                   }}
                   onDragOver={(event) => {
-                    if (!canReorderTracks || !draggingTrackId || draggingTrackId === track.id) return;
+                    if (isSelectMode || !canReorderTracks || !draggingTrackId || draggingTrackId === track.id) return;
                     event.preventDefault();
                     event.dataTransfer.dropEffect = "move";
                     updateAutoScroll(event.clientX, event.clientY);
@@ -521,7 +725,7 @@ function TrackListSectionBase({
                     event.preventDefault();
                     event.stopPropagation();
                     stopAutoScroll();
-                    if (!draggingTrackId || !canReorderTracks) {
+                    if (isSelectMode || !draggingTrackId || !canReorderTracks) {
                       setDraggingTrackId(null);
                       setDragOverTarget(null);
                       return;
@@ -538,11 +742,17 @@ function TrackListSectionBase({
                     setDragOverTarget(null);
                   }}
                   onPointerCancel={finishTouchReorder}
-                  onPointerDown={(event) => handleTouchReorderStart(event, track.id)}
+                  onPointerDown={(event) => {
+                    if (!isSelectMode) handleTouchReorderStart(event, track.id);
+                  }}
                   onPointerMove={handleTouchReorderMove}
                   onPointerUp={finishTouchReorder}
                   className={`group relative grid grid-cols-[auto_minmax(0,1fr)_auto] grid-rows-[auto_auto] items-center gap-x-2 gap-y-0.5 border-b border-surface-border/30 px-2 py-1.5 transition-colors last:border-b-0 hover:bg-surface-hover sm:gap-x-2.5 sm:px-3 ${
-                    canReorderTracks ? "cursor-grab active:cursor-grabbing" : ""
+                    !isSelectMode && canReorderTracks ? "cursor-grab active:cursor-grabbing" : ""
+                  } ${
+                    isSelectMode ? "cursor-pointer" : ""
+                  } ${
+                    isSelectMode && selectedTrackIds.has(track.id) ? "bg-accent/10 border-accent/30" : ""
                   } ${
                     draggingTrackId === track.id ? "scale-95 touch-none opacity-40 bg-surface-muted/40" : "touch-pan-y"
                   }`}
@@ -559,7 +769,28 @@ function TrackListSectionBase({
                   ) : null}
 
                   <div className="relative row-span-2 flex shrink-0 items-center gap-1 sm:gap-1.5">
-                    {canReorderTracks ? (
+                    {isSelectMode ? (
+                      <button
+                        type="button"
+                        data-testid={`track-checkbox-${track.id}`}
+                        aria-checked={selectedTrackIds.has(track.id)}
+                        role="checkbox"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleSelectTrack(track.id);
+                        }}
+                        className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors cursor-pointer ${
+                          selectedTrackIds.has(track.id)
+                            ? "border-accent bg-accent text-white"
+                            : "border-surface-border/80 bg-surface/80 hover:border-foreground-muted"
+                        }`}
+                      >
+                        {selectedTrackIds.has(track.id) ? (
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                        ) : null}
+                      </button>
+                    ) : null}
+                    {!isSelectMode && canReorderTracks ? (
                       <div
                         aria-hidden="true"
                         className="flex shrink-0 items-center text-foreground-muted/30 transition-colors group-hover:text-foreground-muted/70"

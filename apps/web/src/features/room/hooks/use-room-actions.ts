@@ -445,6 +445,73 @@ export function useRoomActions({
     ]
   );
 
+  const deleteTracks = useCallback(
+    async (trackIds: string[]) => {
+      if (!activeSession || !roomSnapshot || !hasRoomPermission(roomSnapshot, activeSession.userId, "library") || trackIds.length === 0) {
+        return [];
+      }
+
+      try {
+        const currentPlayingTrackId = roomSnapshot.room.playback.currentTrackId;
+        const shouldResetPlayer = currentPlayingTrackId !== null && trackIds.includes(currentPlayingTrackId);
+        const result = await musicRoomApi.deleteTracks(roomSnapshot.room.id, { trackIds });
+        if (shouldResetPlayer) {
+          resetPlayerSurface();
+        }
+        for (const trackId of result.deletedTrackIds) {
+          await onTrackDeleted?.(trackId);
+        }
+        await syncRoomSnapshot(roomSnapshot.room.id);
+        await refreshPlaylists();
+        setStatusMessage(`已从房间曲库中删除 ${result.deletedTrackIds.length} 首歌曲。`);
+        return result.deletedTrackIds;
+      } catch (error) {
+        setStatusMessage(toUserFacingError(error));
+        return [];
+      }
+    },
+    [
+      activeSession,
+      roomSnapshot,
+      onTrackDeleted,
+      syncRoomSnapshot,
+      refreshPlaylists,
+      resetPlayerSurface,
+      setStatusMessage
+    ]
+  );
+
+  const batchAddToQueue = useCallback(
+    async (trackIds: string[]) => {
+      if (!activeSession || !roomSnapshot || !hasRoomPermission(roomSnapshot, activeSession.userId, "queue") || trackIds.length === 0) {
+        return null;
+      }
+
+      try {
+        const result = await musicRoomApi.addQueueItems(roomSnapshot.room.id, { trackIds });
+        dispatchRoomStateEvent({
+          type: "server-queue-patch",
+          roomId: roomSnapshot.room.id,
+          queue: result.queue,
+          playback: result.playback
+        });
+        void syncRoomSnapshot(roomSnapshot.room.id).catch(() => undefined);
+        setStatusMessage(`已将 ${trackIds.length} 首歌曲加入共享队列。`);
+        return result.queue;
+      } catch (error) {
+        setStatusMessage(toUserFacingError(error));
+        return null;
+      }
+    },
+    [
+      activeSession,
+      dispatchRoomStateEvent,
+      roomSnapshot,
+      setStatusMessage,
+      syncRoomSnapshot
+    ]
+  );
+
   const playTrack = useCallback(
     async (trackId?: string) => {
       if (!roomSnapshot || !activeSession || !hasRoomPermission(roomSnapshot, activeSession.userId, "player")) {
@@ -737,6 +804,39 @@ export function useRoomActions({
     ]
   );
 
+  const removeQueueItems = useCallback(
+    async (queueItemIds: string[]) => {
+      if (!roomSnapshot || !activeSession || !hasRoomPermission(roomSnapshot, activeSession.userId, "queue") || queueItemIds.length === 0) {
+        return;
+      }
+
+      try {
+        const result = await musicRoomApi.removeQueueItems(roomSnapshot.room.id, { queueItemIds });
+        dispatchRoomStateEvent({
+          type: "server-queue-patch",
+          roomId: roomSnapshot.room.id,
+          queue: result.queue,
+          playback: result.playback
+        });
+        if (shouldResetPlayerAfterQueueRemoval(roomSnapshot.room.playback, result.playback)) {
+          resetPlayerSurface();
+        }
+        void syncRoomSnapshot(roomSnapshot.room.id).catch(() => undefined);
+        setStatusMessage(`已从队列中移除 ${queueItemIds.length} 首歌曲。`);
+      } catch (error) {
+        setStatusMessage(toUserFacingError(error));
+      }
+    },
+    [
+      roomSnapshot,
+      activeSession,
+      dispatchRoomStateEvent,
+      resetPlayerSurface,
+      setStatusMessage,
+      syncRoomSnapshot
+    ]
+  );
+
   const reorderQueue = useCallback(
     async (queueItemIds: string[]) => {
       if (!roomSnapshot || !activeSession || !hasRoomPermission(roomSnapshot, activeSession.userId, "queue")) {
@@ -910,7 +1010,9 @@ export function useRoomActions({
     leaveRoom,
     deleteRoom,
     deleteTrack,
+    deleteTracks,
     addToQueue,
+    batchAddToQueue,
     playTrack,
     playQueueItem,
     pauseTrack,
@@ -925,6 +1027,7 @@ export function useRoomActions({
     deletePlaylist,
     loadPlaylistIntoRoom,
     removeQueueItem,
+    removeQueueItems,
     reorderQueue,
     reorderTracks,
     setNextQueueItem,

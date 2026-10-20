@@ -160,6 +160,24 @@ export const registerTracksRequestSchema = z
   })
   .strict();
 
+export const batchDeleteTracksRequestSchema = z
+  .object({
+    trackIds: z.array(stringId).min(1).max(1000)
+  })
+  .strict();
+
+export const batchAddQueueItemsRequestSchema = z
+  .object({
+    trackIds: z.array(stringId).min(1).max(1000)
+  })
+  .strict();
+
+export const batchRemoveQueueItemsRequestSchema = z
+  .object({
+    queueItemIds: z.array(stringId).min(1).max(1000)
+  })
+  .strict();
+
 export const prepareTrackAssetRequestSchema = z
   .object({
     trackId: stringId,
@@ -278,6 +296,9 @@ export type UpdateRoomRequest = z.infer<typeof updateRoomRequestSchema>;
 export type JoinRoomByCodeRequest = z.infer<typeof joinRoomByCodeRequestSchema>;
 export type RegisterTrackRequest = z.infer<typeof registerTrackRequestSchema>;
 export type RegisterTracksRequest = z.infer<typeof registerTracksRequestSchema>;
+export type BatchDeleteTracksRequest = z.infer<typeof batchDeleteTracksRequestSchema>;
+export type BatchAddQueueItemsRequest = z.infer<typeof batchAddQueueItemsRequestSchema>;
+export type BatchRemoveQueueItemsRequest = z.infer<typeof batchRemoveQueueItemsRequestSchema>;
 export type PrepareTrackAssetRequest = z.infer<typeof prepareTrackAssetRequestSchema>;
 export type ReportTrackAssetUnavailableRequest = z.infer<typeof reportTrackAssetUnavailableRequestSchema>;
 export type AddQueueItemRequest = z.infer<typeof addQueueItemRequestSchema>;

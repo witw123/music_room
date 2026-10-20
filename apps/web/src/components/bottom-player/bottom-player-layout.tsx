@@ -48,6 +48,7 @@ type LayoutProps = {
   onPlayQueueItem: (queueItemId: string) => Promise<void>;
   onPlayNextQueueItem: (queueItemId: string) => Promise<void>;
   onRemoveQueueItem: (queueItemId: string) => Promise<void>;
+  onRemoveQueueItems?: (queueItemIds: string[]) => Promise<void>;
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
   isImmersiveOpen: boolean;
   onToggleImmersive: () => void;
@@ -390,6 +391,7 @@ export function MobileBottomPlayerLayout({
   onPlayQueueItem,
   onPlayNextQueueItem,
   onRemoveQueueItem,
+  onRemoveQueueItems,
   onReorderQueue,
   onToggleImmersive,
   artworkAccent,
@@ -490,6 +492,7 @@ export function MobileBottomPlayerLayout({
             onPlayQueueItem={onPlayQueueItem}
             onPlayNextQueueItem={onPlayNextQueueItem}
             onRemoveQueueItem={onRemoveQueueItem}
+            onRemoveQueueItems={onRemoveQueueItems}
             onReorderQueue={onReorderQueue}
             compactMobile
             placement="bottom-sheet"
@@ -866,6 +869,7 @@ export function DesktopBottomPlayerLayout({
   onPlayQueueItem,
   onPlayNextQueueItem,
   onRemoveQueueItem,
+  onRemoveQueueItems,
   onReorderQueue,
   isImmersiveOpen,
   onToggleImmersive,
@@ -1042,6 +1046,7 @@ export function DesktopBottomPlayerLayout({
           onPlayQueueItem={onPlayQueueItem}
           onPlayNextQueueItem={onPlayNextQueueItem}
           onRemoveQueueItem={onRemoveQueueItem}
+          onRemoveQueueItems={onRemoveQueueItems}
           onReorderQueue={onReorderQueue}
         />
       </div>

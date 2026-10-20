@@ -33,6 +33,7 @@ type BottomPlayerControllerProps = {
   onPlayQueueItem: (queueItemId: string) => Promise<void>;
   onPlayNextQueueItem: (queueItemId: string) => Promise<void>;
   onRemoveQueueItem: (queueItemId: string) => Promise<void>;
+  onRemoveQueueItems?: (queueItemIds: string[]) => Promise<void>;
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
   onSeekRequestReady?: (requestSeek: ((positionMs: number) => void) | null) => void;
   mobileVariant?: "compact" | "full";
@@ -61,6 +62,7 @@ function BottomPlayerControllerBase({
   onPlayQueueItem,
   onPlayNextQueueItem,
   onRemoveQueueItem,
+  onRemoveQueueItems,
   onReorderQueue,
   onSeekRequestReady,
   mobileVariant = "full"
@@ -177,6 +179,7 @@ function BottomPlayerControllerBase({
       onPlayQueueItem={onPlayQueueItem}
       onPlayNextQueueItem={onPlayNextQueueItem}
       onRemoveQueueItem={onRemoveQueueItem}
+      onRemoveQueueItems={onRemoveQueueItems}
       onReorderQueue={onReorderQueue}
       onSeekRequestReady={onSeekRequestReady}
     />

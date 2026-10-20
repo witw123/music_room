@@ -55,6 +55,7 @@ type ImmersivePlayerOverlayProps = {
   onPlayQueueItem: (queueItemId: string) => Promise<void>;
   onPlayNextQueueItem: (queueItemId: string) => Promise<void>;
   onRemoveQueueItem: (queueItemId: string) => Promise<void>;
+  onRemoveQueueItems?: (queueItemIds: string[]) => Promise<void>;
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
   favoriteTrack: ProviderTrackCandidate | null;
   favoriteTrackIsFavorite: boolean;
@@ -103,6 +104,7 @@ export function ImmersivePlayerOverlay({
   onPlayQueueItem,
   onPlayNextQueueItem,
   onRemoveQueueItem,
+  onRemoveQueueItems,
   onReorderQueue,
   favoriteTrack,
   favoriteTrackIsFavorite,
@@ -287,6 +289,7 @@ export function ImmersivePlayerOverlay({
         onPlayNextQueueItem={onPlayNextQueueItem}
         onPrev={onPrev}
         onRemoveQueueItem={onRemoveQueueItem}
+        onRemoveQueueItems={onRemoveQueueItems}
         onReorderQueue={onReorderQueue}
         onSetMobileView={setMobileView}
         onSeekToPosition={onSeekToPosition}
@@ -353,6 +356,7 @@ export function ImmersivePlayerOverlay({
             onPlayQueueItem={onPlayQueueItem}
             onPlayNextQueueItem={onPlayNextQueueItem}
             onRemoveQueueItem={onRemoveQueueItem}
+            onRemoveQueueItems={onRemoveQueueItems}
             onReorderQueue={onReorderQueue}
             setSeekDraft={setSeekDraft}
             volume={volume}
@@ -549,6 +553,7 @@ function MobileImmersivePlayer({
             onPlayQueueItem={onPlayQueueItem}
             onPlayNextQueueItem={onPlayNextQueueItem}
             onRemoveQueueItem={onRemoveQueueItem}
+            onRemoveQueueItems={onRemoveQueueItems}
             onReorderQueue={onReorderQueue}
             placement="bottom-sheet"
             queue={queue}
@@ -595,6 +600,7 @@ type DesktopImmersivePlayerProps = {
   onPlayQueueItem: (queueItemId: string) => Promise<void>;
   onPlayNextQueueItem: (queueItemId: string) => Promise<void>;
   onRemoveQueueItem: (queueItemId: string) => Promise<void>;
+  onRemoveQueueItems?: (queueItemIds: string[]) => Promise<void>;
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
   setSeekDraft: (value: number | null) => void;
   volume: number;
@@ -634,6 +640,7 @@ function DesktopImmersivePlayer({
   onPlayQueueItem,
   onPlayNextQueueItem,
   onRemoveQueueItem,
+  onRemoveQueueItems,
   onReorderQueue,
   setSeekDraft,
   volume,
@@ -734,6 +741,7 @@ function DesktopImmersivePlayer({
           onPlayQueueItem={onPlayQueueItem}
           onPlayNextQueueItem={onPlayNextQueueItem}
           onRemoveQueueItem={onRemoveQueueItem}
+          onRemoveQueueItems={onRemoveQueueItems}
           onReorderQueue={onReorderQueue}
           placement="immersive-desktop"
           queue={queue}

@@ -88,14 +88,17 @@ export type RoomDashboardViewProps = {
   onDeleteRoom: () => void;
   onFilesSelected: (files: FileList | File[] | null) => Promise<void>;
   onAddToQueue: (trackId: string) => Promise<unknown>;
+  onBatchAddToQueue?: (trackIds: string[]) => Promise<unknown>;
   canReorderQueue: boolean;
   canRemoveQueue: boolean;
   onPlayQueueItem: (queueItemId: string) => Promise<void>;
   onPlayNextQueueItem: (queueItemId: string) => Promise<void>;
   onRemoveQueueItem: (queueItemId: string) => Promise<void>;
+  onRemoveQueueItems?: (queueItemIds: string[]) => Promise<void>;
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
   onReorderTracks?: (trackIds: string[]) => Promise<void>;
   onDeleteTrack: (trackId: string) => Promise<void>;
+  onDeleteTracks?: (trackIds: string[]) => Promise<unknown>;
   onPlayTrack: (trackId: string) => Promise<void>;
   onRefreshRoom: () => Promise<RoomSnapshot | null>;
   socket: RoomSocket | null;
@@ -279,8 +282,10 @@ function RoomManagementContent(props: RoomLayoutProps & { activeTab: ManagementT
         localSavedFileHashes={props.localStorageSummary.localSavedFileHashes}
         members={props.roomSnapshot.room.members}
         onAddToQueue={props.onAddToQueue}
+        onBatchAddToQueue={props.onBatchAddToQueue}
         onDeletePlaylist={props.onDeletePlaylist}
         onDeleteTrack={props.onDeleteTrack}
+        onDeleteTracks={props.onDeleteTracks}
         onFilesSelected={props.onFilesSelected}
         onImportCachedTrack={props.onImportCachedTrack}
         onImportNeteaseTrack={props.onImportNeteaseTrack}

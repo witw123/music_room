@@ -517,7 +517,7 @@ function PlaylistCard({
                 <span>已在曲库</span>
               </>
             ) : isAddingToLibrary ? (
-              "添加中…"
+              "加入中…"
             ) : (
               "加入曲库"
             )}
@@ -770,7 +770,7 @@ function PlaylistDetail({
                 type="button"
                 variant="outline"
               >
-                {isAddingToLibrary ? "添加中…" : "加入曲库"}
+                {isAddingToLibrary ? "加入中…" : "加入曲库"}
               </Button>
             )
           ) : null}
@@ -810,7 +810,7 @@ function PlaylistDetail({
               onChange={toggleSelectAll}
               className="h-4 w-4 accent-accent rounded"
             />
-            <span>{allSelectableSelected ? "取消全选" : "全选未导入歌曲"}</span>
+            <span>{allSelectableSelected ? "取消全选" : "全选未加入歌曲"}</span>
           </label>
           <div className="flex items-center gap-2">
             <span className="text-xs tabular-nums text-foreground-muted">已选 {selectedTracks.length} 首</span>
@@ -819,10 +819,10 @@ function PlaylistDetail({
               onClick={() => void importSelectedTracks()}
               size="sm"
               variant="outline"
-              className="rounded-lg h-7 px-2.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-lg h-7 px-2.5 text-xs font-medium border border-accent/30 bg-accent/5 text-accent hover:bg-accent/15 disabled:cursor-not-allowed disabled:opacity-50"
               type="button"
             >
-              {isImportBusy ? "导入中…" : "导入所选歌曲"}
+              {isImportBusy ? "加入中…" : "加入曲库"}
             </Button>
           </div>
         </div>

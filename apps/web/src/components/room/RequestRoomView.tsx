@@ -382,8 +382,10 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
                     localSavedFileHashes={props.localStorageSummary.localSavedFileHashes}
                     members={props.roomSnapshot.room.members}
                     onAddToQueue={props.onAddToQueue}
+                    onBatchAddToQueue={props.onBatchAddToQueue}
                     onDeletePlaylist={props.onDeletePlaylist}
                     onDeleteTrack={props.onDeleteTrack}
+                    onDeleteTracks={props.onDeleteTracks}
                     onFilesSelected={props.onFilesSelected}
                     onImportCachedTrack={props.onImportCachedTrack}
                     onImportNeteaseTrack={props.onImportNeteaseTrack}
@@ -463,6 +465,7 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
                     onPlayNextQueueItem={props.onPlayNextQueueItem}
                     onPlayQueueItem={props.onPlayQueueItem}
                     onRemoveQueueItem={props.onRemoveQueueItem}
+                    onRemoveQueueItems={props.onRemoveQueueItems}
                     onReorderQueue={props.onReorderQueue}
                     queue={props.roomSnapshot.queue}
                     tracks={props.roomSnapshot.tracks}
@@ -590,6 +593,7 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
                     onPlayNextQueueItem={props.onPlayNextQueueItem}
                     onPlayQueueItem={props.onPlayQueueItem}
                     onRemoveQueueItem={props.onRemoveQueueItem}
+                    onRemoveQueueItems={props.onRemoveQueueItems}
                     onReorderQueue={props.onReorderQueue}
                     queue={props.roomSnapshot.queue}
                     tracks={props.roomSnapshot.tracks}
@@ -619,8 +623,10 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
                   localSavedFileHashes={props.localStorageSummary.localSavedFileHashes}
                   members={props.roomSnapshot.room.members}
                   onAddToQueue={props.onAddToQueue}
+                  onBatchAddToQueue={props.onBatchAddToQueue}
                   onDeletePlaylist={props.onDeletePlaylist}
                   onDeleteTrack={props.onDeleteTrack}
+                  onDeleteTracks={props.onDeleteTracks}
                   onFilesSelected={props.onFilesSelected}
                   onImportCachedTrack={props.onImportCachedTrack}
                   onImportNeteaseTrack={props.onImportNeteaseTrack}

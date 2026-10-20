@@ -279,6 +279,48 @@ export class RoomContentService {
     return { ok: true };
   }
 
+  async removeTracks(roomId: string, sessionId: string, trackIds: string[]) {
+    const record = await this.roomRecordRepository.getRoomRecord(roomId);
+    assertMember(record, sessionId);
+    assertPermission(record, sessionId, "library");
+
+    const targetSet = new Set(trackIds);
+    const deletableTracks = record.tracks.filter(
+      (item) => targetSet.has(item.id) && (item.ownerSessionId === sessionId || record.room.hostId === sessionId)
+    );
+
+    if (deletableTracks.length === 0) {
+      return { ok: true, deletedTrackIds: [], deletedTracks: [] };
+    }
+
+    const deletableIds = new Set(deletableTracks.map((item) => item.id));
+    this.removeTracksById(record, deletableIds);
+    incrementRoomRevision(record.room);
+    await this.roomRecordRepository.persistRecord(record);
+
+    const now = new Date().toISOString();
+    await Promise.all(
+      deletableTracks.map((track) => {
+        const deletion: RoomTrackDeletion = {
+          roomId,
+          trackId: track.id,
+          fileHash: track.fileHash,
+          originalAssetId: track.originalAsset?.assetId ?? null,
+          playbackAssetId: track.playbackAsset?.assetId ?? null,
+          roomRevision: record.room.roomRevision ?? 0,
+          deletedAt: now
+        };
+        return this.roomRecordRepository.recordTrackDeletion(deletion).catch(() => undefined);
+      })
+    );
+
+    return {
+      ok: true,
+      deletedTrackIds: deletableTracks.map((item) => item.id),
+      deletedTracks: deletableTracks
+    };
+  }
+
   async addQueueItem(roomId: string, sessionId: string, trackId: string) {
     const session = await this.authService.getUserOrThrow(sessionId);
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
@@ -479,6 +521,57 @@ export class RoomContentService {
     incrementRoomRevision(record.room);
     await this.roomRecordRepository.persistRecord(record);
     return record.queue;
+  }
+
+  async removeQueueItems(roomId: string, queueItemIds: string[], actorSessionId: string) {
+    const record = await this.roomRecordRepository.getRoomRecord(roomId);
+    assertMember(record, actorSessionId);
+    if ((record.room.roomType === "request" || record.room.roomType === "radio") && record.room.hostId !== actorSessionId) {
+      throw new BadRequestException("只有房主可以管理当前房间队列。");
+    }
+    assertPermission(record, actorSessionId, "queue");
+
+    const targetIds = new Set(queueItemIds);
+    const removedItems = record.queue.filter((item) => targetIds.has(item.id));
+    if (removedItems.length === 0) {
+      return record.queue;
+    }
+
+    const nextQueue = record.queue
+      .filter((item) => !targetIds.has(item.id))
+      .map((item, index) => ({ ...item, position: index }));
+
+    const playback = record.room.playback;
+    const removesCurrentQueueItem = playback.currentQueueItemId !== null && targetIds.has(playback.currentQueueItemId);
+    const removesNextQueueItem = playback.nextQueueItemId !== null && targetIds.has(playback.nextQueueItemId);
+    const removesDirectlyPlayingTrack =
+      playback.currentQueueItemId === null &&
+      playback.currentTrackId !== null &&
+      removedItems.some((item) => item.trackId === playback.currentTrackId);
+
+    if (removesCurrentQueueItem || removesDirectlyPlayingTrack) {
+      record.queue = nextQueue;
+      this.roomPlaybackService.clearPlayback(playback);
+      this.roomPlaybackService.syncShuffleBagWithQueue(record, []);
+      incrementQueueVersion(playback);
+      incrementRoomRevision(record.room);
+      await this.roomRecordRepository.persistRecord(record);
+      return record.queue;
+    }
+
+    record.queue = nextQueue;
+    if (removesNextQueueItem) {
+      playback.nextQueueItemId = null;
+    }
+    this.roomPlaybackService.syncShuffleBagWithQueue(record, []);
+    incrementQueueVersion(record.room.playback);
+    incrementRoomRevision(record.room);
+    await this.roomRecordRepository.persistRecord(record);
+    return record.queue;
+  }
+
+  async addQueueItems(roomId: string, sessionId: string, trackIds: string[]) {
+    return this.importPlaylistToQueue(roomId, sessionId, trackIds);
   }
 
   async setNextQueueItem(roomId: string, actorSessionId: string, queueItemId: string) {

@@ -193,6 +193,7 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
                       onPlayNextQueueItem={props.onPlayNextQueueItem}
                       onPlayQueueItem={props.onPlayQueueItem}
                       onRemoveQueueItem={props.onRemoveQueueItem}
+                      onRemoveQueueItems={props.onRemoveQueueItems}
                       onReorderQueue={props.onReorderQueue}
                       queue={props.roomSnapshot.queue}
                       tracks={props.roomSnapshot.tracks}
@@ -308,6 +309,7 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
                     onPlayNextQueueItem={props.onPlayNextQueueItem}
                     onPlayQueueItem={props.onPlayQueueItem}
                     onRemoveQueueItem={props.onRemoveQueueItem}
+                    onRemoveQueueItems={props.onRemoveQueueItems}
                     onReorderQueue={props.onReorderQueue}
                     queue={props.roomSnapshot.queue}
                     tracks={props.roomSnapshot.tracks}
@@ -426,7 +428,9 @@ function RadioLibraryList({
         localFolderName={props.localStorageSummary.localFolderName}
         localSavedFileHashes={props.localStorageSummary.localSavedFileHashes}
         onAddToQueue={props.onAddToQueue}
+        onBatchAddToQueue={props.onBatchAddToQueue}
         onDeleteTrack={props.onDeleteTrack}
+        onDeleteTracks={props.onDeleteTracks}
         onFilesSelected={props.onFilesSelected}
         onPlayTrack={props.onPlayTrack}
         onReorderTracks={props.onReorderTracks}

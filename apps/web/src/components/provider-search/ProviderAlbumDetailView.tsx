@@ -14,7 +14,8 @@ import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
 import {
   PlayIcon,
   HeartIcon,
-  ChevronLeftIcon
+  ChevronLeftIcon,
+  CheckIcon
 } from "@/components/icons/DiscoverIcons";
 
 type Track = ProviderTrackCandidate;
@@ -311,7 +312,7 @@ function TrackActions({ track, actions }: { track: Track; actions: ProviderAlbum
 
   const menuItems: MobileTrackAction[] = [
     ...(actions.onPlay ? [{ id: "play", label: preparingPlayback ? "准备播放中" : playable ? "播放" : "需要下载后播放", icon: "play" as const, disabled: disabled || !playable, onSelect: () => actions.onPlay?.(track) }] : []),
-    ...(actions.onImport ? [{ id: "import", label: inRoom ? "已在房间曲库" : importing ? "导入中…" : "导入曲库", icon: "plus" as const, disabled: inRoom || importing, onSelect: () => actions.onImport?.(track) }] : []),
+    ...(actions.onImport ? [{ id: "import", label: inRoom ? "已在曲库" : importing ? "加入中…" : "加入曲库", icon: "plus" as const, disabled: inRoom || importing, onSelect: () => actions.onImport?.(track) }] : []),
     ...(actions.onDownload ? [{ id: "download", label: downloaded ? "已下载" : downloading ? "下载中" : "下载到本地", icon: "download" as const, disabled: disabled || downloaded, onSelect: () => actions.onDownload?.(track) }] : []),
     ...(actions.onAddToQueue ? [{ id: "queue", label: queued ? "已在队列中" : queueable ? "加入队列" : "需要下载后加入队列", icon: "queue" as const, disabled: disabled || queued || !queueable, onSelect: () => actions.onAddToQueue?.(track) }] : []),
     ...(actions.onAddToPlaylist ? [{ id: "playlist", label: "加入歌单", icon: "plus" as const, disabled, onSelect: () => { if (menuAnchor) actions.onAddToPlaylist?.(track, menuAnchor); } }] : []),
@@ -323,17 +324,18 @@ function TrackActions({ track, actions }: { track: Track; actions: ProviderAlbum
       <div className="hidden items-center gap-1 sm:flex opacity-90 sm:opacity-0 group-hover:opacity-100 transition-opacity">
         {actions.onImport ? (
           inRoom ? (
-            <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium text-emerald-500 bg-emerald-500/10 border border-emerald-500/20">
-              已在曲库
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20">
+              <CheckIcon className="h-3 w-3" />
+              <span>已在曲库</span>
             </span>
           ) : (
             <Button
-              aria-label={`将《${track.title}》导入曲库`}
-              className="h-7 sm:h-8 rounded-lg px-2.5 text-xs text-accent hover:bg-accent/10 border border-accent/20"
+              aria-label={`将《${track.title}》加入曲库`}
+              className="h-7 rounded-md px-2.5 text-[11px] font-medium border border-accent/30 bg-accent/5 text-accent hover:bg-accent/15 transition-colors"
               disabled={disabled || importing}
               onClick={() => actions.onImport?.(track)}
               size="sm"
-              title="导入曲库"
+              title="加入曲库"
               type="button"
               variant="ghost"
             >
@@ -342,10 +344,10 @@ function TrackActions({ track, actions }: { track: Track; actions: ProviderAlbum
                   <svg aria-hidden="true" className="animate-spin" fill="none" height="12" stroke="currentColor" strokeLinecap="round" strokeWidth="2" viewBox="0 0 24 24" width="12">
                     <path d="M12 3a9 9 0 1 0 9 9" />
                   </svg>
-                  <span>导入中</span>
+                  <span>加入中…</span>
                 </span>
               ) : (
-                <span>导入曲库</span>
+                <span>加入曲库</span>
               )}
             </Button>
           )

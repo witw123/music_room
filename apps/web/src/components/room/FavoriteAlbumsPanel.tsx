@@ -348,7 +348,7 @@ function FavoriteAlbumCard({
                 <span>已在曲库</span>
               </>
             ) : isAddingToLibrary ? (
-              "添加中…"
+              "加入中…"
             ) : (
               "加入曲库"
             )}
@@ -535,7 +535,7 @@ function FavoriteAlbumDetail({
                   <span>已在曲库</span>
                 </>
               ) : isAddingToLibrary ? (
-                "添加中…"
+                "加入中…"
               ) : (
                 "加入曲库"
               )}
@@ -557,7 +557,7 @@ function FavoriteAlbumDetail({
                 onChange={toggleSelectAll}
                 className="h-4 w-4 accent-accent"
               />
-              <span>{allSelectableSelected ? "取消全选" : "全选未导入歌曲"}</span>
+              <span>{allSelectableSelected ? "取消全选" : "全选未加入歌曲"}</span>
             </label>
             <div className="flex items-center gap-2">
               <span className="text-[10px] text-foreground-muted">已选择 {selectedTracks.length} 首</span>
@@ -567,7 +567,7 @@ function FavoriteAlbumDetail({
                 onClick={() => void importSelectedTracks()}
                 className="rounded-md border border-accent/30 bg-accent/10 px-3 py-1.5 text-[11px] font-semibold text-accent transition-colors hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {isImportBusy ? "导入中…" : "导入所选歌曲"}
+                {isImportBusy ? "加入中…" : "加入曲库"}
               </button>
             </div>
           </div>
@@ -599,16 +599,25 @@ function FavoriteAlbumDetail({
                     </div>
                   </div>
                   <button
-                    className={`shrink-0 rounded-md border px-3 py-1.5 text-[11px] font-semibold transition-colors ${
+                    className={`inline-flex shrink-0 items-center justify-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
                       isInRoom
-                        ? "cursor-default border-emerald-500/20 bg-emerald-500/5 text-emerald-300"
-                        : "border-accent/30 bg-accent/10 text-accent hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
+                        ? "cursor-default border border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
+                        : "border border-accent/30 bg-accent/5 text-accent hover:bg-accent/15 disabled:cursor-not-allowed disabled:opacity-50"
                     }`}
                     disabled={!canManageLibrary || isInRoom || isPending || isImportBusy}
                     onClick={() => void importTrack(track)}
                     type="button"
                   >
-                    {isInRoom ? "已在曲库" : isPending ? "导入中…" : "导入曲库"}
+                    {isInRoom ? (
+                      <>
+                        <CheckIcon className="h-3 w-3" />
+                        <span>已在曲库</span>
+                      </>
+                    ) : isPending ? (
+                      "加入中…"
+                    ) : (
+                      "加入曲库"
+                    )}
                   </button>
                 </article>
               );

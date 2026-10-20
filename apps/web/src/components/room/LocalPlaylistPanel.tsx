@@ -230,7 +230,7 @@ function LocalPlaylistCard({
                 <span>已在曲库</span>
               </>
             ) : isAddingToLibrary ? (
-              "添加中…"
+              "加入中…"
             ) : (
               "加入曲库"
             )}
@@ -346,7 +346,7 @@ function LocalPlaylistDetail({
                 type="button"
                 variant="outline"
               >
-                {isAddingToLibrary ? "添加中…" : "加入曲库"}
+                {isAddingToLibrary ? "加入中…" : "加入曲库"}
               </Button>
             )
           ) : null}
@@ -379,7 +379,7 @@ function LocalPlaylistDetail({
                 onChange={toggleSelectAll}
                 className="h-4 w-4 accent-accent"
               />
-              <span>{allSelectableSelected ? "取消全选" : "全选未导入歌曲"}</span>
+              <span>{allSelectableSelected ? "取消全选" : "全选未加入歌曲"}</span>
             </label>
             <div className="flex items-center gap-2">
               <span className="text-[10px] text-foreground-muted">已选择 {selectedTracks.length} 首</span>
@@ -387,9 +387,9 @@ function LocalPlaylistDetail({
                 type="button"
                 disabled={!canManageLibrary || selectedTracks.length === 0 || isImportBusy}
                 onClick={() => void importSelectedTracks()}
-                className="rounded-md border border-surface-border bg-surface px-3 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-md border border-accent/30 bg-accent/10 px-3 py-1.5 text-[11px] font-medium text-accent transition-colors hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {isImportBusy ? "导入中…" : "导入所选歌曲"}
+                {isImportBusy ? "加入中…" : "加入曲库"}
               </button>
             </div>
           </div>
@@ -425,15 +425,26 @@ function LocalPlaylistDetail({
                     onClick={() => {
                       if (cachedTrack) void importTrack(track);
                     }}
-                    className={`shrink-0 rounded-md border px-3 py-1.5 text-[11px] font-semibold transition-colors ${
+                    className={`inline-flex shrink-0 items-center justify-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
                       isInRoom
-                        ? "cursor-default border-emerald-500/20 bg-emerald-500/5 text-emerald-300"
+                        ? "cursor-default border border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
                         : canImport
-                          ? "border-surface-border bg-surface text-foreground hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
-                          : "cursor-default border-surface-border text-foreground-muted"
+                          ? "border border-accent/30 bg-accent/5 text-accent hover:bg-accent/15 disabled:cursor-not-allowed disabled:opacity-50"
+                          : "cursor-default border border-surface-border text-foreground-muted"
                     }`}
                   >
-                    {isInRoom ? "已在本房间" : isPending ? "导入中…" : cachedTrack ? "导入曲库" : "未保存到本地"}
+                    {isInRoom ? (
+                      <>
+                        <CheckIcon className="h-3 w-3" />
+                        <span>已在曲库</span>
+                      </>
+                    ) : isPending ? (
+                      "加入中…"
+                    ) : cachedTrack ? (
+                      "加入曲库"
+                    ) : (
+                      "未保存到本地"
+                    )}
                   </button>
                 </article>
               );

@@ -166,6 +166,7 @@ export function RoomAppShell({
         onPlaybackPositionChange={playbackActions.handlePlaybackPositionChange}
         onPrev={playbackActions.handlePrevTrack}
         onRemoveQueueItem={roomActions.removeQueueItem}
+        onRemoveQueueItems={roomActions.removeQueueItems}
         onReorderQueue={roomActions.reorderQueue}
         onSeek={roomActions.seekTrack}
         onSeekRequestReady={handleSeekRequestReady}

@@ -154,14 +154,17 @@ function RoomWorkspaceSectionComponent({
       onDeleteRoom={roomActions.handleDeleteRoomAction}
       onFilesSelected={onFilesSelected}
       onAddToQueue={roomActions.addToQueue}
+      onBatchAddToQueue={roomActions.batchAddToQueue}
       canReorderQueue={isHostControlledRoom ? isRoomHost : canReorderQueue}
       canRemoveQueue={isHostControlledRoom ? isRoomHost : !!activeSession && canReorderQueue}
       onPlayQueueItem={onPlayQueueItem}
       onPlayNextQueueItem={roomActions.setNextQueueItem}
       onRemoveQueueItem={roomActions.removeQueueItem}
+      onRemoveQueueItems={roomActions.removeQueueItems}
       onReorderQueue={roomActions.reorderQueue}
       onReorderTracks={roomActions.reorderTracks}
       onDeleteTrack={roomActions.deleteTrack}
+      onDeleteTracks={roomActions.deleteTracks}
       onPlayTrack={onPlayTrack}
       onRefreshRoom={roomActions.refreshRoomSnapshot}
       onTabChange={onTabChange}

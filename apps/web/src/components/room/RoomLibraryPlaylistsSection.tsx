@@ -817,21 +817,21 @@ function RoomLibraryPlaylistDetail({
               onChange={toggleSelectAll}
               type="checkbox"
             />
-            <span>{allSelectableSelected ? "取消全选" : "全选未导入歌曲"}</span>
+            <span>{allSelectableSelected ? "取消全选" : "全选未加入歌曲"}</span>
           </label>
           <div className="flex items-center gap-2">
             <span className="text-xs tabular-nums text-foreground-muted">
               已选 {selectedKeys.length} 首
             </span>
             <Button
-              className="rounded-lg h-7 px-2.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-lg h-7 px-2.5 text-xs font-medium border border-accent/30 bg-accent/5 text-accent hover:bg-accent/15 disabled:cursor-not-allowed disabled:opacity-50"
               disabled={selectedKeys.length === 0 || isImportBusy}
               onClick={() => void importSelectedTracks()}
               size="sm"
               type="button"
               variant="outline"
             >
-              {isImportBusy ? "导入中…" : "导入所选歌曲"}
+              {isImportBusy ? "加入中…" : "加入曲库"}
             </Button>
           </div>
         </div>
@@ -881,23 +881,21 @@ function RoomLibraryPlaylistDetail({
                     {formatDuration(item.durationMs)}
                   </span>
                   {item.isInRoom ? (
-                    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
+                    <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-400">
                       <CheckIcon className="h-3 w-3" />
                       <span>已在曲库</span>
                     </span>
                   ) : canManageLibrary && item.providerTrack ? (
-                    <Button
-                      className="h-6.5 rounded-md px-2 text-[11px] font-medium"
+                    <button
+                      className="h-7 rounded-md px-2.5 text-[11px] font-medium border border-accent/30 bg-accent/5 text-accent hover:bg-accent/15 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                       disabled={isImporting || isImportBusy}
                       onClick={() => void importSingleTrack(item)}
-                      size="sm"
                       type="button"
-                      variant="outline"
                     >
-                      {isImporting ? "导入中…" : "导入"}
-                    </Button>
+                      {isImporting ? "加入中…" : "加入曲库"}
+                    </button>
                   ) : (
-                    <span className="text-[10px] text-foreground-muted/60">未导入</span>
+                    <span className="text-[10px] text-foreground-muted/60">未加入</span>
                   )}
                 </div>
               </div>

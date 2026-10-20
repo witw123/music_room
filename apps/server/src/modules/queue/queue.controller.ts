@@ -1,6 +1,8 @@
 import { Body, Controller, Delete, Get, Headers, Ip, Patch, Param, Post, UnauthorizedException } from "@nestjs/common";
 import {
   addQueueItemRequestSchema,
+  batchAddQueueItemsRequestSchema,
+  batchRemoveQueueItemsRequestSchema,
   reorderQueueRequestSchema,
   setNextQueueItemRequestSchema
 } from "@music-room/shared";
@@ -55,6 +57,24 @@ export class QueueController {
     };
   }
 
+  @Post("batch")
+  async addQueueItems(
+    @Param("roomId") roomId: string,
+    @Headers("x-session-token") sessionToken: string | undefined,
+    @Body() body: { trackIds: string[] },
+    @Ip() ipAddress?: string
+  ) {
+    const userId = await this.getCurrentUserId(sessionToken);
+    await this.limitQueueWrites(userId, ipAddress);
+    const payload = parseRequestBody(batchAddQueueItemsRequestSchema, body);
+    await this.roomService.addQueueItems(roomId, userId, payload.trackIds);
+    const snapshot = await this.roomRealtimePublisher.emitQueueSnapshot(roomId);
+    return {
+      queue: snapshot.queue,
+      playback: snapshot.room.playback
+    };
+  }
+
   @Delete(":queueItemId")
   async removeQueueItem(
     @Param("roomId") roomId: string,
@@ -65,6 +85,24 @@ export class QueueController {
     const userId = await this.getCurrentUserId(sessionToken);
     await this.limitQueueWrites(userId, ipAddress);
     await this.roomService.removeQueueItem(roomId, queueItemId, userId);
+    const snapshot = await this.roomRealtimePublisher.emitQueueSnapshot(roomId);
+    return {
+      queue: snapshot.queue,
+      playback: snapshot.room.playback
+    };
+  }
+
+  @Post("batch-remove")
+  async removeQueueItems(
+    @Param("roomId") roomId: string,
+    @Headers("x-session-token") sessionToken: string | undefined,
+    @Body() body: { queueItemIds: string[] },
+    @Ip() ipAddress?: string
+  ) {
+    const userId = await this.getCurrentUserId(sessionToken);
+    await this.limitQueueWrites(userId, ipAddress);
+    const payload = parseRequestBody(batchRemoveQueueItemsRequestSchema, body);
+    await this.roomService.removeQueueItems(roomId, payload.queueItemIds, userId);
     const snapshot = await this.roomRealtimePublisher.emitQueueSnapshot(roomId);
     return {
       queue: snapshot.queue,

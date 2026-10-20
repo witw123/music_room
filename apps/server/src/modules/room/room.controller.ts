@@ -1,5 +1,6 @@
 import { Body, BadRequestException, Controller, Delete, Get, Headers, Ip, Query, Patch, Param, Post, ServiceUnavailableException, UnauthorizedException } from "@nestjs/common";
 import {
+  batchDeleteTracksRequestSchema,
   computeAssetId,
   createRoomRequestSchema,
   createRoomSongRequestSchema,
@@ -13,6 +14,7 @@ import {
   updateRoomMemberPermissionsRequestSchema,
   updateRadioAutopilotRequestSchema,
   updateRoomRequestSchema,
+  type BatchDeleteTracksRequest,
   type Playlist,
   type PrepareTrackAssetRequest,
   type RegisterTrackRequest,
@@ -591,6 +593,45 @@ export class RoomController {
       });
     }
     return result;
+  }
+
+  @Post(":roomId/tracks/batch-delete")
+  async deleteTracks(
+    @Param("roomId") roomId: string,
+    @Headers("x-session-token") sessionToken: string | undefined,
+    @Body() body: BatchDeleteTracksRequest,
+    @Ip() ipAddress?: string
+  ) {
+    const userId = await this.getCurrentUserId(sessionToken);
+    await this.abuseProtection?.enforce("room:track-write", [
+      { name: "ip", value: ipAddress },
+      { name: "user", value: userId }
+    ], { limit: 120, windowMs: 10 * 60 * 1000 });
+    const payload = parseRequestBody(batchDeleteTracksRequestSchema, body);
+    const getRoomSnapshot = this.roomService.getRoomSnapshot;
+    const beforeSnapshot = typeof getRoomSnapshot === "function"
+      ? await getRoomSnapshot.call(this.roomService, roomId, []).catch(() => null)
+      : null;
+    const result = await this.roomService.removeTracks(roomId, userId, payload.trackIds);
+    await Promise.all(
+      result.deletedTrackIds.map((trackId) =>
+        this.playlistService.removeTrackFromPlaylists(trackId).catch(() => undefined)
+      )
+    );
+    const librarySnapshot = await this.roomRealtimePublisher.emitLibrarySnapshot(roomId);
+    const now = new Date().toISOString();
+    const revision = librarySnapshot?.room.roomRevision ?? (beforeSnapshot?.room.roomRevision ?? 0) + 1;
+    for (const track of result.deletedTracks) {
+      this.roomRealtimePublisher.emitTrackDeleted(roomId, {
+        trackId: track.id,
+        fileHash: track.fileHash,
+        originalAssetId: track.originalAsset?.assetId ?? null,
+        playbackAssetId: track.playbackAsset?.assetId ?? null,
+        roomRevision: revision,
+        deletedAt: now
+      });
+    }
+    return { ok: true, deletedTrackIds: result.deletedTrackIds };
   }
 
   @Patch(":roomId/tracks/reorder")

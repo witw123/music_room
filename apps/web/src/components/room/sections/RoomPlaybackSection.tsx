@@ -33,6 +33,7 @@ export type RoomPlaybackSectionProps = {
   onPlayQueueItem: (queueItemId: string) => Promise<void>;
   onPlayNextQueueItem: (queueItemId: string) => Promise<void>;
   onRemoveQueueItem: (queueItemId: string) => Promise<void>;
+  onRemoveQueueItems?: (queueItemIds: string[]) => Promise<void>;
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
   onSetPlaybackMode?: (mode: PlaybackMode) => void | Promise<void>;
 };
@@ -58,6 +59,7 @@ function RoomPlaybackSectionComponent({
   onPlayQueueItem,
   onPlayNextQueueItem,
   onRemoveQueueItem,
+  onRemoveQueueItems,
   onReorderQueue,
   onSetPlaybackMode
 }: RoomPlaybackSectionProps) {
@@ -99,6 +101,7 @@ function RoomPlaybackSectionComponent({
       onPlayQueueItem={onPlayQueueItem}
       onPlayNextQueueItem={onPlayNextQueueItem}
       onRemoveQueueItem={onRemoveQueueItem}
+      onRemoveQueueItems={onRemoveQueueItems}
       onReorderQueue={onReorderQueue}
     />
   );

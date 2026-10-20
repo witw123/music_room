@@ -75,6 +75,7 @@ type BottomPlayerProps = {
   onPlayQueueItem: (queueItemId: string) => Promise<void>;
   onPlayNextQueueItem: (queueItemId: string) => Promise<void>;
   onRemoveQueueItem: (queueItemId: string) => Promise<void>;
+  onRemoveQueueItems?: (queueItemIds: string[]) => Promise<void>;
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
   desktopLyricsSource?: DesktopLyricsSource;
   onSeekRequestReady?: (requestSeek: ((positionMs: number) => void) | null) => void;
@@ -139,6 +140,7 @@ function BottomPlayerBase({
   onPlayQueueItem,
   onPlayNextQueueItem,
   onRemoveQueueItem,
+  onRemoveQueueItems,
   onReorderQueue,
   desktopLyricsSource = "local",
   onSeekRequestReady,
@@ -572,6 +574,7 @@ function BottomPlayerBase({
         onPlayQueueItem={onPlayQueueItem}
         onPlayNextQueueItem={onPlayNextQueueItem}
         onRemoveQueueItem={onRemoveQueueItem}
+        onRemoveQueueItems={onRemoveQueueItems}
         onReorderQueue={onReorderQueue}
         isImmersiveOpen={isImmersiveOpen}
         onToggleImmersive={() => setIsImmersiveOpen((current) => !current)}
@@ -616,6 +619,7 @@ function BottomPlayerBase({
         onPlayQueueItem={onPlayQueueItem}
         onPlayNextQueueItem={onPlayNextQueueItem}
         onRemoveQueueItem={onRemoveQueueItem}
+        onRemoveQueueItems={onRemoveQueueItems}
         onReorderQueue={onReorderQueue}
         isImmersiveOpen={isImmersiveOpen}
         onToggleImmersive={() => setIsImmersiveOpen((current) => !current)}
@@ -693,6 +697,7 @@ function BottomPlayerBase({
       onPlayQueueItem={onPlayQueueItem}
       onPlayNextQueueItem={onPlayNextQueueItem}
       onRemoveQueueItem={onRemoveQueueItem}
+      onRemoveQueueItems={onRemoveQueueItems}
       onReorderQueue={onReorderQueue}
       favoriteTrack={favoriteTrack}
       favoriteTrackIsFavorite={favoriteTrackIsFavorite}

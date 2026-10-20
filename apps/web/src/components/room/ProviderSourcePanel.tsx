@@ -401,13 +401,14 @@ function ProviderSourcePanelBase<TrackT extends ProviderTrackCandidate, AccountT
                     </div>
                     {onImportTrack ? (
                       <Button
-                        className="shrink-0 self-start sm:self-auto"
+                        className="shrink-0 self-start sm:self-auto h-7 rounded-md px-2.5 text-[11px] font-medium border border-accent/30 bg-accent/5 text-accent hover:bg-accent/15"
                         disabled={pendingAction !== null}
                         onClick={() => void importTrack(track)}
                         size="sm"
                         type="button"
+                        variant="ghost"
                       >
-                        {isImporting ? "导入中…" : "导入曲库"}
+                        {isImporting ? "加入中…" : "加入曲库"}
                       </Button>
                     ) : null}
                   </article>
