@@ -46,6 +46,7 @@ export type LibraryTabPanelProps = {
   onImportQqMusicTracks?: (tracks: QqMusicTrackCandidate[]) => Promise<void>;
   onImportBilibiliTracks?: (tracks: BilibiliTrackCandidate[]) => Promise<void>;
   onImportCachedTrack?: (track: CachedLibraryTrack) => Promise<void>;
+  onRefreshRoom?: () => Promise<unknown>;
   onSwitchToDesk?: () => void;
   hideLocalAudioImport?: boolean;
 };
@@ -80,6 +81,7 @@ function LibraryTabPanelBase({
   onImportQqMusicTracks,
   onImportBilibiliTracks,
   onImportCachedTrack,
+  onRefreshRoom,
   onSwitchToDesk,
   hideLocalAudioImport
 }: LibraryTabPanelProps) {
@@ -144,6 +146,7 @@ function LibraryTabPanelBase({
             onPlayTrack={onPlayTrack}
             onReorderTracks={onReorderTracks}
             onSaveTrackToLocal={onSaveTrackToLocal}
+            onRefreshRoom={onRefreshRoom}
             roomId={roomId}
             tracks={tracks}
             uploadedTracks={uploadedTracks}

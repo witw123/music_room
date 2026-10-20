@@ -86,7 +86,10 @@ describe("room snapshot handoff", () => {
     } satisfies RoomJoinResponse;
 
     expect(buildRoomJoinBootstrapSnapshot(joined)).toEqual({
-      room: snapshot.room,
+      room: {
+        ...snapshot.room,
+        roomRevision: 0
+      },
       tracks: [],
       queue: [],
       playlists: []

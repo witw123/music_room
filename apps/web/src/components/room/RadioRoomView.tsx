@@ -448,6 +448,7 @@ function RadioLibraryList({
         onImportQqMusicTracks={props.onImportQqMusicTracks}
         onImportBilibiliTracks={props.onImportBilibiliTracks}
         onImportCachedTrack={props.onImportCachedTrack}
+        onRefreshRoom={props.onRefreshRoom}
         onSwitchToDesk={onSwitchToDesk}
       />
     </div>

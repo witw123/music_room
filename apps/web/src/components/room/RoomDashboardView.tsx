@@ -298,6 +298,7 @@ function RoomManagementContent(props: RoomLayoutProps & { activeTab: ManagementT
         onPlayTrack={props.onPlayTrack}
         onReorderTracks={props.onReorderTracks}
         onSaveTrackToLocal={props.onSaveTrackToLocal}
+        onRefreshRoom={props.onRefreshRoom}
         roomId={props.roomSnapshot.room.id}
         roomPlaylists={props.roomSnapshot.playlists}
         tracks={props.roomSnapshot.tracks}

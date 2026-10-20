@@ -398,6 +398,7 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
                     onPlayTrack={props.onPlayTrack}
                     onReorderTracks={props.onReorderTracks}
                     onSaveTrackToLocal={props.onSaveTrackToLocal}
+                    onRefreshRoom={props.onRefreshRoom}
                     roomId={props.roomSnapshot.room.id}
                     roomPlaylists={props.roomSnapshot.playlists}
                     tracks={props.roomSnapshot.tracks}
@@ -639,6 +640,7 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
                   onPlayTrack={props.onPlayTrack}
                   onReorderTracks={props.onReorderTracks}
                   onSaveTrackToLocal={props.onSaveTrackToLocal}
+                  onRefreshRoom={props.onRefreshRoom}
                   roomId={props.roomSnapshot.room.id}
                   roomPlaylists={props.roomSnapshot.playlists}
                   tracks={props.roomSnapshot.tracks}

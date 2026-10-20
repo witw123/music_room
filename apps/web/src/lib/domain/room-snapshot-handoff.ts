@@ -13,7 +13,10 @@ type RoomSnapshotHandoffPayload = {
 
 export function buildRoomJoinBootstrapSnapshot(joined: RoomJoinResponse): RoomSnapshot {
   return {
-    room: joined.room,
+    room: {
+      ...joined.room,
+      roomRevision: 0
+    },
     tracks: [],
     queue: [],
     playlists: []

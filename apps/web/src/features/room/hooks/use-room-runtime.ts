@@ -288,10 +288,13 @@ export function useRoomRuntime({
   const roomSnapshotResyncController = useRef(
     createRoomSnapshotResyncController({
       loadSnapshot: async (roomId) => {
-        const sinceRevision =
-          currentRoomRef.current?.room.id === roomId
-            ? currentRoomRef.current.room.roomRevision ?? 0
-            : 0;
+        const current = currentRoomRef.current;
+        const canUseIncrementalSync =
+          current?.room.id === roomId &&
+          current.tracks.length > 0;
+        const sinceRevision = canUseIncrementalSync
+          ? current.room.roomRevision ?? 0
+          : 0;
         const sync = await musicRoomApi.syncRoom(roomId, sinceRevision);
         if (sync.roomDeleted) {
           await deleteRoomTrackArtifactsRef.current(
@@ -308,8 +311,8 @@ export function useRoomRuntime({
             roomId
           );
         }
-        if (sync.unchanged && currentRoomRef.current?.room.id === roomId) {
-          return currentRoomRef.current;
+        if (sync.unchanged && current?.room.id === roomId && current.tracks.length > 0) {
+          return current;
         }
         return sync.snapshot ?? musicRoomApi.getRoom(roomId);
       },

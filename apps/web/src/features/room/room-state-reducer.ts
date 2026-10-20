@@ -320,7 +320,9 @@ export function roomStateReducer(
             presenceRevision: shouldApplyPresence
               ? Math.max(currentPresenceRevision, event.presenceRevision)
               : currentPresenceRevision,
-            roomRevision: Math.max(currentRoomRevision, event.roomRevision),
+            roomRevision: current.source === "authoritative"
+              ? Math.max(currentRoomRevision, event.roomRevision)
+              : currentRoomRevision,
             playback: nextPlayback
           }
         }

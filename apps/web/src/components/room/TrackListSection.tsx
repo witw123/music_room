@@ -32,6 +32,7 @@ type TrackListSectionProps = {
   onPlayTrack: (trackId: string) => Promise<void>;
   onReorderTracks?: (trackIds: string[]) => Promise<void>;
   onBatchAddToQueue?: (trackIds: string[]) => Promise<unknown>;
+  onRefreshRoom?: () => Promise<unknown>;
   hideLocalAudioImport?: boolean;
 };
 
@@ -71,9 +72,11 @@ function TrackListSectionBase({
   onDeleteTracks,
   onPlayTrack,
   onReorderTracks,
-  onBatchAddToQueue
+  onBatchAddToQueue,
+  onRefreshRoom
 }: TrackListSectionProps) {
   const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [trackFilter, setTrackFilter] = useState<LibraryTrackFilter>("all");
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedTrackIds, setSelectedTrackIds] = useState<Set<string>>(new Set());
@@ -924,14 +927,38 @@ function TrackListSectionBase({
           </div>
         ) : (
           <div className="rounded-2xl border border-surface-border bg-surface/30 px-6 py-12 text-center">
-            <p className="mx-auto max-w-sm text-sm text-foreground-muted">
-              {tracks.length === 0
-                ? "还没有曲目。先导入本地音乐，之后就可以在队列里协作播放。"
-                : trackFilter === "mine"
+            {tracks.length === 0 ? (
+              <div className="flex flex-col items-center gap-3">
+                <p className="mx-auto max-w-sm text-sm text-foreground-muted">
+                  还没有曲目。先导入本地音乐，之后就可以在队列里协作播放。
+                </p>
+                {onRefreshRoom ? (
+                  <Button
+                    className="h-7 rounded-md px-2.5 text-[11px] font-medium border border-surface-border/80 bg-surface/60 text-foreground-muted hover:text-foreground hover:bg-surface-hover/60"
+                    disabled={isRefreshing}
+                    onClick={async () => {
+                      setIsRefreshing(true);
+                      try {
+                        await onRefreshRoom();
+                      } finally {
+                        setIsRefreshing(false);
+                      }
+                    }}
+                    size="sm"
+                    type="button"
+                    variant="ghost"
+                  >
+                    {isRefreshing ? "同步中…" : "刷新曲库"}
+                  </Button>
+                ) : null}
+              </div>
+            ) : (
+              <p className="mx-auto max-w-sm text-sm text-foreground-muted">
+                {trackFilter === "mine"
                   ? "你还没有上传歌曲。导入本地音乐后，它会出现在这里。"
-                  : "暂无其他成员上传的歌曲。"
-              }
-            </p>
+                  : "暂无其他成员上传的歌曲。"}
+              </p>
+            )}
           </div>
         )}
       </div>

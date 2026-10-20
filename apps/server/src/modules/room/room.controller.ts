@@ -351,7 +351,7 @@ export class RoomController {
     await this.abuseProtection?.enforce("room:track-write", [
       { name: "ip", value: ipAddress },
       { name: "user", value: userId }
-    ], { limit: 120, windowMs: 10 * 60 * 1000 });
+    ], { limit: 1200, windowMs: 10 * 60 * 1000 });
     const payload = parseRequestBody(registerTrackRequestSchema, body);
     await this.validateTrackAssets(payload);
     const track = await this.roomService.registerTrack(roomId, userId, {
@@ -473,7 +473,7 @@ export class RoomController {
     await this.abuseProtection?.enforce("room:track-write", [
       { name: "ip", value: ipAddress },
       { name: "user", value: userId }
-    ], { limit: 120, windowMs: 10 * 60 * 1000 });
+    ], { limit: 1200, windowMs: 10 * 60 * 1000 });
     const payload = parseRequestBody(registerTracksRequestSchema, body);
     await Promise.all(payload.tracks.map((track) => this.validateTrackAssets(track)));
     const tracks = await this.roomService.registerTracks(roomId, userId, payload.tracks.map((track) => ({
@@ -497,7 +497,7 @@ export class RoomController {
     await this.abuseProtection?.enforce("room:track-write", [
       { name: "ip", value: ipAddress },
       { name: "user", value: userId }
-    ], { limit: 120, windowMs: 10 * 60 * 1000 });
+    ], { limit: 1200, windowMs: 10 * 60 * 1000 });
     const payload = parseRequestBody(prepareTrackAssetRequestSchema, body);
     if (payload.trackId !== trackId) {
       throw new BadRequestException("Track ID in path does not match request body.");
@@ -526,7 +526,7 @@ export class RoomController {
     await this.abuseProtection?.enforce("room:track-write", [
       { name: "ip", value: ipAddress },
       { name: "user", value: userId }
-    ], { limit: 120, windowMs: 10 * 60 * 1000 });
+    ], { limit: 1200, windowMs: 10 * 60 * 1000 });
     const payload = parseRequestBody(reportTrackAssetUnavailableRequestSchema, body);
     if (payload.trackId !== trackId) {
       throw new BadRequestException("Track ID in path does not match request body.");
@@ -606,7 +606,7 @@ export class RoomController {
     await this.abuseProtection?.enforce("room:track-write", [
       { name: "ip", value: ipAddress },
       { name: "user", value: userId }
-    ], { limit: 120, windowMs: 10 * 60 * 1000 });
+    ], { limit: 1200, windowMs: 10 * 60 * 1000 });
     const payload = parseRequestBody(batchDeleteTracksRequestSchema, body);
     const getRoomSnapshot = this.roomService.getRoomSnapshot;
     const beforeSnapshot = typeof getRoomSnapshot === "function"
