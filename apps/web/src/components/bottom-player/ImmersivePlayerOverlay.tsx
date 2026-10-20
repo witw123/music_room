@@ -413,6 +413,7 @@ function MobileImmersivePlayer({
   onPlayNextQueueItem,
   onPrev,
   onRemoveQueueItem,
+  onRemoveQueueItems,
   onReorderQueue,
   onSetMobileView,
   onSeekToPosition,

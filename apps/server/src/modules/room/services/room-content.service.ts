@@ -542,12 +542,11 @@ export class RoomContentService {
       .map((item, index) => ({ ...item, position: index }));
 
     const playback = record.room.playback;
-    const removesCurrentQueueItem = playback.currentQueueItemId !== null && targetIds.has(playback.currentQueueItemId);
-    const removesNextQueueItem = playback.nextQueueItemId !== null && targetIds.has(playback.nextQueueItemId);
+    const removesCurrentQueueItem = Boolean(playback.currentQueueItemId && targetIds.has(playback.currentQueueItemId));
+    const removesNextQueueItem = Boolean(playback.nextQueueItemId && targetIds.has(playback.nextQueueItemId));
     const removesDirectlyPlayingTrack =
-      playback.currentQueueItemId === null &&
-      playback.currentTrackId !== null &&
-      removedItems.some((item) => item.trackId === playback.currentTrackId);
+      !playback.currentQueueItemId &&
+      Boolean(playback.currentTrackId && removedItems.some((item) => item.trackId === playback.currentTrackId));
 
     if (removesCurrentQueueItem || removesDirectlyPlayingTrack) {
       record.queue = nextQueue;
