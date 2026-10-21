@@ -1,10 +1,12 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import type { DiscoverPlaylistCard } from "./discover-types";
 import { providerPlaylistKey } from "./discover-types";
-import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
 import { PlayIcon } from "@/components/icons/DiscoverIcons";
+import { MediaArtwork } from "@/components/ui/media-artwork";
+
+export const Artwork = MediaArtwork;
 
 function providerLabel(provider: string) {
   return provider === "netease" ? "网易云音乐" : "QQ 音乐";
@@ -85,10 +87,4 @@ export function DiscoverPlaylistRail({
   );
 }
 
-export function Artwork({ alt, src, className = "" }: { alt: string; src: string | null; className?: string }) {
-  const [failed, setFailed] = useState(false);
-  const source = src ? getArtworkSourceUrl(src) : null;
-  if (!source || failed) return <span aria-label={alt || undefined} className={`flex min-w-0 max-w-full items-center justify-center overflow-hidden bg-surface text-xl text-foreground-muted ${className}`}>♪</span>;
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img alt={alt} className={`block min-w-0 max-w-full object-cover ${className}`} loading="lazy" onError={() => setFailed(true)} src={source} style={{ display: "block", height: "100%", maxHeight: "100%", maxWidth: "100%", width: "100%" }} />;
-}
+

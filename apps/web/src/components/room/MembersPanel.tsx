@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { memo, useState } from "react";
 import { getRoomMemberPermissions, type PeerDiagnosticsSnapshot, type RoomMember, type RoomMemberPermissions } from "@music-room/shared";

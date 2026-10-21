@@ -15,10 +15,7 @@ import type {
 import { Button } from "@/components/ui/button";
 import { formatDuration } from "@/lib/domain/music-room-ui";
 import { musicRoomApi } from "@/lib/network/music-room-api";
-import {
-  getCachedFavorites,
-  setCachedFavorites
-} from "@/features/workspace/page-data-cache";
+import { useFavoriteAlbums } from "@/features/favorites/use-favorite-albums";
 import { CheckIcon } from "@/components/icons/DiscoverIcons";
 import { providerTrackKey } from "@/features/playlist/local-playlist";
 import { importTaskStore, useVisibleImportTasks } from "@/features/upload/import-task-store";
@@ -54,8 +51,8 @@ export function FavoriteAlbumsPanel({
   roomPlaylists,
   onRefreshRoom
 }: FavoriteAlbumsPanelProps) {
-  const [albums, setAlbums] = useState<ProviderAlbumFavorite[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  const { albums, isLoading: albumsLoading } = useFavoriteAlbums(activeSession?.userId);
+  const loaded = !albumsLoading;
   const [selectedAlbumId, setSelectedAlbumId] = useState<string | null>(null);
   const [detail, setDetail] = useState<ProviderAlbumDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -69,38 +66,6 @@ export function FavoriteAlbumsPanel({
       .filter((track) => track.sourceRef)
       .map((track) => `${track.sourceRef?.provider}:${track.sourceRef?.trackId}`)
   );
-
-  useEffect(() => {
-    if (!activeSession) {
-      setAlbums([]);
-      setLoaded(false);
-      return;
-    }
-
-    const cached = getCachedFavorites(activeSession.userId);
-    if (cached) {
-      setAlbums(cached);
-      setLoaded(true);
-    }
-
-    let cancelled = false;
-    void musicRoomApi.listFavoriteAlbums()
-      .then((items) => {
-        if (cancelled) return;
-        setCachedFavorites(activeSession.userId, items);
-        setAlbums(items);
-        setLoaded(true);
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        setLoaded(true);
-        setErrorMessage(error instanceof Error ? error.message : "收藏加载失败。");
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeSession]);
 
   useEffect(() => {
     if (!selectedAlbum) {

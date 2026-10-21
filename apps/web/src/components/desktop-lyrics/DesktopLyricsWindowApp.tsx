@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DesktopLyricsBar } from "@/components/desktop-lyrics/DesktopLyricsBar";

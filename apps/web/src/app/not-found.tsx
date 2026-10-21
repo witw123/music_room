@@ -1,4 +1,4 @@
-export default function NotFoundPage() {
+﻿export default function NotFoundPage() {
   return (
     <main
       style={{

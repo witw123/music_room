@@ -7,7 +7,7 @@ import {
   ProviderAlbumTrackTable,
   type ProviderAlbumTrackActions
 } from "./ProviderAlbumDetailView";
-import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
+import { MediaArtwork } from "@/components/ui/media-artwork";
 import {
   PlayIcon,
   HeartIcon,
@@ -124,18 +124,5 @@ function DescriptionDisclosure({ description }: { description: string | null }) 
 }
 
 function PlaylistArtwork({ alt, src }: { alt: string; src: string | null }) {
-  const [failed, setFailed] = useState(false);
-  if (!src || failed) {
-    return (
-      <div className="relative aspect-square w-full rounded-xl bg-surface border border-surface-border flex items-center justify-center text-2xl text-foreground-muted/40 shadow-xs">
-        ♪
-      </div>
-    );
-  }
-  return (
-    <div className="relative aspect-square w-full rounded-xl overflow-hidden border border-surface-border shadow-xs">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img alt={alt} className="aspect-square w-full h-full object-cover" decoding="async" loading="lazy" onError={() => setFailed(true)} src={getArtworkSourceUrl(src)} />
-    </div>
-  );
+  return <MediaArtwork alt={alt} src={src} rounded="xl" className="shadow-xs" />;
 }

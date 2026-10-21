@@ -2,99 +2,52 @@
 
 import type { ReactNode } from "react";
 import type { AdminIncident, AdminOverview, AdminRoomSummary, AdminUserSummary } from "@music-room/shared";
+import {
+  AlertTriangle,
+  ArrowRight,
+  Bell,
+  FileText,
+  LayoutGrid,
+  LogOut,
+  Plus,
+  Radio,
+  RefreshCw,
+  Server,
+  Users
+} from "lucide-react";
 
 export type AuditRow = { id: string; action: string; targetType: string; targetId: string | null; reason: string | null; result: string; createdAt: string };
 
 export type IconName = "grid" | "radio" | "users" | "alert" | "file" | "server" | "refresh" | "logout" | "arrow" | "bell" | "plus";
 
 export function Icon({ name, size = 16, className = "" }: { name: IconName; size?: number; className?: string }) {
-  const paths: Record<IconName, ReactNode> = {
-    grid: (
-      <>
-        <rect x="3" y="3" width="7" height="7" rx="1" />
-        <rect x="14" y="3" width="7" height="7" rx="1" />
-        <rect x="3" y="14" width="7" height="7" rx="1" />
-        <rect x="14" y="14" width="7" height="7" rx="1" />
-      </>
-    ),
-    radio: (
-      <>
-        <circle cx="12" cy="12" r="2" />
-        <path d="M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4M4.7 4.7a10.3 10.3 0 0 0 0 14.6M19.3 4.7a10.3 10.3 0 0 1 0 14.6" />
-      </>
-    ),
-    users: (
-      <>
-        <path d="M16 20v-1.5a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4V20" />
-        <circle cx="9.5" cy="7" r="3.5" />
-        <path d="M17 11a3.5 3.5 0 1 0-1-6.8M21 20v-1.5a4 4 0 0 0-3-3.87" />
-      </>
-    ),
-    alert: (
-      <>
-        <path d="m12 3 9 17H3L12 3Z" />
-        <path d="M12 9v4M12 17h.01" />
-      </>
-    ),
-    file: (
-      <>
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
-        <path d="M14 2v6h6M8 13h8M8 17h5" />
-      </>
-    ),
-    server: (
-      <>
-        <rect x="3" y="3" width="18" height="7" rx="1" />
-        <rect x="3" y="14" width="18" height="7" rx="1" />
-        <path d="M7 6.5h.01M7 17.5h.01M11 6.5h6M11 17.5h6" />
-      </>
-    ),
-    refresh: (
-      <>
-        <path d="M20 11a8.1 8.1 0 0 0-14.8-3L3 11" />
-        <path d="M3 5v6h6M4 13a8.1 8.1 0 0 0 14.8 3L21 13" />
-        <path d="M21 19v-6h-6" />
-      </>
-    ),
-    logout: (
-      <>
-        <path d="M10 17l5-5-5-5M15 12H3" />
-        <path d="M21 19V5a2 2 0 0 0-2-2h-6" />
-      </>
-    ),
-    arrow: (
-      <>
-        <path d="M5 12h14M13 6l6 6-6 6" />
-      </>
-    ),
-    bell: (
-      <>
-        <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
-        <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
-      </>
-    ),
-    plus: (
-      <>
-        <path d="M12 5v14M5 12h14" />
-      </>
-    )
-  };
-  return (
-    <svg
-      aria-hidden="true"
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.7"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-    >
-      {paths[name]}
-    </svg>
-  );
+  const props = { size, className, "aria-hidden": true as const };
+  switch (name) {
+    case "grid":
+      return <LayoutGrid {...props} />;
+    case "radio":
+      return <Radio {...props} />;
+    case "users":
+      return <Users {...props} />;
+    case "alert":
+      return <AlertTriangle {...props} />;
+    case "file":
+      return <FileText {...props} />;
+    case "server":
+      return <Server {...props} />;
+    case "refresh":
+      return <RefreshCw {...props} />;
+    case "logout":
+      return <LogOut {...props} />;
+    case "arrow":
+      return <ArrowRight {...props} />;
+    case "bell":
+      return <Bell {...props} />;
+    case "plus":
+      return <Plus {...props} />;
+    default:
+      return null;
+  }
 }
 
 export function Metric({ label, value, meta, color, width }: { label: string; value: number; meta: string; color: string; width: string }) {

@@ -211,7 +211,7 @@ export function RoomReactionOverlay({
             ) : null}
 
             {isHighCombo && (
-              <span className="font-extrabold text-[11px] sm:text-xs tabular-nums text-white bg-accent px-1.5 py-0.5 rounded-full shadow-xs animate-bounce">
+              <span className="font-extrabold text-[11px] sm:text-xs tabular-nums text-white bg-accent px-1.5 py-0.5 rounded-full shadow-xs animate-pulse">
                 x{particle.comboCount}
               </span>
             )}

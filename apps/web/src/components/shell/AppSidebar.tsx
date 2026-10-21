@@ -1,9 +1,22 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { Route } from "next";
+import {
+  Compass,
+  Heart,
+  Home,
+  ListMusic,
+  Music,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Search,
+  Settings,
+  Sun,
+  User
+} from "lucide-react";
 import { storeAwayRoomId } from "@/lib/domain/away-room";
 import {
   applyAppTheme,
@@ -162,11 +175,7 @@ export function AppSidebar({
           }}
         >
           <span className={`flex shrink-0 items-center justify-center rounded-xl bg-accent text-white shadow-sm ${compactMobile ? "h-8 w-8" : "h-9 w-9"} md:h-9 md:w-9`}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M9 18V5l12-2v13" />
-              <circle cx="6" cy="18" r="3" />
-              <circle cx="18" cy="16" r="3" />
-            </svg>
+            <Music size={18} strokeWidth={2} aria-hidden="true" />
           </span>
           <span className={`min-w-0 leading-none ${collapsed ? "md:hidden" : ""}`}>
             <span className="block truncate text-sm font-bold text-foreground tracking-tight">Music Room</span>
@@ -343,119 +352,31 @@ function resolveActiveItem(pathname: string | null): AppNavItemId | null {
 }
 
 function NavIcon({ name, size = 18 }: { name: IconName; size?: number }) {
-  const commonProps = {
-    width: size,
-    height: size,
-    viewBox: "0 0 24 24",
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: 1.8,
-    strokeLinecap: "round" as const,
-    strokeLinejoin: "round" as const,
-    "aria-hidden": true
-  };
-
-  if (name === "home") {
-    return (
-      <svg {...commonProps}>
-        <path d="m3 10 9-7 9 7" />
-        <path d="M5 9.5V21h14V9.5" />
-        <path d="M9 21v-6h6v6" />
-      </svg>
-    );
+  const props = { size, "aria-hidden": true as const, className: "shrink-0" };
+  switch (name) {
+    case "home":
+      return <Home {...props} />;
+    case "playlist":
+      return <ListMusic {...props} />;
+    case "search":
+      return <Search {...props} />;
+    case "discover":
+      return <Compass {...props} />;
+    case "profile":
+      return <User {...props} />;
+    case "favorite":
+      return <Heart {...props} />;
+    case "settings":
+      return <Settings {...props} />;
+    case "collapse":
+      return <PanelLeftClose {...props} />;
+    case "expand":
+      return <PanelLeftOpen {...props} />;
+    case "sun":
+      return <Sun {...props} />;
+    default:
+      return <Music {...props} />;
   }
-
-  if (name === "playlist") {
-    return (
-      <svg {...commonProps}>
-        <path d="M4 5h11" />
-        <path d="M4 10h11" />
-        <path d="M4 15h7" />
-        <path d="M16 15.5V6l5-1v9.5" />
-        <circle cx="14" cy="18" r="2" />
-        <circle cx="19" cy="16.5" r="2" />
-      </svg>
-    );
-  }
-
-  if (name === "search") {
-    return (
-      <svg {...commonProps}>
-        <circle cx="11" cy="11" r="6.5" />
-        <path d="m16 16 4.5 4.5" />
-      </svg>
-    );
-  }
-
-  if (name === "discover") {
-    return (
-      <svg {...commonProps}>
-        <circle cx="12" cy="12" r="8.5" />
-        <path d="m15.8 8.2-2.1 5.5-5.5 2.1 2.1-5.5 5.5-2.1Z" />
-      </svg>
-    );
-  }
-
-  if (name === "profile") {
-    return (
-      <svg {...commonProps}>
-        <circle cx="12" cy="8" r="3.5" />
-        <path d="M4.5 21a7.5 7.5 0 0 1 15 0" />
-      </svg>
-    );
-  }
-
-  if (name === "favorite") {
-    return (
-      <svg {...commonProps}>
-        <path d="M20.8 8.7c0 5.2-8.8 10.3-8.8 10.3S3.2 13.9 3.2 8.7A4.7 4.7 0 0 1 12 6.1a4.7 4.7 0 0 1 8.8 2.6Z" />
-      </svg>
-    );
-  }
-
-  if (name === "settings") {
-    return (
-      <svg {...commonProps}>
-        <path d="m12 3.5 1.3 1.8 2.2-.3.7 2 2 .7-.3 2.2 1.8 1.3-1.8 1.3.3 2.2-2 .7-.7 2-2.2-.3L12 21l-1.3-1.8-2.2.3-.7-2-2-.7.3-2.2L4.3 12l1.8-1.3-.3-2.2 2-.7.7-2 2.2.3L12 3.5Z" />
-        <circle cx="12" cy="12" r="3.2" />
-      </svg>
-    );
-  }
-
-  if (name === "collapse") {
-    return (
-      <svg {...commonProps}>
-        <path d="m13 6-6 6 6 6" />
-        <path d="m19 6-6 6 6 6" />
-      </svg>
-    );
-  }
-
-  if (name === "expand") {
-    return (
-      <svg {...commonProps}>
-        <path d="m11 6 6 6-6 6" />
-        <path d="m5 6 6 6-6 6" />
-      </svg>
-    );
-  }
-
-  if (name === "sun") {
-    return (
-      <svg {...commonProps}>
-        <circle cx="12" cy="12" r="3.5" />
-        <path d="M12 2.5v2M12 19.5v2M4.5 4.5l1.4 1.4M18.1 18.1l1.4 1.4M2.5 12h2M19.5 12h2M4.5 19.5l1.4-1.4M18.1 5.9l1.4-1.4" />
-      </svg>
-    );
-  }
-
-  return (
-    <svg {...commonProps}>
-      <path d="M10 17l5-5-5-5" />
-      <path d="M15 12H3" />
-      <path d="M21 3v18" />
-    </svg>
-  );
 }
 
 

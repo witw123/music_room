@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+﻿import { describe, expect, it, vi } from "vitest";
 import type { RoomSnapshot } from "@music-room/shared";
 import {
   createRoomSnapshotResyncController,

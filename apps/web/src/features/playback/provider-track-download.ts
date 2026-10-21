@@ -1,4 +1,4 @@
-import type { LocalPlaylistTrackRecord } from "@/features/library/indexeddb";
+﻿import type { LocalPlaylistTrackRecord } from "@/features/library/indexeddb";
 import {
   hashAudioBlob,
   toProviderTrackRecord,

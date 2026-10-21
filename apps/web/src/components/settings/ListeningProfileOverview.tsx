@@ -11,7 +11,7 @@ import {
   prepareTrackForImmediatePlayback
 } from "@/features/playback/provider-playback-preparation";
 import { toProviderTrackRecord } from "@/features/playlist/local-playlist";
-import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
+import { MediaArtwork } from "@/components/ui/media-artwork";
 import { TasteExclusionsManager } from "@/components/discovery/TasteExclusionsManager";
 import {
   PlayIcon,
@@ -393,17 +393,7 @@ function StatusToast({
 }
 
 function Artwork({ alt, src, className = "" }: { alt: string; src: string | null; className?: string }) {
-  const [failed, setFailed] = useState(false);
-  const source = src ? getArtworkSourceUrl(src) : null;
-  if (!source || failed) {
-    return (
-      <span aria-label={alt || undefined} className={`flex items-center justify-center bg-surface-elevated text-xs text-foreground-muted ${className}`}>
-        ♪
-      </span>
-    );
-  }
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img alt={alt} className={`object-cover ${className}`} loading="lazy" onError={() => setFailed(true)} src={source} />;
+  return <MediaArtwork alt={alt} src={src} rounded="md" containerClassName={className} />;
 }
 
 function ProfileLoadingSkeleton() {

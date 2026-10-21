@@ -32,8 +32,13 @@ const config: Config = {
         'spin-slow': 'spin 8s linear infinite',
         'fade-in': 'fadeIn 0.3s ease-out forwards',
         'slide-up': 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+        'music-bar': 'musicBar 1s ease-in-out infinite',
       },
       keyframes: {
+        musicBar: {
+          '0%, 100%': { transform: 'scaleY(0.25)' },
+          '50%': { transform: 'scaleY(1)' },
+        },
         fadeIn: {
           '0%': { opacity: '0' },
           '100%': { opacity: '1' },

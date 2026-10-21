@@ -108,9 +108,9 @@ export function PersonalOverview({
         {nowPlaying ? (
           <div className="mt-3 flex items-center gap-2.5 rounded-lg border border-accent/20 bg-accent/[0.06] px-3 py-2 min-w-0">
             <span aria-hidden="true" className="flex items-end gap-0.5 h-3 shrink-0 text-accent">
-              <span className="w-0.5 h-full bg-current rounded-full animate-bounce" style={{ animationDuration: "0.9s" }} />
-              <span className="w-0.5 h-2 bg-current rounded-full animate-bounce" style={{ animationDuration: "1.1s", animationDelay: "0.2s" }} />
-              <span className="w-0.5 h-2.5 bg-current rounded-full animate-bounce" style={{ animationDuration: "0.8s", animationDelay: "0.4s" }} />
+              <span className="w-0.5 h-full bg-current rounded-full animate-music-bar origin-bottom" style={{ animationDuration: "0.9s" }} />
+              <span className="w-0.5 h-full bg-current rounded-full animate-music-bar origin-bottom" style={{ animationDuration: "1.1s", animationDelay: "0.2s" }} />
+              <span className="w-0.5 h-full bg-current rounded-full animate-music-bar origin-bottom" style={{ animationDuration: "0.8s", animationDelay: "0.4s" }} />
             </span>
             <p className="min-w-0 flex-1 truncate text-xs">
               <span className="font-semibold text-accent">正在听</span>

@@ -12,6 +12,7 @@ import {
   type KeyboardEvent,
   type ReactNode
 } from "react";
+import { Loader2, Search, X } from "lucide-react";
 
 export interface SearchBarProps {
   id?: string;
@@ -216,7 +217,7 @@ export const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(function S
               aria-hidden="true"
               className="flex h-4 w-4 shrink-0 items-center justify-center text-foreground-muted/60 mr-2"
             >
-              <SearchIcon />
+              <Search size={16} />
             </span>
           )}
 
@@ -254,7 +255,7 @@ export const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(function S
                 aria-label="清空搜索内容"
                 className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-foreground-muted/50 transition hover:bg-foreground/10 hover:text-foreground"
               >
-                <CloseIcon />
+                <X size={13} />
               </button>
             ) : null}
           </div>
@@ -283,7 +284,7 @@ export const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(function S
           >
             {loading ? (
               <>
-                <SpinnerIcon />
+                <Loader2 size={14} className="animate-spin" />
                 <span>{searchButtonLoadingText}</span>
               </>
             ) : (
@@ -297,59 +298,3 @@ export const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(function S
     </div>
   );
 });
-
-function SearchIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <circle cx="11" cy="11" r="8" />
-      <path d="m21 21-4.3-4.3" />
-    </svg>
-  );
-}
-
-function CloseIcon() {
-  return (
-    <svg
-      width="13"
-      height="13"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M18 6 6 18" />
-      <path d="m6 6 12 12" />
-    </svg>
-  );
-}
-
-function SpinnerIcon() {
-  return (
-    <svg
-      className="h-3.5 w-3.5 animate-spin"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.5"
-    >
-      <circle
-        cx="12"
-        cy="12"
-        r="10"
-        strokeDasharray="32"
-        strokeDashoffset="12"
-      />
-    </svg>
-  );
-}

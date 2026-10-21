@@ -57,10 +57,6 @@ import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { useLocalPlayer } from "@/features/playback/local-player-context";
 import type { AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
-import {
-  getCachedPlaylistData,
-  setCachedPlaylistData
-} from "@/features/workspace/page-data-cache";
 
 type PlaylistDeleteTarget =
   | { kind: "local"; playlist: LocalPlaylistRecord }
@@ -86,28 +82,13 @@ export function PlaylistsWorkspacePage({
     sessionStorageKey: "music-room-session",
     initialStatusMessage: ""
   });
-  const cachedPageData = activeSession ? getCachedPlaylistData(activeSession.userId) : undefined;
-  const [localTracks, setLocalTracks] = useState<LocalPlaylistTrackRecord[]>(
-    () => cachedPageData?.localTracks ?? []
-  );
-  const [localPlaylists, setLocalPlaylists] = useState<LocalPlaylistRecord[]>(
-    () => cachedPageData?.localPlaylists ?? []
-  );
-  const [networkPlaylists, setNetworkPlaylists] = useState<Playlist[]>(
-    () => cachedPageData?.networkPlaylists ?? []
-  );
-  const [localPlaylistDatabaseIds, setLocalPlaylistDatabaseIds] = useState<Record<string, string>>(
-    () => cachedPageData?.localPlaylistDatabaseIds ?? {}
-  );
+  const [localTracks, setLocalTracks] = useState<LocalPlaylistTrackRecord[]>([]);
+  const [localPlaylists, setLocalPlaylists] = useState<LocalPlaylistRecord[]>([]);
+  const [networkPlaylists, setNetworkPlaylists] = useState<Playlist[]>([]);
+  const [localPlaylistDatabaseIds, setLocalPlaylistDatabaseIds] = useState<Record<string, string>>({});
   const [networkArtworkById, setNetworkArtworkById] = useState<Record<string, string[]>>({});
-  const [roomTrackIndex, setRoomTrackIndex] = useState<Map<string, LocalPlaylistTrackRecord>>(
-    () => cachedPageData?.roomTrackIndex ?? new Map()
-  );
-  const [playlistDataLoaded, setPlaylistDataLoaded] = useState(() =>
-    playlistView === "local"
-      ? cachedPageData?.localLoaded === true
-      : cachedPageData?.networkLoaded === true
-  );
+  const [roomTrackIndex, setRoomTrackIndex] = useState<Map<string, LocalPlaylistTrackRecord>>(() => new Map());
+  const [playlistDataLoaded, setPlaylistDataLoaded] = useState(false);
   const [selectedPlaylist, setSelectedPlaylist] = useState<PlaylistSelection | null>(null);
   useBackHandler(() => setSelectedPlaylist(null), selectedPlaylist !== null);
   const [pending, setPending] = useState(false);
@@ -152,14 +133,6 @@ export function PlaylistsWorkspacePage({
       setLocalTracks(tracks);
       setLocalPlaylists(playlists);
       setRoomTrackIndex(roomTracks);
-      if (activeUserId) {
-        setCachedPlaylistData(activeUserId, {
-          localTracks: tracks,
-          localPlaylists: playlists,
-          roomTrackIndex: roomTracks,
-          localLoaded: true
-        });
-      }
       if (playlistView === "local") setPlaylistDataLoaded(true);
       setSelectedPlaylist((current) => {
         if (!current) return null;
@@ -177,12 +150,6 @@ export function PlaylistsWorkspacePage({
       const nextNetworkPlaylists = playlists.filter((playlist) => !isLocalPlaylistMirror(playlist));
       networkPlaylistsRef.current = nextNetworkPlaylists;
       setNetworkPlaylists(nextNetworkPlaylists);
-      if (activeUserId) {
-        setCachedPlaylistData(activeUserId, {
-          networkPlaylists: nextNetworkPlaylists,
-          networkLoaded: true
-        });
-      }
       if (playlistView === "network") setPlaylistDataLoaded(true);
       setSelectedPlaylist((current) => {
         if (!current || current.kind !== "network") return current;
@@ -256,9 +223,6 @@ export function PlaylistsWorkspacePage({
         await syncLocalPlaylistsToDatabase(localPlaylistRecords, databasePlaylists);
       if (version === refreshVersion.current) {
         setLocalPlaylistDatabaseIds(localPlaylistDatabaseIds);
-        if (activeUserId) {
-          setCachedPlaylistData(activeUserId, { localPlaylistDatabaseIds });
-        }
         if (failed) {
           console.warn("Some local playlist mirrors could not be synchronized.");
         } else {
@@ -275,23 +239,10 @@ export function PlaylistsWorkspacePage({
       }
     }
     return localResult.status === "fulfilled" ? localResult.value.tracks.length : 0;
-  }, [activeUserId, playlistView]);
+  }, [playlistView]);
 
   useEffect(() => {
     if (!activeSession) return;
-
-    const cached = getCachedPlaylistData(activeSession.userId);
-    if (cached) {
-      setLocalTracks(cached.localTracks);
-      setLocalPlaylists(cached.localPlaylists);
-      setNetworkPlaylists(cached.networkPlaylists);
-      networkPlaylistsRef.current = cached.networkPlaylists;
-      setLocalPlaylistDatabaseIds(cached.localPlaylistDatabaseIds);
-      setRoomTrackIndex(cached.roomTrackIndex);
-      setPlaylistDataLoaded(
-        playlistView === "local" ? cached.localLoaded : cached.networkLoaded
-      );
-    }
     void refresh().catch(() => setMessage("歌单数据加载失败，请刷新重试。"));
   }, [activeSession, playlistView, refresh]);
 

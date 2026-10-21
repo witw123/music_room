@@ -1,4 +1,4 @@
-import type { ProviderLyrics } from "@music-room/shared";
+﻿import type { ProviderLyrics } from "@music-room/shared";
 import { musicRoomApi } from "@/lib/network/music-room-api";
 
 export type RoomLyricLine = {

@@ -1,9 +1,15 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { createPortal } from "react-dom";
-import { useBackHandler } from "@/lib/desktop/use-back-handler";
-import { Button } from "./button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from "./alert-dialog";
 
 type ConfirmDialogProps = {
   open: boolean;
@@ -26,55 +32,29 @@ export function ConfirmDialog({
   onCancel,
   onConfirm
 }: ConfirmDialogProps) {
-  const cancelButtonRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    cancelButtonRef.current?.focus();
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !pending) onCancel();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onCancel, open, pending]);
-
-  // Mirrors the Escape condition above: a confirm mid-request stays put.
-  useBackHandler(onCancel, open && !pending);
-
-  if (!open) return null;
-
-  return createPortal(
-    <div
-      className="light-modal-scrim z-[var(--z-modal)]"
-      role="presentation"
-      onClick={(event) => {
-        if (!pending && event.target === event.currentTarget) {
-          onCancel();
-        }
-      }}
-    >
-      <div
-        aria-describedby="confirm-dialog-description"
-        aria-labelledby="confirm-dialog-title"
-        aria-modal="true"
-        className="light-dialog-surface custom-scrollbar max-h-[calc(100*var(--app-dvh)-env(safe-area-inset-top)-env(safe-area-inset-bottom)-2rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-lg border border-white/10 bg-surface p-5 shadow-2xl"
-        role="alertdialog"
-      >
-        <h2 id="confirm-dialog-title" className="text-lg font-semibold text-foreground">{title}</h2>
-        <p id="confirm-dialog-description" className="mt-2 text-sm leading-6 text-foreground-muted">{description}</p>
-        <div className="mt-6 flex justify-end gap-2">
-          <Button ref={cancelButtonRef} disabled={pending} onClick={onCancel} type="button" variant="ghost">取消</Button>
-          <Button
-            className={destructive ? "bg-red-600 text-white hover:bg-red-500" : ""}
+  return (
+    <AlertDialog open={open} onOpenChange={(isOpen) => !isOpen && !pending && onCancel()}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogDescription>{description}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={pending} onClick={onCancel}>
+            取消
+          </AlertDialogCancel>
+          <AlertDialogAction
+            destructive={destructive}
             disabled={pending}
-            onClick={onConfirm}
-            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              onConfirm();
+            }}
           >
             {pending ? "正在处理…" : confirmLabel}
-          </Button>
-        </div>
-      </div>
-    </div>,
-    document.body
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }

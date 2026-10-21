@@ -16,8 +16,6 @@ import {
 import type { AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { musicRoomApi } from "@/lib/network/music-room-api";
-import { getProfileProviderRecommendations } from "@/features/discovery/profile-provider-recommendations";
-import { personalizationChangedEvent } from "@/features/personalization/use-personalization-reporter";
 import { useWorkspacePageActive } from "@/features/workspace/page-activity";
 import { useFavoriteTracks } from "@/features/favorites/use-favorite-tracks";
 import { useLocalPlayer } from "@/features/playback/local-player-context";
@@ -35,11 +33,7 @@ import {
   toPlaybackPreparationErrorMessage
 } from "@/features/playback/provider-playback-preparation";
 import { downloadProviderTrackToLibrary } from "@/features/playback/provider-track-download";
-import {
-  getCachedDiscoverData,
-  setCachedDiscoverData,
-  invalidateDiscoverDataCache
-} from "@/features/workspace/page-data-cache";
+import { useDiscoverRecommendations } from "@/features/discovery/use-discover-recommendations";
 import {
   SlidersIcon,
   PlayIcon
@@ -65,7 +59,6 @@ import {
   toErrorMessage,
   moodStations,
   type Track,
-  type DiscoverData,
   type Detail,
   type DiscoverPlaylistCard,
   type DiscoverTrackActions
@@ -83,13 +76,18 @@ export function DiscoverPage() {
     pendingFavoriteKey,
     toggleFavorite: toggleFavoriteTrack
   } = useFavoriteTracks(activeSession?.userId);
-  const [data, setData] = useState<DiscoverData | null>(() =>
-    activeSession ? getCachedDiscoverData(activeSession.userId) ?? null : null
-  );
-  const [loading, setLoading] = useState(() =>
-    !(activeSession && getCachedDiscoverData(activeSession.userId))
-  );
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const {
+    data: discoverData,
+    isLoading: discoverLoading,
+    error: discoverError,
+    refetch: refetchDiscover
+  } = useDiscoverRecommendations(activeSession?.userId, pageActive);
+  const data = discoverData ?? null;
+  const loading = discoverLoading && !data;
+  const [actionErrorMessage, setErrorMessage] = useState<string | null>(null);
+  const errorMessage = actionErrorMessage ?? (discoverError ? toErrorMessage(discoverError) : null);
+  const detailRequestVersionRef = useRef(0);
+  const detailAbortRef = useRef<AbortController | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
@@ -141,80 +139,9 @@ export function DiscoverPage() {
     };
   }, [activeSession, pageActive]);
 
-  const requestVersionRef = useRef(0);
-  const requestAbortRef = useRef<AbortController | null>(null);
-  const lastProfileRefreshAtRef = useRef(0);
-  const profileRefreshTimerRef = useRef<number | null>(null);
-
-  const load = useCallback(async (force = false) => {
-    if (!pageActive || !hydrated || !activeSession) return;
-    if (activeSession && !force) {
-      const cached = getCachedDiscoverData(activeSession.userId);
-      if (cached) {
-        setData(cached);
-        setLoading(false);
-        return;
-      }
-    }
-    const version = ++requestVersionRef.current;
-    requestAbortRef.current?.abort();
-    const controller = new AbortController();
-    requestAbortRef.current = controller;
-    setLoading(true);
-    setErrorMessage(null);
-
-    try {
-      const recommendations = await getProfileProviderRecommendations({
-        signal: controller.signal
-      });
-      if (controller.signal.aborted || requestVersionRef.current !== version) return;
-      if (activeSession) {
-        setCachedDiscoverData(activeSession.userId, recommendations);
-      }
-      setData(recommendations);
-    } catch (error) {
-      if (controller.signal.aborted || requestVersionRef.current !== version) return;
-      setErrorMessage(toErrorMessage(error));
-    } finally {
-      if (requestVersionRef.current === version) setLoading(false);
-    }
-  }, [activeSession, hydrated, pageActive]);
-
-  useEffect(() => {
-    if (!hydrated || !pageActive) return;
-    setDetailLoading(null);
-    void load();
-    return () => {
-      requestVersionRef.current += 1;
-      requestAbortRef.current?.abort();
-    };
-  }, [hydrated, activeSession, load, pageActive]);
-
-  useEffect(() => {
-    if (!activeSession) return;
-    const handlePersonalizationChange = () => {
-      invalidateDiscoverDataCache(activeSession.userId);
-      if (!pageActive) return;
-      const now = Date.now();
-      if (now - lastProfileRefreshAtRef.current < 4000) return;
-      lastProfileRefreshAtRef.current = now;
-      if (profileRefreshTimerRef.current !== null) {
-        window.clearTimeout(profileRefreshTimerRef.current);
-      }
-      profileRefreshTimerRef.current = window.setTimeout(() => {
-        invalidateDiscoverDataCache(activeSession.userId);
-        void load(true);
-      }, 500);
-    };
-
-    window.addEventListener(personalizationChangedEvent, handlePersonalizationChange);
-    return () => {
-      window.removeEventListener(personalizationChangedEvent, handlePersonalizationChange);
-      if (profileRefreshTimerRef.current !== null) {
-        window.clearTimeout(profileRefreshTimerRef.current);
-      }
-    };
-  }, [activeSession, load, pageActive]);
+  const load = useCallback(async (_force = false) => {
+    await refetchDiscover();
+  }, [refetchDiscover]);
 
   async function resolveTrackArtwork(track: Track) {
     if (track.artworkUrl) return track;
@@ -473,26 +400,26 @@ export function DiscoverPage() {
       return;
     }
 
-    const version = ++requestVersionRef.current;
-    requestAbortRef.current?.abort();
+    const version = ++detailRequestVersionRef.current;
+    detailAbortRef.current?.abort();
     const controller = new AbortController();
-    requestAbortRef.current = controller;
+    detailAbortRef.current = controller;
     setDetailLoading(key);
     try {
       const full = playlist.provider === "netease"
         ? await musicRoomApi.getNeteasePlaylist(playlist.providerPlaylistId)
         : await musicRoomApi.getQqMusicPlaylist(playlist.providerPlaylistId);
-      if (controller.signal.aborted || requestVersionRef.current !== version) return;
+      if (controller.signal.aborted || detailRequestVersionRef.current !== version) return;
       setDetail({
         summary: playlist,
         value: full
       });
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err) {
-      if (controller.signal.aborted || requestVersionRef.current !== version) return;
+      if (controller.signal.aborted || detailRequestVersionRef.current !== version) return;
       setErrorMessage(toErrorMessage(err));
     } finally {
-      if (requestVersionRef.current === version) setDetailLoading(null);
+      if (detailRequestVersionRef.current === version) setDetailLoading(null);
     }
   };
 

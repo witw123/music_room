@@ -5,21 +5,33 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import type { PersonalizationExclusion, PlaybackMode } from "@music-room/shared";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Globe,
+  HardDrive,
+  Info,
+  Layout,
+  PlayCircle,
+  Search,
+  Sliders,
+  X
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { CustomLayoutEditor } from "./CustomLayoutEditor";
 import { LocalStorageManagementCard } from "./LocalStorageSettingsSection";
 import { AboutSettingsSection } from "./AboutSettingsSection";
+import { SettingRow, SettingsSection } from "./SettingRow";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
 import { musicRoomApi } from "@/lib/network/music-room-api";
 import {
-  appSettingsChangeEvent,
   getDefaultAppSettings,
-  getAppSettings,
   normalizeCustomLayoutSettings,
   resetAppSettings,
   updateAppSettings,
-  type AppSettings,
+  useAppSettings,
   type AudioQualityPreference,
   type PlayerStyle,
   type ThemePreference
@@ -94,37 +106,37 @@ const SETTINGS_CATEGORIES: SettingsCategoryConfig[] = [
     id: "general",
     label: "通用",
     description: "基础外观、动效与系统通知偏好",
-    icon: GeneralIcon
+    icon: (props) => <Sliders size={16} {...props} />
   },
   {
     id: "playback",
     label: "播放策略",
     description: "音量、音质、播放模式与缓存规则",
-    icon: PlaybackIcon
+    icon: (props) => <PlayCircle size={16} {...props} />
   },
   {
     id: "appearance",
     label: "界面外观",
     description: "界面缩放与画布自定义布局",
-    icon: AppearanceIcon
+    icon: (props) => <Layout size={16} {...props} />
   },
   {
     id: "network",
     label: "网络与P2P",
     description: "本地目录授权与个性化推荐画像",
-    icon: NetworkIcon
+    icon: (props) => <Globe size={16} {...props} />
   },
   {
     id: "storage",
     label: "存储管理",
     description: "本地曲库、缓存占用统计与数据清理",
-    icon: StorageIcon
+    icon: (props) => <HardDrive size={16} {...props} />
   },
   {
     id: "about",
     label: "关于与账号",
     description: "客户端版本、更新检查与账号会话",
-    icon: AboutIcon
+    icon: (props) => <Info size={16} {...props} />
   }
 ];
 
@@ -145,7 +157,7 @@ export function SettingsPage() {
     sessionStorageKey: "music-room-session",
     initialStatusMessage: ""
   });
-  const [settings, setSettings] = useState<AppSettings>(() => getDefaultAppSettings());
+  const settings = useAppSettings();
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isCustomLayoutEditorOpen, setIsCustomLayoutEditorOpen] = useState(false);
   const [recommendationExclusions, setRecommendationExclusions] = useState<PersonalizationExclusion[]>([]);
@@ -190,20 +202,6 @@ export function SettingsPage() {
   }, [activeSession, authEntryHref, hydrated, router]);
 
   useEffect(() => {
-    const syncSettings = () => {
-      const next = getAppSettings();
-      setSettings(next);
-    };
-    syncSettings();
-    window.addEventListener(appSettingsChangeEvent, syncSettings);
-    window.addEventListener("storage", syncSettings);
-    return () => {
-      window.removeEventListener(appSettingsChangeEvent, syncSettings);
-      window.removeEventListener("storage", syncSettings);
-    };
-  }, []);
-
-  useEffect(() => {
     if (isCustomLayoutEditorOpen) {
       document.documentElement.dataset.customLayoutEditorOpen = "true";
     } else {
@@ -223,13 +221,13 @@ export function SettingsPage() {
   }, [activeSession]);
 
   const patchSettings = useCallback((patch: Parameters<typeof updateAppSettings>[0]) => {
-    setSettings(updateAppSettings(patch));
+    updateAppSettings(patch);
     setStatusMessage("设置已保存");
   }, []);
 
   const resetSettings = useCallback(() => {
     if (!window.confirm("确定要恢复默认设置吗？本地歌曲和歌单不会被删除。")) return;
-    setSettings(resetAppSettings());
+    resetAppSettings();
     setStatusMessage("已恢复默认设置");
   }, []);
 
@@ -933,7 +931,7 @@ export function SettingsPage() {
             type="button"
           >
             <span>进入</span>
-            <ChevronRightIcon />
+            <ChevronRight size={14} className="shrink-0" />
           </button>
           <span className="text-xs text-foreground-muted md:hidden">请使用桌面浏览器调整</span>
         </SettingRow>
@@ -1189,7 +1187,7 @@ export function SettingsPage() {
         {/* 轻量级即时搜索过滤框 */}
         <div className="relative flex-1 max-w-sm">
           <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-foreground-muted">
-            <SearchIcon className="h-3.5 w-3.5" />
+            <Search size={14} />
           </span>
           <input
             aria-label="搜索设置"
@@ -1214,7 +1212,7 @@ export function SettingsPage() {
               title="清空搜索 (Esc)"
               type="button"
             >
-              <ClearIcon className="h-3 w-3" />
+              <X size={12} />
             </button>
           ) : null}
         </div>
@@ -1223,7 +1221,7 @@ export function SettingsPage() {
           className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-surface-border bg-surface px-2.5 sm:px-3 text-xs font-medium text-foreground-muted transition-colors hover:bg-surface-hover hover:text-foreground"
           href="/app/profile"
         >
-          <ChevronLeftIcon className="h-3.5 w-3.5" />
+          <ChevronLeft size={14} />
           <span className="hidden sm:inline">返回到我的页</span>
           <span className="sm:hidden">返回</span>
         </Link>
@@ -1305,7 +1303,7 @@ export function SettingsPage() {
                   type="button"
                 >
                   <span className="flex items-center gap-2">
-                    <SearchIcon className="h-3.5 w-3.5 text-foreground-muted" />
+                    <Search size={14} className="text-foreground-muted shrink-0" />
                     <span>全部搜索结果</span>
                   </span>
                   <span className="rounded-full bg-surface-hover px-1.5 py-0.5 text-[10px] font-mono tabular-nums text-foreground-muted">
@@ -1387,7 +1385,7 @@ export function SettingsPage() {
           {/* 无匹配空状态 */}
           {isSearching && displayedItems.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-xl border border-surface-border bg-surface/30 px-4 py-12 text-center backdrop-blur-xs">
-              <SearchIcon className="mb-3 h-8 w-8 text-foreground-muted/40" />
+              <Search size={32} className="mb-3 text-foreground-muted/40" />
               <p className="text-sm font-medium text-foreground">未找到匹配的设置项</p>
               <p className="mt-1 text-xs text-foreground-muted">
                 没有找到与“{searchQuery}”相关的设置，尝试更换关键词或清除搜索。
@@ -1482,64 +1480,6 @@ export function SettingsPage() {
   );
 }
 
-function SettingsSection({
-  title,
-  badge,
-  children
-}: {
-  title: string;
-  badge?: string;
-  children: ReactNode;
-}) {
-  return (
-    <section className="rounded-xl border border-surface-border bg-surface/40 p-4 sm:p-5 backdrop-blur-xs">
-      <div className="mb-2 flex items-center gap-2">
-        {badge ? (
-          <span className="rounded bg-accent/10 px-1.5 py-0.5 text-[10px] font-medium text-accent">
-            {badge}
-          </span>
-        ) : null}
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground-muted">{title}</h2>
-      </div>
-      <div className="divide-y divide-surface-border/50">{children}</div>
-    </section>
-  );
-}
-
-function SettingRow({
-  label,
-  description,
-  children,
-  stacked = false
-}: {
-  label: string;
-  description: string;
-  children: ReactNode;
-  stacked?: boolean;
-}) {
-  if (stacked) {
-    return (
-      <div className="py-3 sm:py-3.5">
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-foreground">{label}</p>
-          <p className="mt-0.5 text-xs leading-relaxed text-foreground-muted">{description}</p>
-        </div>
-        <div className="mt-2.5 w-full">{children}</div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex min-h-12 items-center justify-between gap-3 py-2.5 sm:gap-4">
-      <div className="min-w-0 pr-1 sm:pr-2">
-        <p className="text-sm font-medium text-foreground">{label}</p>
-        <p className="mt-0.5 text-xs leading-relaxed text-foreground-muted">{description}</p>
-      </div>
-      <div className="shrink-0">{children}</div>
-    </div>
-  );
-}
-
 function Toggle({
   checked,
   disabled = false,
@@ -1552,128 +1492,11 @@ function Toggle({
   onChange: (checked: boolean) => void;
 }) {
   return (
-    <label
-      className={`inline-flex min-h-8 min-w-10 items-center justify-center select-none ${
-        disabled ? "cursor-not-allowed opacity-45" : "cursor-pointer"
-      }`}
-      title={label}
-    >
-      <input
-        aria-label={label}
-        checked={checked}
-        className="peer sr-only"
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.checked)}
-        type="checkbox"
-      />
-      <span
-        className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-transparent transition-colors duration-200 ease-in-out peer-focus-visible:ring-2 peer-focus-visible:ring-accent ${
-          checked ? "bg-accent" : "bg-surface-hover"
-        }`}
-      >
-        <span
-          className={`pointer-events-none inline-block h-3.5 w-3.5 rounded-full bg-white shadow-xs transition-transform duration-200 ease-in-out ${
-            checked ? "translate-x-[19px]" : "translate-x-[3px]"
-          }`}
-        />
-      </span>
-    </label>
-  );
-}
-
-// 通用图标系列 (大众行业通用隐喻，16x16，极简克制)
-function GeneralIcon({ className = "h-4 w-4" }: { className?: string }) {
-  return (
-    <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75"
-      />
-    </svg>
-  );
-}
-
-function PlaybackIcon({ className = "h-4 w-4" }: { className?: string }) {
-  return (
-    <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-      <circle cx="12" cy="12" r="9" strokeLinecap="round" strokeLinejoin="round" />
-      <polygon fill="currentColor" points="10 8 16 12 10 16 10 8" stroke="none" />
-    </svg>
-  );
-}
-
-function AppearanceIcon({ className = "h-4 w-4" }: { className?: string }) {
-  return (
-    <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-      <rect height="18" rx="2" strokeLinecap="round" strokeLinejoin="round" width="18" x="3" y="3" />
-      <path d="M9 3v18M3 9h6" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function NetworkIcon({ className = "h-4 w-4" }: { className?: string }) {
-  return (
-    <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-      <circle cx="12" cy="12" r="9" strokeLinecap="round" strokeLinejoin="round" />
-      <path
-        d="M3.6 9h16.8M3.6 15h16.8M11.5 3a17 17 0 0 0 0 18M12.5 3a17 17 0 0 1 0 18"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function StorageIcon({ className = "h-4 w-4" }: { className?: string }) {
-  return (
-    <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-      <rect height="6" rx="2" strokeLinecap="round" strokeLinejoin="round" width="18" x="3" y="4" />
-      <rect height="6" rx="2" strokeLinecap="round" strokeLinejoin="round" width="18" x="3" y="14" />
-      <line strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" x1="6" x2="6.01" y1="7" y2="7" />
-      <line strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" x1="6" x2="6.01" y1="17" y2="17" />
-    </svg>
-  );
-}
-
-function AboutIcon({ className = "h-4 w-4" }: { className?: string }) {
-  return (
-    <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-      <circle cx="12" cy="12" r="9" strokeLinecap="round" strokeLinejoin="round" />
-      <line strokeLinecap="round" strokeLinejoin="round" x1="12" x2="12" y1="16" y2="12" />
-      <line strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" x1="12" x2="12.01" y1="8" y2="8" />
-    </svg>
-  );
-}
-
-function SearchIcon({ className = "h-4 w-4" }: { className?: string }) {
-  return (
-    <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-      <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-    </svg>
-  );
-}
-
-function ClearIcon({ className = "h-3 w-3" }: { className?: string }) {
-  return (
-    <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-    </svg>
-  );
-}
-
-function ChevronRightIcon() {
-  return (
-    <svg aria-hidden="true" fill="none" height="14" viewBox="0 0 24 24" width="14">
-      <path d="m9 5 7 7-7 7" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-    </svg>
-  );
-}
-
-function ChevronLeftIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
-  return (
-    <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-      <path d="m15 18-6-6 6-6" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
+    <Switch
+      aria-label={label}
+      checked={checked}
+      disabled={disabled}
+      onCheckedChange={onChange}
+    />
   );
 }

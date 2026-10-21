@@ -17,10 +17,6 @@ import {
 } from "@/lib/network/music-room-api";
 import { Button } from "@/components/ui/button";
 import { SearchBar } from "@/components/ui/search-bar";
-import {
-  getCachedProviderAccount,
-  setCachedProviderAccount
-} from "@/features/workspace/page-data-cache";
 
 const qualityLabels = {
   standard: "标准",
@@ -141,9 +137,7 @@ function ProviderSourcePanelBase<TrackT extends ProviderTrackCandidate, AccountT
   onImportTrack?: (track: TrackT) => Promise<void>;
   mode?: "full" | "account";
 }) {
-  const [account, setAccount] = useState<ProviderAccountLike | null>(() =>
-    activeSession ? getCachedProviderAccount(activeSession.userId, adapter.cachedProvider) ?? null : null
-  );
+  const [account, setAccount] = useState<ProviderAccountLike | null>(null);
   const [qrSession, setQrSession] = useState<{
     attemptId: string;
     qrimg: string;
@@ -164,7 +158,6 @@ function ProviderSourcePanelBase<TrackT extends ProviderTrackCandidate, AccountT
     void adapter.api.getAccount()
       .then((nextAccount) => {
         if (!cancelled) {
-          setCachedProviderAccount(activeSession.userId, adapter.cachedProvider, nextAccount);
           setAccount(nextAccount);
           setErrorMessage(null);
         }
@@ -193,7 +186,6 @@ function ProviderSourcePanelBase<TrackT extends ProviderTrackCandidate, AccountT
         if (cancelled) return;
         if (status.status === "connected" && status.account) {
           setAccount(status.account);
-          setCachedProviderAccount(activeSession.userId, adapter.cachedProvider, status.account);
           setQrSession(null);
           setErrorMessage(null);
           setPendingAction(null);
@@ -231,9 +223,7 @@ function ProviderSourcePanelBase<TrackT extends ProviderTrackCandidate, AccountT
     return null;
   }
 
-  const displayedAccount = account ?? (
-    activeSession ? getCachedProviderAccount(activeSession.userId, adapter.cachedProvider) ?? null : null
-  );
+  const displayedAccount = account;
 
   const startQrLogin = async () => {
     setPendingAction("qr");
@@ -282,7 +272,6 @@ function ProviderSourcePanelBase<TrackT extends ProviderTrackCandidate, AccountT
     try {
       await adapter.api.disconnect();
       setAccount(adapter.disconnectedAccount);
-      setCachedProviderAccount(activeSession.userId, adapter.cachedProvider, adapter.disconnectedAccount);
       setResults([]);
     } catch (error) {
       setErrorMessage(toProviderErrorMessage(adapter, error));

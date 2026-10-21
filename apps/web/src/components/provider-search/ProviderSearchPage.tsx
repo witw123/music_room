@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   NeteaseAccountStatus,
   ProviderAlbumDetail,
@@ -34,12 +34,7 @@ import { SearchBar } from "@/components/ui/search-bar";
 import { Button } from "@/components/ui/button";
 import { BilibiliImportDialog } from "./BilibiliImportDialog";
 import { useLocalPlayer } from "@/features/playback/local-player-context";
-import {
-  getCachedFavorites,
-  getCachedProviderAccount,
-  setCachedFavorites,
-  setCachedProviderAccount
-} from "@/features/workspace/page-data-cache";
+import { useFavoriteAlbums } from "@/features/favorites/use-favorite-albums";
 import { useFavoriteTracks } from "@/features/favorites/use-favorite-tracks";
 import { rankSearchResultsWithPersonalization } from "@/features/personalization/rank-search-results";
 import {
@@ -116,9 +111,8 @@ export function ProviderSearchPage({
     ? initialProvider
     : enabledProviders[0] ?? "netease";
   const [provider, setProvider] = useState<Provider>(defaultProvider);
-  const [account, setAccount] = useState<Account | null>(() =>
-    activeSession && defaultProvider !== "bilibili" ? getCachedProviderAccount(activeSession.userId, defaultProvider) ?? null : null
-  );
+  const { albums: favoriteAlbums, saveFavoriteAlbum, deleteFavoriteAlbum } = useFavoriteAlbums(activeSession?.userId);
+  const [account, setAccount] = useState<Account | null>(null);
   const [uncontrolledKeywords, setUncontrolledKeywords] = useState("");
   const keywords = controlledKeywords ?? uncontrolledKeywords;
   const isConnected = provider === "bilibili" || account?.connected === true;
@@ -142,10 +136,10 @@ export function ProviderSearchPage({
   const searchRequestRef = useRef(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [favoriteAlbumIds, setFavoriteAlbumIds] = useState<Set<string>>(() => {
-    const cachedItems = activeSession ? getCachedFavorites(activeSession.userId) ?? [] : [];
-    return new Set(cachedItems.map((item) => albumKey(item.provider, item.providerAlbumId)));
-  });
+  const favoriteAlbumIds = useMemo(
+    () => new Set(favoriteAlbums.map((item) => albumKey(item.provider, item.providerAlbumId))),
+    [favoriteAlbums]
+  );
   const [playlistPickerTrack, setPlaylistPickerTrack] = useState<Track | null>(null);
   const [playlistPickerAlbum, setPlaylistPickerAlbum] = useState<ProviderAlbumDetail | null>(null);
   const [playlistPickerAnchor, setPlaylistPickerAnchor] = useState<AnchoredDialogAnchor | null>(null);
@@ -219,35 +213,9 @@ export function ProviderSearchPage({
   }, [isConnected, keywords, provider, searchSuggestionsOpen]);
 
   useEffect(() => {
-    if (!activeSession) return;
-    const cachedItems = getCachedFavorites(activeSession.userId);
-    if (cachedItems) {
-      setFavoriteAlbumIds(new Set(cachedItems.map((item) => albumKey(item.provider, item.providerAlbumId))));
-    }
-    let cancelled = false;
-    void musicRoomApi.listFavoriteAlbums()
-      .then((items) => {
-        if (!cancelled) {
-          setCachedFavorites(activeSession.userId, items);
-          setFavoriteAlbumIds(new Set(items.map((item) => albumKey(item.provider, item.providerAlbumId))));
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setFavoriteAlbumIds(new Set());
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [activeSession]);
-
-  useEffect(() => {
     if (!activeSession || !enabledProviders.includes(provider)) return;
     let cancelled = false;
-    setAccount(
-      activeSession && provider !== "bilibili"
-        ? getCachedProviderAccount(activeSession.userId, provider) ?? null
-        : null
-    );
+    setAccount(null);
     searchRequestRef.current += 1;
     setResults([]);
     setBilibiliCollections([]);
@@ -268,7 +236,6 @@ export function ProviderSearchPage({
     void load()
       .then((nextAccount) => {
         if (!cancelled) {
-          setCachedProviderAccount(activeSession.userId, provider, nextAccount);
           setAccount(nextAccount);
         }
       })
@@ -686,8 +653,8 @@ export function ProviderSearchPage({
       const favKey = albumKey(detail.provider, detail.providerPlaylistId);
       if (!favoriteAlbumIds.has(favKey) && activeSession) {
         try {
-          await musicRoomApi.saveFavoriteAlbum({
-            provider: detail.provider,
+          await saveFavoriteAlbum({
+            provider: detail.provider as "netease" | "qqmusic",
             providerAlbumId: detail.providerPlaylistId,
             title: detail.title,
             artist: detail.creatorName ?? "网络歌单",
@@ -696,7 +663,6 @@ export function ProviderSearchPage({
             releaseTime: null,
             trackCount: detail.trackCount
           });
-          setFavoriteAlbumIds((prev) => new Set(prev).add(favKey));
         } catch {
           // Non-blocking
         }
@@ -744,21 +710,11 @@ export function ProviderSearchPage({
     setErrorMessage(null);
     try {
       if (favoriteAlbumIds.has(id)) {
-        await musicRoomApi.deleteFavoriteAlbum(item.provider, item.providerAlbumId);
-        setFavoriteAlbumIds((current) => {
-          const next = new Set(current);
-          next.delete(id);
-          return next;
-        });
-        const cachedItems = getCachedFavorites(activeSession.userId) ?? [];
-        setCachedFavorites(
-          activeSession.userId,
-          cachedItems.filter((candidate) => candidate.provider !== item.provider || candidate.providerAlbumId !== item.providerAlbumId)
-        );
+        await deleteFavoriteAlbum({ provider: item.provider as "netease" | "qqmusic", providerAlbumId: item.providerAlbumId });
         setStatusMessage(`已取消收藏《${item.title}》。`);
       } else {
-        await musicRoomApi.saveFavoriteAlbum({
-          provider: item.provider,
+        await saveFavoriteAlbum({
+          provider: item.provider as "netease" | "qqmusic",
           providerAlbumId: item.providerAlbumId,
           title: item.title,
           artist: item.artist,
@@ -767,25 +723,6 @@ export function ProviderSearchPage({
           releaseTime: item.releaseTime,
           trackCount: item.trackCount
         });
-        setFavoriteAlbumIds((current) => new Set(current).add(id));
-        const cachedItems = getCachedFavorites(activeSession.userId) ?? [];
-        const nextItem = {
-          id: `optimistic:${id}`,
-          provider: item.provider,
-          providerAlbumId: item.providerAlbumId,
-          title: item.title,
-          artist: item.artist,
-          artworkUrl: item.artworkUrl,
-          description: item.description,
-          releaseTime: item.releaseTime,
-          trackCount: item.trackCount,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        };
-        setCachedFavorites(
-          activeSession.userId,
-          [...cachedItems.filter((candidate) => candidate.provider !== item.provider || candidate.providerAlbumId !== item.providerAlbumId), nextItem]
-        );
         setStatusMessage(`已收藏《${item.title}》。`);
       }
     } catch (error) {

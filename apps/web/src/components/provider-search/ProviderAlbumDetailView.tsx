@@ -10,7 +10,7 @@ import { FavoriteTrackButton } from "@/components/ui/FavoriteTrackButton";
 import { MobileTrackActionsMenu, type MobileTrackAction } from "@/components/ui/MobileTrackActionsMenu";
 import { formatDuration } from "@/lib/domain/music-room-ui";
 import { getAnchoredDialogAnchor, type AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
-import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
+import { MediaArtwork } from "@/components/ui/media-artwork";
 import {
   PlayIcon,
   HeartIcon,
@@ -457,31 +457,11 @@ function MoreIcon() {
 }
 
 function AlbumArtwork({ alt, src }: { alt: string; src: string | null }) {
-  const [failed, setFailed] = useState(false);
-  if (!src || failed) {
-    return (
-      <div className="relative aspect-square w-full rounded-xl bg-surface border border-surface-border flex items-center justify-center text-2xl text-foreground-muted/40 shadow-xs">
-        ♪
-      </div>
-    );
-  }
-  return (
-    <div className="relative aspect-square w-full rounded-xl overflow-hidden border border-surface-border shadow-xs">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img alt={alt} className="aspect-square w-full h-full object-cover" decoding="async" loading="lazy" onError={() => setFailed(true)} src={getArtworkSourceUrl(src)} />
-    </div>
-  );
+  return <MediaArtwork alt={alt} src={src} rounded="xl" className="shadow-xs" />;
 }
 
 function TrackArtwork({ alt, src }: { alt: string; src: string | null }) {
-  const [failed, setFailed] = useState(false);
-  if (!src || failed) {
-    return <span aria-label={alt} className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-surface border border-surface-border text-xs text-foreground-muted">♪</span>;
-  }
-  return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img alt={alt} className="h-9 w-9 shrink-0 rounded-lg object-cover border border-surface-border shadow-xs" decoding="async" loading="lazy" onError={() => setFailed(true)} src={getArtworkSourceUrl(src)} />
-  );
+  return <MediaArtwork alt={alt} src={src} rounded="lg" containerClassName="h-9 w-9" className="shadow-xs" />;
 }
 
 function Icon({ name }: { name: "search" | "plus" }) {

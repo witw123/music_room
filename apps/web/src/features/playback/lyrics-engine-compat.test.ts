@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+﻿import { afterEach, describe, expect, it, vi } from "vitest";
 
 /**
  * `Intl.Segmenter` needs Chrome 87+ / Safari 14.1+. The Capacitor WebView is

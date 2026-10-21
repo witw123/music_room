@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useEffect, useRef, useState } from "react";
+import { Check, CheckSquare, Copy, GripVertical, Play, Plus, Save, Trash2 } from "lucide-react";
 import type { AuthSession, RoomMember, TrackMeta } from "@music-room/shared";
 import { formatDuration } from "@/lib/domain/music-room-ui";
 import { Button } from "@/components/ui/button";
@@ -98,45 +99,28 @@ function TrackListSectionBase({
     {
       id: "play",
       label: "立即播放",
-      icon: (
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M8 5v14l11-7z" />
-        </svg>
-      ),
+      icon: <Play size={14} fill="currentColor" />,
       disabled: pendingAction !== null,
       onSelect: () => void runAction(`play:${contextMenu.track.id}`, () => onPlayTrack(contextMenu.track.id))
     },
     {
       id: "queue",
       label: "加入播放队列",
-      icon: (
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 5v14M5 12h14" />
-        </svg>
-      ),
+      icon: <Plus size={14} />,
       disabled: !canAddToQueue || pendingAction !== null,
       onSelect: () => void runAction(`queue:${contextMenu.track.id}`, () => onAddToQueue(contextMenu.track.id))
     },
     ...(contextMenu.isSaved ? [] : [{
       id: "save-local",
       label: "保存到本地",
-      icon: (
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M5 4h11l3 3v13H5z" /><path d="M8 4v5h8V4" /><path d="M8 20v-5h8v5" />
-        </svg>
-      ),
+      icon: <Save size={14} />,
       disabled: pendingAction !== null,
       onSelect: () => void runAction(`save:${contextMenu.track.id}`, () => onSaveTrackToLocal(contextMenu.track))
     }]),
     {
       id: "copy",
       label: "复制歌曲信息",
-      icon: (
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
-          <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
-        </svg>
-      ),
+      icon: <Copy size={14} />,
       onSelect: () => {
         if (typeof navigator !== "undefined" && navigator.clipboard) {
           void navigator.clipboard.writeText(`${contextMenu.track.title} - ${contextMenu.track.artist}`);
@@ -147,11 +131,7 @@ function TrackListSectionBase({
       id: "delete",
       label: "从房间移除",
       destructive: true,
-      icon: (
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M4 7h16M10 11v6M14 11v6M9 7V4h6v3M6 7l1 13h10l1-13" />
-        </svg>
-      ),
+      icon: <Trash2 size={14} />,
       disabled: !canManageLibrary || pendingAction !== null,
       onSelect: () => void runAction(`delete:${contextMenu.track.id}`, () => onDeleteTrack(contextMenu.track.id))
     }] : [])
@@ -565,10 +545,7 @@ function TrackListSectionBase({
               }}
               title={isSelectMode ? "退出批量操作" : "批量操作"}
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <rect width="18" height="18" x="3" y="3" rx="2" />
-                <path d="m9 12 2 2 4-4" />
-              </svg>
+              <CheckSquare size={13} aria-hidden="true" />
               <span>{isSelectMode ? "退出" : "批量"}</span>
             </button>
           )}
@@ -596,7 +573,7 @@ function TrackListSectionBase({
                   }`}
                 >
                   {areAllVisibleSelected ? (
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                    <Check size={10} strokeWidth={3} />
                   ) : selectedTrackIds.size > 0 ? (
                     <span className="h-1.5 w-1.5 rounded-xs bg-accent" />
                   ) : null}
@@ -618,7 +595,7 @@ function TrackListSectionBase({
                 className="h-6.5 px-2 text-[11px] text-foreground-muted hover:text-foreground hover:bg-surface-hover/80"
                 title="将选中的歌曲加入播放队列"
               >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1"><path d="M12 5v14M5 12h14" /></svg>
+                <Plus size={12} className="mr-1" />
                 <span>加入队列</span>
               </Button>
 
@@ -632,7 +609,7 @@ function TrackListSectionBase({
                   className="h-6.5 px-2 text-[11px] text-foreground-muted hover:text-foreground hover:bg-surface-hover/80"
                   title="将选中的歌曲保存到本地目录"
                 >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1"><path d="M5 4h11l3 3v13H5z" /><path d="M8 4v5h8V4" /><path d="M8 20v-5h8v5" /></svg>
+                  <Save size={12} className="mr-1" />
                   <span>保存本地</span>
                 </Button>
               ) : null}
@@ -647,7 +624,7 @@ function TrackListSectionBase({
                   className="h-6.5 px-2 text-[11px] text-destructive hover:bg-destructive/10 hover:text-destructive"
                   title="将选中有权限的歌曲从曲库删除"
                 >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1"><path d="M4 7h16M10 11v6M14 11v6M9 7V4h6v3M6 7l1 13h10l1-13" /></svg>
+                  <Trash2 size={12} className="mr-1" />
                   <span>删除 ({deletableSelectedTracks.length})</span>
                 </Button>
               ) : null}
@@ -789,7 +766,7 @@ function TrackListSectionBase({
                         }`}
                       >
                         {selectedTrackIds.has(track.id) ? (
-                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                          <Check size={11} strokeWidth={3} />
                         ) : null}
                       </button>
                     ) : null}
@@ -798,14 +775,7 @@ function TrackListSectionBase({
                         aria-hidden="true"
                         className="flex shrink-0 items-center text-foreground-muted/30 transition-colors group-hover:text-foreground-muted/70"
                       >
-                        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
-                          <circle cx="9" cy="6" r="1.5" />
-                          <circle cx="15" cy="6" r="1.5" />
-                          <circle cx="9" cy="12" r="1.5" />
-                          <circle cx="15" cy="12" r="1.5" />
-                          <circle cx="9" cy="18" r="1.5" />
-                          <circle cx="15" cy="18" r="1.5" />
-                        </svg>
+                        <GripVertical className="h-3.5 w-3.5" />
                       </div>
                     ) : null}
                     <div className="relative shrink-0">
@@ -836,9 +806,7 @@ function TrackListSectionBase({
                       title="立即播放"
                       size="icon"
                     >
-                      <svg aria-hidden="true" fill="currentColor" height="16" viewBox="0 0 24 24" width="16">
-                        <path d="M8 5.2v13.6c0 .8.9 1.3 1.6.9l10-6.8a1.1 1.1 0 0 0 0-1.8l-10-6.8C8.9 3.9 8 4.4 8 5.2Z" />
-                      </svg>
+                      <Play size={15} fill="currentColor" aria-hidden="true" />
                     </Button>
 
                     {canDeleteTrack ? (
@@ -856,7 +824,7 @@ function TrackListSectionBase({
                         type="button"
                         size="icon"
                       >
-                        <svg aria-hidden="true" fill="none" height="15" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="15"><path d="M4 7h16M10 11v6M14 11v6M9 7V4h6v3M6 7l1 13h10l1-13" /></svg>
+                        <Trash2 size={15} aria-hidden="true" />
                       </Button>
                     ) : null}
 
@@ -878,9 +846,9 @@ function TrackListSectionBase({
                         size="icon"
                       >
                         {isSavedLocally ? (
-                          <svg aria-hidden="true" fill="none" height="15" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="15"><path d="m5 12 4 4L19 6" /></svg>
+                          <Check size={15} aria-hidden="true" />
                         ) : (
-                          <svg aria-hidden="true" fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="16"><path d="M5 4h11l3 3v13H5z" /><path d="M8 4v5h8V4" /><path d="M8 20v-5h8v5" /></svg>
+                          <Save size={15} aria-hidden="true" />
                         )}
                       </Button>
                     ) : null}
@@ -897,7 +865,7 @@ function TrackListSectionBase({
                       type="button"
                       size="icon"
                     >
-                      <svg aria-hidden="true" fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="16"><path d="M12 5v14M5 12h14" /></svg>
+                      <Plus size={15} aria-hidden="true" />
                     </Button>
 
                   </div>

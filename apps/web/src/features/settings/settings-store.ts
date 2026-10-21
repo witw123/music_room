@@ -1,4 +1,5 @@
 import type { PlaybackMode } from "@music-room/shared";
+import { create } from "zustand";
 import { invokeTauri, isTauriRuntime } from "@/lib/desktop/tauri";
 import { EQUALIZER_PRESETS, type EqualizerPresetId } from "../playback/audio-equalizer";
 
@@ -206,6 +207,30 @@ export function getAppSettings(): AppSettings {
   }
 }
 
+export interface AppSettingsStoreState {
+  settings: AppSettings;
+  updateSettings: (patch: Parameters<typeof updateAppSettings>[0]) => AppSettings;
+  resetSettings: () => AppSettings;
+}
+
+export const useAppSettingsStore = create<AppSettingsStoreState>((set) => ({
+  settings: getAppSettings(),
+  updateSettings: (patch) => {
+    const next = updateAppSettings(patch);
+    set({ settings: next });
+    return next;
+  },
+  resetSettings: () => {
+    const next = resetAppSettings();
+    set({ settings: next });
+    return next;
+  }
+}));
+
+export function useAppSettings<T = AppSettings>(selector?: (state: AppSettings) => T): T {
+  return useAppSettingsStore((s) => (selector ? selector(s.settings) : (s.settings as unknown as T)));
+}
+
 export function updateAppSettings(
   patch: Partial<{
     theme: ThemePreference;
@@ -227,12 +252,14 @@ export function updateAppSettings(
       document.documentElement.dataset.fullMotion = String(next.layout.fullMotion);
       applyUiScale(next.layout.uiScale);
     }
+    useAppSettingsStore.setState({ settings: next });
     window.dispatchEvent(new Event(appSettingsChangeEvent));
   }
   return next;
 }
 
 export function resetAppSettings() {
+  const defaults = cloneSettings(defaultSettings);
   if (typeof window !== "undefined") {
     window.localStorage.removeItem(appSettingsStorageKey);
     if (typeof document !== "undefined") {
@@ -240,9 +267,10 @@ export function resetAppSettings() {
       document.documentElement.dataset.fullMotion = String(defaultSettings.layout.fullMotion);
       applyUiScale(defaultSettings.layout.uiScale);
     }
+    useAppSettingsStore.setState({ settings: defaults });
     window.dispatchEvent(new Event(appSettingsChangeEvent));
   }
-  return cloneSettings(defaultSettings);
+  return defaults;
 }
 
 export function normalizeSettings(value: unknown): AppSettings {

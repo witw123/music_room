@@ -111,10 +111,10 @@ export function RoomDirectoryCard({ room: directoryItem, onOpen }: RoomDirectory
       {/* Track Playing Information Placed BELOW the cover */}
       {nowPlaying?.title ? (
         <div className="mt-2 flex items-center gap-2 rounded-lg border border-surface-border bg-surface/75 px-2.5 py-1">
-          <div className="flex items-end gap-0.5 h-3 shrink-0 text-accent">
-            <span className="w-0.5 h-full bg-current rounded-full animate-bounce" style={{ animationDuration: "0.8s" }} />
-            <span className="w-0.5 h-2 bg-current rounded-full animate-bounce" style={{ animationDuration: "1.1s", animationDelay: "0.2s" }} />
-            <span className="w-0.5 h-2.5 bg-current rounded-full animate-bounce" style={{ animationDuration: "0.9s", animationDelay: "0.4s" }} />
+          <div className="flex items-end gap-0.5 h-3 shrink-0 text-accent" aria-hidden="true">
+            <span className="w-0.5 h-full bg-current rounded-full animate-music-bar origin-bottom" style={{ animationDuration: "0.8s" }} />
+            <span className="w-0.5 h-full bg-current rounded-full animate-music-bar origin-bottom" style={{ animationDuration: "1.1s", animationDelay: "0.2s" }} />
+            <span className="w-0.5 h-full bg-current rounded-full animate-music-bar origin-bottom" style={{ animationDuration: "0.9s", animationDelay: "0.4s" }} />
           </div>
           <div className="flex items-center gap-1.5 min-w-0 flex-1 truncate text-xs">
             <span className="font-medium text-foreground truncate">{nowPlaying.title}</span>

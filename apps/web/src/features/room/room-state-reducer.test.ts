@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import type { PlaybackSnapshot, RoomSnapshot } from "@music-room/shared";
 import {
   initialRoomStateStore,

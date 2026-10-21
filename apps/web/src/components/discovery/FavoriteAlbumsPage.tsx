@@ -16,10 +16,8 @@ import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
 import { MusicRoomApiError, musicRoomApi } from "@/lib/network/music-room-api";
 import { isLocalPlaylistMirror } from "@/features/playlist/local-playlist-database";
-import {
-  getCachedFavorites,
-  setCachedFavorites
-} from "@/features/workspace/page-data-cache";
+import { useFavoriteAlbums } from "@/features/favorites/use-favorite-albums";
+import { useFavoriteArtists } from "@/features/favorites/use-favorite-artists";
 import { useLocalPlayer } from "@/features/playback/local-player-context";
 import {
   providerPlaybackCacheChangedEvent
@@ -69,13 +67,17 @@ export function FavoriteAlbumsPage({
     pendingFavoriteKey,
     toggleFavorite: toggleFavoriteTrack
   } = useFavoriteTracks(activeSession?.userId);
-  const [items, setItems] = useState<ProviderAlbumFavorite[]>(() =>
-    activeSession ? getCachedFavorites(activeSession.userId) ?? [] : []
-  );
-  const [artists, setArtists] = useState<ProviderArtistFavorite[]>([]);
-  const [favoritesLoaded, setFavoritesLoaded] = useState(() =>
-    Boolean(activeSession && getCachedFavorites(activeSession.userId))
-  );
+  const {
+    albums: items,
+    isLoading: albumsLoading,
+    deleteFavoriteAlbum
+  } = useFavoriteAlbums(activeSession?.userId);
+  const {
+    artists,
+    isLoading: artistsLoading,
+    deleteFavoriteArtist
+  } = useFavoriteArtists(activeSession?.userId);
+  const favoritesLoaded = !albumsLoading && !artistsLoading;
   const [detail, setDetail] = useState<ProviderAlbumDetail | null>(null);
   useBackHandler(() => setDetail(null), detail !== null);
   const [pending, setPending] = useState<string | null>(null);
@@ -90,42 +92,6 @@ export function FavoriteAlbumsPage({
   useEffect(() => {
     if (hydrated && !activeSession) router.replace(authEntryHref as Route);
   }, [activeSession, authEntryHref, hydrated, router]);
-
-  useEffect(() => {
-    if (!activeSession) return;
-    const cachedItems = getCachedFavorites(activeSession.userId);
-    if (cachedItems) {
-      setItems(cachedItems);
-      setFavoritesLoaded(true);
-    }
-    let cancelled = false;
-    void musicRoomApi.listFavoriteAlbums()
-      .then((records) => {
-        if (!cancelled) {
-          setCachedFavorites(activeSession.userId, records);
-          setItems(records);
-          setFavoritesLoaded(true);
-        }
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          setFavoritesLoaded(true);
-          setErrorMessage(error instanceof Error ? error.message : "收藏加载失败。");
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [activeSession]);
-
-  useEffect(() => {
-    if (!activeSession) return;
-    let cancelled = false;
-    void musicRoomApi.listFavoriteArtists()
-      .then((records) => { if (!cancelled) setArtists(records); })
-      .catch((error) => { if (!cancelled) setErrorMessage(error instanceof Error ? error.message : "收藏歌手加载失败。"); });
-    return () => { cancelled = true; };
-  }, [activeSession]);
 
   useEffect(() => {
     let cancelled = false;
@@ -382,10 +348,7 @@ export function FavoriteAlbumsPage({
     setPending(`remove:${item.id}`);
     setErrorMessage(null);
     try {
-      await musicRoomApi.deleteFavoriteAlbum(item.provider, item.providerAlbumId);
-      const nextItems = items.filter((candidate) => candidate.id !== item.id);
-      setItems(nextItems);
-      if (activeSession) setCachedFavorites(activeSession.userId, nextItems);
+      await deleteFavoriteAlbum({ provider: item.provider, providerAlbumId: item.providerAlbumId });
       if (detail?.provider === item.provider && detail.providerAlbumId === item.providerAlbumId) setDetail(null);
     } catch (error) {
       setErrorMessage(toErrorMessage(error));
@@ -403,8 +366,7 @@ export function FavoriteAlbumsPage({
   async function removeArtist(item: ProviderArtistFavorite) {
     setPending(`artist:${item.provider}:${item.providerArtistId}`);
     try {
-      await musicRoomApi.deleteFavoriteArtist(item.provider, item.providerArtistId);
-      setArtists((current) => current.filter((artist) => artist.id !== item.id));
+      await deleteFavoriteArtist({ provider: item.provider, providerArtistId: item.providerArtistId });
       setStatusMessage(`已取消收藏 ${item.name}。`);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "取消收藏歌手失败。");

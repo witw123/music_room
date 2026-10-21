@@ -7,15 +7,33 @@ const themeInitScript = `(() => {
   try {
     const raw = localStorage.getItem("music-room-settings-v1");
     const value = raw ? JSON.parse(raw) : null;
-    const preference = value && (value.theme === "light" || value.theme === "system" || value.theme === "dark") ? value.theme : "dark";
+    const validThemes = ["system","dark","light","sage-dark","sage-light","obsidian","midnight-dark","midnight-light","paper"];
+    const preference = value && validThemes.includes(value.theme) ? value.theme : "dark";
     const sidebarCollapsed = !(value && value.layout && value.layout.sidebarCollapsed === false);
     const systemPrefersLight = typeof window.matchMedia === "function" && window.matchMedia("(prefers-color-scheme: light)").matches;
-    const light = preference === "light" || (preference === "system" && systemPrefersLight);
-    const theme = light ? "light" : "dark";
-    document.documentElement.dataset.theme = theme;
+    let resolved = preference;
+    if (resolved === "system") {
+      resolved = systemPrefersLight ? "light" : "dark";
+    }
+    const isDark = resolved === "dark" || resolved === "sage-dark" || resolved === "obsidian" || resolved === "midnight-dark";
+    const themeMode = isDark ? "dark" : "light";
+    document.documentElement.dataset.theme = resolved;
+    document.documentElement.dataset.themeMode = themeMode;
     document.documentElement.dataset.sidebarCollapsed = String(sidebarCollapsed);
-    document.documentElement.style.colorScheme = theme;
-    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", light ? "#f5f5f7" : "#09090b");
+    document.documentElement.style.colorScheme = themeMode;
+
+    const metaColors = {
+      dark: "#0d0f12",
+      light: "#f6f7f8",
+      "sage-dark": "#141716",
+      "sage-light": "#f2f5f3",
+      obsidian: "#090a0c",
+      "midnight-dark": "#0a0f18",
+      "midnight-light": "#eef3f9",
+      paper: "#f5f2eb"
+    };
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", metaColors[resolved] || (isDark ? "#0d0f12" : "#f6f7f8"));
+
     const isLyricsWindow = Boolean(typeof window !== "undefined" && window.location && (window.location.pathname === "/desktop-lyrics" || (window.location.search && window.location.search.indexOf("window=desktop-lyrics") !== -1)));
     if (isLyricsWindow) {
       document.documentElement.dataset.lyricsWindow = "true";
@@ -38,8 +56,9 @@ const themeInitScript = `(() => {
     }
   } catch {
     document.documentElement.dataset.theme = "dark";
+    document.documentElement.dataset.themeMode = "dark";
     document.documentElement.style.colorScheme = "dark";
-    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", "#09090b");
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", "#0d0f12");
   }
 })();`;
 
