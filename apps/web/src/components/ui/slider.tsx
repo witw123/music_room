@@ -1,17 +1,17 @@
-import * as React from "react"
+import * as React from "react";
 
-export interface SliderProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'type'> {
-  value: number
-  max: number
-  min?: number
-  containerStyle?: React.CSSProperties
-  accentColor?: string
+export interface SliderProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "type"> {
+  value: number;
+  max: number;
+  min?: number;
+  containerStyle?: React.CSSProperties;
+  accentColor?: string;
 }
 
 export const Slider = React.forwardRef<HTMLInputElement, SliderProps>(
-  ({ className = "", containerStyle, value, max, min = 0, accentColor = "rgb(0 112 243)", ...props }, ref) => {
-    const percentage = max > min ? ((value - min) / (max - min)) * 100 : 0
-    
+  ({ className = "", containerStyle, value, max, min = 0, accentColor = "var(--accent, rgb(0 112 243))", ...props }, ref) => {
+    const percentage = max > min ? ((value - min) / (max - min)) * 100 : 0;
+
     return (
       <div style={containerStyle} className={`relative flex items-center w-full h-4 group cursor-pointer ${className}`}>
         {/* Track background */}
@@ -26,7 +26,7 @@ export const Slider = React.forwardRef<HTMLInputElement, SliderProps>(
           />
         </div>
         {/* Thumb */}
-        <div 
+        <div
           className="absolute h-3 w-3 bg-foreground rounded-full shadow-sm border border-surface-border opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-all scale-75 group-hover:scale-100"
           style={{ left: `calc(${percentage}% - 6px)` }}
         />
@@ -41,7 +41,7 @@ export const Slider = React.forwardRef<HTMLInputElement, SliderProps>(
           {...props}
         />
       </div>
-    )
+    );
   }
-)
-Slider.displayName = "Slider"
+);
+Slider.displayName = "Slider";

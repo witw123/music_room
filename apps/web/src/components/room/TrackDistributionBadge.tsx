@@ -172,7 +172,7 @@ export function TrackDistributionBadge({
         aria-label={`曲目资产状态: ${config.title}`}
         title={`曲目资产状态: ${config.title}`}
         onClick={handleClick}
-        className={`absolute -bottom-0.5 -right-0.5 z-10 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[#18191f] transition-transform hover:scale-125 focus:outline-none focus-visible:ring-1 focus-visible:ring-accent ${className}`}
+        className={`absolute -bottom-0.5 -right-0.5 z-10 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-surface border border-surface-border transition-transform hover:scale-125 focus:outline-none focus-visible:ring-1 focus-visible:ring-accent ${className}`}
       >
         <span className={`h-2 w-2 rounded-full ${config.dotClass}`} />
       </button>
@@ -183,7 +183,7 @@ export function TrackDistributionBadge({
           ariaLabelledBy={`dist-badge-${track.id}`}
           onClose={() => setIsOpen(false)}
           compact
-          className="w-72 max-w-[calc(100vw-32px)] rounded-xl border border-surface-border bg-[#181a20]/95 p-3.5 shadow-2xl backdrop-blur-md"
+          className="w-72 max-w-[calc(100vw-32px)] rounded-xl border border-surface-border bg-surface p-3.5 shadow-lg backdrop-blur-md"
         >
           <div id={`dist-badge-${track.id}`} className="space-y-2.5 text-xs text-foreground">
             <div className="flex items-center justify-between border-b border-surface-border/60 pb-2">

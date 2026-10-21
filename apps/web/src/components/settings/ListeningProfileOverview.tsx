@@ -385,7 +385,7 @@ function StatusToast({
       className="pointer-events-none fixed inset-x-0 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-[90] flex justify-center px-4 md:bottom-24"
       role="status"
     >
-      <p className="pointer-events-auto max-w-full truncate rounded-xl border border-surface-border bg-[#121216]/97 px-4 py-2.5 text-xs text-foreground shadow-[0_8px_24px_rgba(0,0,0,0.45)] animate-in fade-in slide-in-from-bottom-2 duration-200">
+      <p className="pointer-events-auto max-w-full truncate rounded-xl border border-surface-border bg-surface px-4 py-2.5 text-xs text-foreground shadow-md backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 duration-200">
         {message}
       </p>
     </div>

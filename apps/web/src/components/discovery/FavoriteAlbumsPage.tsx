@@ -15,7 +15,6 @@ import {
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
 import { MusicRoomApiError, musicRoomApi } from "@/lib/network/music-room-api";
-import { isLocalPlaylistMirror } from "@/features/playlist/local-playlist-database";
 import { useFavoriteAlbums } from "@/features/favorites/use-favorite-albums";
 import { useFavoriteArtists } from "@/features/favorites/use-favorite-artists";
 import { useLocalPlayer } from "@/features/playback/local-player-context";
@@ -36,7 +35,9 @@ import {
   type LocalPlaylistTrackRecord
 } from "@/features/playlist/local-playlist";
 import { type AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
+import { MediaArtwork } from "@/components/ui/media-artwork";
 import { useFavoriteTracks, favoriteTrackToCandidate } from "@/features/favorites/use-favorite-tracks";
+import { useNetworkPlaylists } from "@/features/playlist/use-network-playlists";
 import { useBackHandler } from "@/lib/desktop/use-back-handler";
 
 type Track = ProviderTrackCandidate;
@@ -77,6 +78,7 @@ export function FavoriteAlbumsPage({
     isLoading: artistsLoading,
     deleteFavoriteArtist
   } = useFavoriteArtists(activeSession?.userId);
+  const { playlists: networkPlaylists } = useNetworkPlaylists(activeSession?.userId);
   const favoritesLoaded = !albumsLoading && !artistsLoading;
   const [detail, setDetail] = useState<ProviderAlbumDetail | null>(null);
   useBackHandler(() => setDetail(null), detail !== null);
@@ -274,19 +276,9 @@ export function FavoriteAlbumsPage({
     if (pending) return;
     setPlaylistPickerTrack(track);
     setPlaylistPickerAnchor(anchor);
-    setPlaylistPickerLoading(true);
-    setPlaylistPickerOptions([]);
+    setPlaylistPickerLoading(false);
+    setPlaylistPickerOptions(networkPlaylists.map((playlist) => ({ kind: "network" as const, playlist })));
     setStatusMessage(null);
-    setPending(`playlist-picker:${track.providerTrackId}`);
-    try {
-      const playlists = await musicRoomApi.listMyPlaylists();
-      setPlaylistPickerOptions(playlists.filter((item) => !isLocalPlaylistMirror(item)).map((playlist) => ({ kind: "network" as const, playlist })));
-    } catch (error) {
-      setErrorMessage(toErrorMessage(error));
-    } finally {
-      setPlaylistPickerLoading(false);
-      setPending(null);
-    }
   }
 
   async function addTrackToPlaylist(option: ProviderPlaylistPickerOption) {
@@ -614,11 +606,15 @@ function FavoriteTracksSection({
 }
 
 function AlbumArtwork({ alt, src, className = "" }: { alt: string; src: string | null; className?: string }) {
-  return src ? (
-    // External provider artwork is intentionally rendered without Next image optimization.
-    // eslint-disable-next-line @next/next/no-img-element
-    <img alt={alt} className={`aspect-square w-full object-cover ${className}`} loading="lazy" src={src} />
-  ) : <span aria-label={alt} className={`flex aspect-square w-full items-center justify-center bg-background-secondary text-3xl text-foreground-muted ${className}`}>♪</span>;
+  return (
+    <MediaArtwork
+      alt={alt}
+      src={src}
+      className={className}
+      containerClassName={className}
+      rounded="none"
+    />
+  );
 }
 
 function HeartIcon({ filled = false }: { filled?: boolean }) {

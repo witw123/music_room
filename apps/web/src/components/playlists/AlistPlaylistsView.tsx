@@ -7,6 +7,12 @@ import { musicRoomApi } from "@/lib/network/music-room-api";
 import { useLocalPlayer } from "@/features/playback/local-player-context";
 import type { LocalPlaylistTrackRecord } from "@/features/playlist/local-playlist";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle
+} from "@/components/ui/dialog";
+import {
   FolderIcon,
   PlayIcon,
   RotateCcwIcon,
@@ -479,107 +485,101 @@ export function AlistPlaylistsView() {
       </div>
 
       {/* Settings Modal/Drawer */}
-      {showConfigDrawer ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="max-w-md w-full rounded-2xl border border-surface-border bg-surface p-6 shadow-2xl">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-semibold text-foreground">修改 Alist 网盘设置</h3>
-              <button
-                onClick={() => setShowConfigDrawer(false)}
-                className="text-foreground-muted hover:text-foreground p-1"
-              >
-                <CloseIcon className="w-5 h-5" />
-              </button>
+      <Dialog open={showConfigDrawer} onOpenChange={setShowConfigDrawer}>
+        <DialogContent className="max-w-md p-6">
+          <DialogHeader className="pr-6">
+            <DialogTitle className="text-base font-semibold text-foreground">
+              修改 Alist 网盘设置
+            </DialogTitle>
+          </DialogHeader>
+
+          <form onSubmit={handleSaveSetup} className="space-y-4">
+            <div>
+              <label className="block text-xs font-medium text-foreground-muted mb-1">
+                Alist 服务地址
+              </label>
+              <input
+                type="url"
+                required
+                value={inputUrl}
+                onChange={(e) => setInputUrl(e.target.value)}
+                className="w-full px-3 py-2 text-sm rounded-xl border border-surface-border bg-surface-muted focus:outline-none focus:border-accent text-foreground"
+              />
             </div>
 
-            <form onSubmit={handleSaveSetup} className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-foreground-muted mb-1">
-                  Alist 服务地址
-                </label>
-                <input
-                  type="url"
-                  required
-                  value={inputUrl}
-                  onChange={(e) => setInputUrl(e.target.value)}
-                  className="w-full px-3 py-2 text-sm rounded-xl border border-surface-border bg-surface-muted focus:outline-none focus:border-accent text-foreground"
-                />
+            <div>
+              <label className="block text-xs font-medium text-foreground-muted mb-1">
+                音乐挂载根路径
+              </label>
+              <input
+                type="text"
+                required
+                value={inputPath}
+                onChange={(e) => setInputPath(e.target.value)}
+                className="w-full px-3 py-2 text-sm rounded-xl border border-surface-border bg-surface-muted focus:outline-none focus:border-accent text-foreground"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-foreground-muted mb-1">
+                访问 Token（可选）
+              </label>
+              <input
+                type="password"
+                value={inputToken}
+                onChange={(e) => setInputToken(e.target.value)}
+                className="w-full px-3 py-2 text-sm rounded-xl border border-surface-border bg-surface-muted focus:outline-none focus:border-accent text-foreground"
+              />
+            </div>
+
+            {testResult ? (
+              <div
+                className={`p-2.5 rounded-xl text-xs ${
+                  testResult.ok ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400"
+                }`}
+              >
+                {testResult.message}
               </div>
+            ) : null}
 
-              <div>
-                <label className="block text-xs font-medium text-foreground-muted mb-1">
-                  音乐挂载根路径
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={inputPath}
-                  onChange={(e) => setInputPath(e.target.value)}
-                  className="w-full px-3 py-2 text-sm rounded-xl border border-surface-border bg-surface-muted focus:outline-none focus:border-accent text-foreground"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-foreground-muted mb-1">
-                  访问 Token（可选）
-                </label>
-                <input
-                  type="password"
-                  value={inputToken}
-                  onChange={(e) => setInputToken(e.target.value)}
-                  className="w-full px-3 py-2 text-sm rounded-xl border border-surface-border bg-surface-muted focus:outline-none focus:border-accent text-foreground"
-                />
-              </div>
-
-              {testResult ? (
-                <div
-                  className={`p-2.5 rounded-xl text-xs ${
-                    testResult.ok ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400"
-                  }`}
-                >
-                  {testResult.message}
-                </div>
-              ) : null}
-
-              <div className="flex items-center justify-between pt-2">
+            <div className="flex items-center justify-between pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  removeConfig();
+                  setShowConfigDrawer(false);
+                }}
+                className="text-xs text-red-400 hover:underline"
+              >
+                断开连接
+              </button>
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    removeConfig();
-                    setShowConfigDrawer(false);
-                  }}
-                  className="text-xs text-red-400 hover:underline"
+                  disabled={testing}
+                  onClick={() =>
+                    void testConnection({
+                      url: inputUrl.trim(),
+                      mountPath: inputPath.trim() || "/Music",
+                      token: inputToken.trim() || undefined
+                    })
+                  }
+                  className="px-3 py-1.5 text-xs font-medium rounded-xl border border-surface-border hover:bg-white/5 transition-colors cursor-pointer"
                 >
-                  断开连接
+                  {testing ? "测试中..." : "测试"}
                 </button>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    disabled={testing}
-                    onClick={() =>
-                      void testConnection({
-                        url: inputUrl.trim(),
-                        mountPath: inputPath.trim() || "/Music",
-                        token: inputToken.trim() || undefined
-                      })
-                    }
-                    className="px-3 py-1.5 text-xs font-medium rounded-xl border border-surface-border hover:bg-white/5 transition-colors"
-                  >
-                    {testing ? "测试中..." : "测试"}
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={testing}
-                    className="px-4 py-1.5 text-xs font-semibold rounded-xl bg-accent text-accent-contrast hover:opacity-90 transition-opacity"
-                  >
-                    保存
-                  </button>
-                </div>
+                <button
+                  type="submit"
+                  disabled={testing}
+                  className="px-4 py-1.5 text-xs font-semibold rounded-xl bg-accent text-accent-contrast hover:opacity-90 transition-opacity cursor-pointer"
+                >
+                  保存
+                </button>
               </div>
-            </form>
-          </div>
-        </div>
-      ) : null}
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

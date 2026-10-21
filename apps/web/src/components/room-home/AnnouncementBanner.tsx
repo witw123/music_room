@@ -1,11 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import type { SystemAnnouncement } from "@music-room/shared";
 import { musicRoomApi } from "@/lib/network/music-room-api";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle
+} from "@/components/ui/dialog";
 
 const DISMISSED_STORAGE_KEY = "music-room-dismissed-announcements";
 
@@ -301,51 +306,23 @@ function AnnouncementDialogModal({
   onMarkAsRead: (id: string) => void;
   onClose: () => void;
 }) {
-  const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(() =>
-    typeof document !== "undefined" ? document.body : null
-  );
-
-  useEffect(() => {
-    if (!portalRoot && typeof document !== "undefined") {
-      setPortalRoot(document.body);
-    }
-  }, [portalRoot]);
-
-  // Handle ESC key
+  // Handle ESC key for back to list when detail is open
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        if (selectedAnnouncement) {
-          onSelectAnnouncement(null);
-        } else {
-          onClose();
-        }
+      if (event.key === "Escape" && selectedAnnouncement) {
+        event.stopPropagation();
+        onSelectAnnouncement(null);
       }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose, onSelectAnnouncement, selectedAnnouncement]);
+  }, [onSelectAnnouncement, selectedAnnouncement]);
 
-  if (!portalRoot) return null;
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overscroll-contain animate-fade-in"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) {
-          onClose();
-        }
-      }}
-      role="presentation"
-    >
-      <div
-        aria-modal="true"
-        role="dialog"
-        aria-label="系统公告"
-        className="relative flex flex-col w-full max-w-md max-h-[min(82vh,600px)] rounded-2xl border border-surface-border bg-background-secondary p-5 sm:p-6 shadow-2xl text-foreground overflow-hidden"
-      >
-        {/* Modal Header: Bell icon + Title "公告" + Close button (×) */}
-        <div className="flex items-center justify-between pb-4 border-b border-surface-border shrink-0">
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-md max-h-[min(82vh,600px)] p-5 sm:p-6 flex flex-col overflow-hidden">
+        {/* Modal Header: Bell icon + Title "公告" */}
+        <DialogHeader className="pb-3 border-b border-surface-border shrink-0 pr-6">
           <div className="flex items-center gap-2.5">
             <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/15 text-accent shrink-0">
               <svg
@@ -363,38 +340,16 @@ function AnnouncementDialogModal({
                 <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
               </svg>
             </div>
-            <h3 className="text-base font-bold tracking-tight text-foreground">
+            <DialogTitle className="text-base font-bold tracking-tight text-foreground">
               公告
-            </h3>
+            </DialogTitle>
             {announcements.length > 0 ? (
               <span className="font-mono text-xs text-foreground-muted">
                 ({announcements.length})
               </span>
             ) : null}
           </div>
-
-          <button
-            type="button"
-            aria-label="关闭弹窗"
-            onClick={onClose}
-            className="rounded-lg p-1.5 text-foreground-muted hover:text-foreground hover:bg-surface transition-colors cursor-pointer"
-          >
-            <svg
-              aria-hidden="true"
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-        </div>
+        </DialogHeader>
 
         {/* Modal Body: List View (Image 2) or Detail View */}
         <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar pt-2">
@@ -533,8 +488,7 @@ function AnnouncementDialogModal({
             </div>
           )}
         </div>
-      </div>
-    </div>,
-    portalRoot
+      </DialogContent>
+    </Dialog>
   );
 }

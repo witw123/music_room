@@ -1,8 +1,13 @@
 "use client";
 
-import { useEffect } from "react";
-import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription
+} from "@/components/ui/dialog";
 import { useBackHandler } from "@/lib/desktop/use-back-handler";
 import {
   formatFileSize,
@@ -24,15 +29,6 @@ export function UpdatePromptDialog({
   result,
   onDismiss
 }: UpdatePromptDialogProps) {
-  useEffect(() => {
-    if (!open) return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onDismiss();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onDismiss, open]);
-
   useBackHandler(onDismiss, open);
 
   // hooks 必须在任何提前 return 之前调用
@@ -51,7 +47,6 @@ export function UpdatePromptDialog({
   });
 
   if (!open || !result || !result.hasUpdate) return null;
-  if (typeof document === "undefined") return null;
 
   const platformName = getPlatformDisplayName(result.platform, result.runtime);
   const isDesktopDownloading =
@@ -77,41 +72,28 @@ export function UpdatePromptDialog({
     onDismiss();
   };
 
-  return createPortal(
-    <div
-      className="light-modal-scrim z-[var(--z-modal)]"
-      onClick={(event) => {
-        if (event.target === event.currentTarget) {
-          onDismiss();
-        }
-      }}
-      role="presentation"
-    >
-      <div
-        aria-describedby="update-dialog-description"
-        aria-labelledby="update-dialog-title"
-        aria-modal="true"
-        className="light-dialog-surface max-h-[calc(100*var(--app-dvh)-env(safe-area-inset-top)-env(safe-area-inset-bottom)-2rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-lg border border-surface-border bg-surface p-5 shadow-2xl"
-        role="dialog"
-      >
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="flex h-2 w-2 rounded-full bg-accent" />
-            <h2 id="update-dialog-title" className="text-base font-semibold text-foreground">
-              发现新版本 v{result.latestVersion}
-            </h2>
+  return (
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onDismiss()}>
+      <DialogContent className="max-w-md p-5 sm:p-6">
+        <DialogHeader className="pr-6">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className="flex h-2 w-2 rounded-full bg-accent" />
+              <DialogTitle className="text-base font-semibold text-foreground">
+                发现新版本 v{result.latestVersion}
+              </DialogTitle>
+            </div>
+            <span className="rounded bg-surface-hover px-2 py-0.5 text-xs text-foreground-muted">
+              {platformName}
+            </span>
           </div>
-          <span className="rounded bg-surface-hover px-2 py-0.5 text-xs text-foreground-muted">
-            {platformName}
-          </span>
-        </div>
-
-        <p id="update-dialog-description" className="mt-2 text-xs leading-5 text-foreground-muted">
-          当前运行版本为 v{result.currentVersion}。检测到 GitHub 远端有新版本发布。
-        </p>
+          <DialogDescription className="mt-2 text-xs leading-5 text-foreground-muted">
+            当前运行版本为 v{result.currentVersion}。检测到 GitHub 远端有新版本发布。
+          </DialogDescription>
+        </DialogHeader>
 
         {downloadTarget ? (
-          <div className="mt-3.5 rounded border border-surface-border bg-background/50 p-2.5 text-xs">
+          <div className="rounded border border-surface-border bg-background/50 p-2.5 text-xs">
             <div className="font-mono text-foreground">{downloadTarget.name}</div>
             {downloadTarget.size > 0 ? (
               <div className="mt-1 text-foreground-muted">
@@ -177,7 +159,7 @@ export function UpdatePromptDialog({
         ) : null}
 
         {result.release.body ? (
-          <div className="mt-3.5 max-h-40 overflow-y-auto rounded border border-surface-border bg-background/30 p-2.5 text-xs text-foreground-muted">
+          <div className="max-h-40 overflow-y-auto rounded border border-surface-border bg-background/30 p-2.5 text-xs text-foreground-muted">
             <div className="mb-1 font-medium text-foreground">更新日志:</div>
             <div className="whitespace-pre-wrap font-sans text-xs leading-5 opacity-90">
               {result.release.body}
@@ -185,7 +167,7 @@ export function UpdatePromptDialog({
           </div>
         ) : null}
 
-        <div className="mt-5 flex justify-end gap-2">
+        <div className="mt-2 flex justify-end gap-2">
           <Button onClick={onDismiss} size="sm" type="button" variant="ghost">
             稍后提醒
           </Button>
@@ -223,8 +205,7 @@ export function UpdatePromptDialog({
                   : "前往下载"}
           </Button>
         </div>
-      </div>
-    </div>,
-    document.body
+      </DialogContent>
+    </Dialog>
   );
 }

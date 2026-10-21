@@ -1,15 +1,20 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import type { ColdStartTasteDimension } from "@music-room/shared";
 import { musicRoomApi } from "@/lib/network/music-room-api";
 import { personalizationChangedEvent } from "@/features/personalization/use-personalization-reporter";
 import { Button } from "@/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription
+} from "@/components/ui/dialog";
+import {
   SlidersIcon,
   SparklesIcon,
-  CloseIcon,
   CheckIcon,
   MusicIcon,
   LandmarkIcon,
@@ -145,41 +150,24 @@ export function TasteColdStartDialog({
     }
   };
 
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-md"
-      onClick={(event) => {
-        if (event.target === event.currentTarget) {
-          onClose();
-        }
-      }}
-      role="presentation"
-    >
-      {/* z-[var(--z-modal)] matches the app's modal convention (RoomsHomePage dialogs,
-          AnchoredDialog): at z-50 the fixed bottom player (z-60/80) and the
-          mobile bottom navigation (z-70) paint over the dialog footer and the
-          primary CTA becomes untappable on phones. */}
-      <div
-        className="relative w-full max-w-2xl p-4 sm:p-5 rounded-xl bg-background-secondary border border-surface-border shadow-2xl text-foreground overflow-hidden max-h-[calc(90*var(--app-dvh))] flex flex-col"
-      >
-        <div className="flex items-start justify-between gap-4 mb-4 shrink-0">
+  return (
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-2xl max-h-[calc(90*var(--app-dvh))] flex flex-col p-4 sm:p-5">
+        <DialogHeader className="mb-2 shrink-0">
           <div className="flex items-center gap-3">
             <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-surface border border-surface-border text-foreground shrink-0">
               <SlidersIcon className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-base sm:text-lg font-bold text-foreground tracking-tight">调整偏好</h2>
-              <p className="text-xs text-foreground-muted">勾选常听的分类，保存后发现页推荐立即按新偏好刷新</p>
+              <DialogTitle className="text-base sm:text-lg font-bold text-foreground tracking-tight">
+                调整偏好
+              </DialogTitle>
+              <DialogDescription className="text-xs text-foreground-muted">
+                勾选常听的分类，保存后发现页推荐立即按新偏好刷新
+              </DialogDescription>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="h-7 w-7 rounded-md text-foreground-muted hover:text-foreground hover:bg-surface-hover flex items-center justify-center transition-colors shrink-0"
-          >
-            <CloseIcon className="w-4 h-4" />
-          </button>
-        </div>
+        </DialogHeader>
 
         <div className="space-y-4 flex-1 min-h-0 overflow-y-auto pr-1 hide-scrollbar touch-pan-y">
           {TASTE_DIMENSION_GROUPS.map((group) => {
@@ -278,8 +266,7 @@ export function TasteColdStartDialog({
             </Button>
           </div>
         </div>
-        </div>
-      </div>,
-      document.body
+      </DialogContent>
+    </Dialog>
   );
 }

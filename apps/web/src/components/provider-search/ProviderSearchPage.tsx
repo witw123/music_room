@@ -3,19 +3,14 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
-  NeteaseAccountStatus,
   ProviderAlbumDetail,
   ProviderAlbumSummary,
   ProviderPlaylistDetail,
-  ProviderPlaylistSummary,
-  QqMusicAccountStatus
+  ProviderPlaylistSummary
 } from "@music-room/shared";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
 import { musicRoomApi } from "@/lib/network/music-room-api";
-import {
-  isLocalPlaylistMirror
-} from "@/features/playlist/local-playlist-database";
 import {
   localPlaylistTrackId,
   listMergedLocalPlaylistTracks,
@@ -32,10 +27,13 @@ import { ProviderPlaylistPickerDialog, type ProviderPlaylistPickerOption } from 
 import { SearchSuggestions, type SearchSuggestionItem } from "./ProviderSearchSuggestions";
 import { SearchBar } from "@/components/ui/search-bar";
 import { Button } from "@/components/ui/button";
+import { MediaArtwork } from "@/components/ui/media-artwork";
 import { BilibiliImportDialog } from "./BilibiliImportDialog";
 import { useLocalPlayer } from "@/features/playback/local-player-context";
 import { useFavoriteAlbums } from "@/features/favorites/use-favorite-albums";
 import { useFavoriteTracks } from "@/features/favorites/use-favorite-tracks";
+import { useNetworkPlaylists } from "@/features/playlist/use-network-playlists";
+import { useProviderAccount } from "@/features/providers/use-provider-account";
 import { rankSearchResultsWithPersonalization } from "@/features/personalization/rank-search-results";
 import {
   SongsResults,
@@ -55,7 +53,6 @@ import { BilibiliPartDetailView, type BilibiliPartDetail } from "./BilibiliPartD
 import { useBackHandler } from "@/lib/desktop/use-back-handler";
 import { isBilibiliCollection, bilibiliTrackToPlaylistSummary } from "@/features/library/bilibili-collection";
 
-type Account = NeteaseAccountStatus | QqMusicAccountStatus;
 type ContentTab = "songs" | "playlists" | "albums";
 
 const enabledProviders: Provider[] = [
@@ -112,7 +109,13 @@ export function ProviderSearchPage({
     : enabledProviders[0] ?? "netease";
   const [provider, setProvider] = useState<Provider>(defaultProvider);
   const { albums: favoriteAlbums, saveFavoriteAlbum, deleteFavoriteAlbum } = useFavoriteAlbums(activeSession?.userId);
-  const [account, setAccount] = useState<Account | null>(null);
+  const { playlists: networkPlaylists } = useNetworkPlaylists(activeSession?.userId);
+  const { data: currentProviderAccount } = useProviderAccount(
+    activeSession?.userId,
+    provider === "bilibili" ? "netease" : provider,
+    provider !== "bilibili"
+  );
+  const account = provider === "bilibili" ? null : (currentProviderAccount ?? null);
   const [uncontrolledKeywords, setUncontrolledKeywords] = useState("");
   const keywords = controlledKeywords ?? uncontrolledKeywords;
   const isConnected = provider === "bilibili" || account?.connected === true;
@@ -214,8 +217,6 @@ export function ProviderSearchPage({
 
   useEffect(() => {
     if (!activeSession || !enabledProviders.includes(provider)) return;
-    let cancelled = false;
-    setAccount(null);
     searchRequestRef.current += 1;
     setResults([]);
     setBilibiliCollections([]);
@@ -228,23 +229,6 @@ export function ProviderSearchPage({
     setSearchSuggestionsOpen(false);
     setRemoteSuggestions([]);
     setRemoteHotWords([]);
-    if (provider === "bilibili") {
-      setAccount(null);
-      return;
-    }
-    const load = provider === "netease" ? musicRoomApi.getNeteaseAccount : musicRoomApi.getQqMusicAccount;
-    void load()
-      .then((nextAccount) => {
-        if (!cancelled) {
-          setAccount(nextAccount);
-        }
-      })
-      .catch((error) => {
-        if (!cancelled) setErrorMessage(toProviderErrorMessage(error, provider));
-      });
-    return () => {
-      cancelled = true;
-    };
   }, [activeSession, provider]);
 
   useEffect(() => {
@@ -469,23 +453,11 @@ export function ProviderSearchPage({
     setPlaylistPickerTrack(track);
     setPlaylistPickerAlbum(null);
     setPlaylistPickerAnchor(anchor);
-    setPlaylistPickerLoading(true);
-    setPlaylistPickerOptions([]);
+    setPlaylistPickerLoading(false);
+    setPlaylistPickerOptions(
+      networkPlaylists.map((item) => ({ kind: "network" as const, playlist: item }))
+    );
     setErrorMessage(null);
-    setPending(`playlist-picker:${track.providerTrackId}`);
-    try {
-      const networkPlaylists = await musicRoomApi.listMyPlaylists();
-      setPlaylistPickerOptions(
-        networkPlaylists
-          .filter((item) => !isLocalPlaylistMirror(item))
-          .map((item) => ({ kind: "network" as const, playlist: item }))
-      );
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? `歌单加载失败：${error.message}` : "歌单加载失败，请稍后重试。");
-    } finally {
-      setPlaylistPickerLoading(false);
-      setPending(null);
-    }
   }
 
   async function openAlbumPlaylistPicker(albumToAdd: ProviderAlbumDetail, anchor: AnchoredDialogAnchor) {
@@ -493,23 +465,11 @@ export function ProviderSearchPage({
     setPlaylistPickerTrack(null);
     setPlaylistPickerAlbum(albumToAdd);
     setPlaylistPickerAnchor(anchor);
-    setPlaylistPickerLoading(true);
-    setPlaylistPickerOptions([]);
+    setPlaylistPickerLoading(false);
+    setPlaylistPickerOptions(
+      networkPlaylists.map((item) => ({ kind: "network" as const, playlist: item }))
+    );
     setErrorMessage(null);
-    setPending(`playlist-picker:album:${albumToAdd.providerAlbumId}`);
-    try {
-      const networkPlaylists = await musicRoomApi.listMyPlaylists();
-      setPlaylistPickerOptions(
-        networkPlaylists
-          .filter((item) => !isLocalPlaylistMirror(item))
-          .map((item) => ({ kind: "network" as const, playlist: item }))
-      );
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? `歌单加载失败：${error.message}` : "歌单加载失败，请稍后重试。");
-    } finally {
-      setPlaylistPickerLoading(false);
-      setPending(null);
-    }
   }
 
   async function addTrackToPlaylist(option: ProviderPlaylistPickerOption) {
@@ -1017,19 +977,14 @@ export function ProviderSearchPage({
                         onClick={() => void loadPlaylist(item)}
                         className="group flex flex-col overflow-hidden rounded-xl border border-surface-border/60 bg-surface/40 p-2 sm:p-2.5 text-left transition duration-200 hover:border-accent/40 hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                       >
-                        <div className="relative aspect-square w-full overflow-hidden rounded-lg bg-surface border border-surface-border/40">
-                          {item.artworkUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              alt={item.title}
-                              className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
-                              loading="lazy"
-                              referrerPolicy="no-referrer"
-                              src={item.artworkUrl}
-                            />
-                          ) : (
-                            <div className="flex h-full w-full items-center justify-center text-xs text-foreground-muted">歌单</div>
-                          )}
+                        <div className="relative aspect-square w-full">
+                          <MediaArtwork
+                            alt={item.title}
+                            src={item.artworkUrl}
+                            containerClassName="w-full h-full border-surface-border/40"
+                            className="transition duration-300 group-hover:scale-105"
+                            fallbackIcon={<span className="text-xs text-foreground-muted">歌单</span>}
+                          />
                           <span className="absolute bottom-1 right-1 rounded bg-black/60 px-1 py-0.5 text-[9px] font-mono text-white/90 backdrop-blur-xs">
                             {item.trackCount} 首
                           </span>

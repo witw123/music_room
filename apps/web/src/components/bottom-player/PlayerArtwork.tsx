@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from "react";
+import { useState, useEffect, type CSSProperties } from "react";
 import { getArtworkSourceUrl } from "./artwork-colors";
 
 type SquareAlbumCoverProps = {
@@ -10,12 +10,17 @@ type SquareAlbumCoverProps = {
 export function SquareAlbumCover({ artworkUrl, className = "", style }: SquareAlbumCoverProps) {
   const [loadError, setLoadError] = useState(false);
   const src = artworkUrl ? getArtworkSourceUrl(artworkUrl) : null;
+
+  useEffect(() => {
+    setLoadError(false);
+  }, [artworkUrl]);
+
   const showImage = Boolean(src && !loadError);
 
   return (
     <div
       aria-hidden="true"
-      className={`relative overflow-hidden bg-[#18191e] shadow-2xl ${className}`}
+      className={`relative overflow-hidden bg-surface border border-surface-border shadow-sm ${className}`}
       data-testid="square-album-cover"
       style={style}
     >

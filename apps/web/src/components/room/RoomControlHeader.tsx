@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, type FormEvent, type Dispatch, type SetStateAction } from "react";
 import { createPortal } from "react-dom";
@@ -12,6 +12,13 @@ import type {
 } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription
+} from "@/components/ui/dialog";
 import {
   CopyIcon,
   MoreVerticalIcon,
@@ -578,43 +585,17 @@ export function RoomEditDialog({
   open: boolean;
   pending: boolean;
 }) {
-  if (!open) return null;
-
-  return createPortal(
-    <div
-      className="light-overlay-scrim fixed inset-0 z-[500] flex items-start justify-center overflow-y-auto bg-black/75 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] backdrop-blur-sm sm:items-center"
-      onClick={(event) => {
-        if (!pending && event.target === event.currentTarget) {
-          onClose();
-        }
-      }}
-      role="presentation"
-    >
-      <div
-        aria-labelledby="edit-room-dialog-title"
-        aria-modal="true"
-        className="light-dialog-surface custom-scrollbar max-h-[calc(100*var(--app-dvh)-env(safe-area-inset-top)-env(safe-area-inset-bottom)-2rem)] w-full max-w-lg overflow-y-auto overscroll-contain rounded-2xl border border-surface-border bg-surface p-5 shadow-2xl sm:p-6"
-        role="dialog"
-      >
-        <div className="mb-5 flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-semibold text-foreground" id="edit-room-dialog-title">
-              编辑房间
-            </h2>
-            <p className="mt-1.5 text-sm leading-6 text-foreground-muted">
-              修改房间信息后立即同步给当前成员。
-            </p>
-          </div>
-          <button
-            aria-label="关闭"
-            className="rounded-lg px-2 py-1 text-xl leading-none text-foreground-muted hover:bg-white/10 hover:text-foreground"
-            disabled={pending}
-            onClick={onClose}
-            type="button"
-          >
-            ×
-          </button>
-        </div>
+  return (
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && !pending && onClose()}>
+      <DialogContent className="max-w-lg p-5 sm:p-6">
+        <DialogHeader className="pr-6">
+          <DialogTitle id="edit-room-dialog-title" className="text-xl font-semibold text-foreground">
+            编辑房间
+          </DialogTitle>
+          <DialogDescription className="mt-1.5 text-sm leading-6 text-foreground-muted">
+            修改房间信息后立即同步给当前成员。
+          </DialogDescription>
+        </DialogHeader>
         <form className="flex flex-col gap-4" onSubmit={onSubmit}>
           <div
             className="flex gap-2 rounded-xl border border-surface-border bg-surface p-1"
@@ -728,8 +709,7 @@ export function RoomEditDialog({
             </Button>
           </div>
         </form>
-      </div>
-    </div>,
-    document.body
+      </DialogContent>
+    </Dialog>
   );
 }

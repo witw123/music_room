@@ -1,8 +1,15 @@
-﻿"use client";
+"use client";
 
-import { createPortal } from "react-dom";
 import type { Playlist } from "@music-room/shared";
 import { AnchoredDialog, type AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle
+} from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import type {
   LocalPlaylistRecord,
@@ -16,9 +23,7 @@ export type PlaylistSelection =
 
 /**
  * Dialog surfaces for the playlists workspace (create/edit, move-to-playlist
- * picker, delete confirmation). Pure prop-driven leaves extracted from
- * PlaylistsWorkspacePage to keep the page focused on data flow; each renders
- * through createPortal so no ancestor stacking context can clip it.
+ * picker, delete confirmation).
  */
 
 export function PlaylistEditorDialog({
@@ -41,62 +46,62 @@ export function PlaylistEditorDialog({
   onCancel: () => void;
 }) {
   const isLocal = kind === "local";
-  const titleId = `create-${kind}-playlist-title`;
-  return createPortal(
-    <div
-      className="light-modal-scrim z-[var(--z-modal)]"
-      onClick={(event) => {
-        if (event.target === event.currentTarget) {
-          onCancel();
-        }
-      }}
-      role="presentation"
-    >
-      <form
-        aria-labelledby={titleId}
-        className="light-dialog-surface max-h-[calc(100*var(--app-dvh)-env(safe-area-inset-top)-env(safe-area-inset-bottom)-2rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-2xl border border-white/15 bg-[#151a21] p-5 text-foreground shadow-[0_24px_80px_rgba(0,0,0,0.72)] sm:p-6"
-        onSubmit={(event) => {
-          event.preventDefault();
-          onSubmit();
-        }}
-        role="dialog"
-        aria-modal="true"
-      >
-        <div className="flex items-start justify-between gap-4">
+  return (
+    <Dialog open onOpenChange={(open) => !open && onCancel()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{isLocal ? "新建本地歌单" : "新建网络歌单"}</DialogTitle>
+          <DialogDescription>
+            {isLocal
+              ? "创建时选择本地歌曲目录，歌单会直接读取所选目录中的歌曲。"
+              : "网络歌单无需本地目录，可从搜索页保存网易云音乐或 QQ 音乐歌单。"}
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          className="space-y-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSubmit();
+          }}
+        >
           <div>
-            <h2 className="text-lg font-semibold text-foreground" id={titleId}>{isLocal ? "新建本地歌单" : "新建网络歌单"}</h2>
-            <p className="mt-1 text-xs text-foreground-muted">{isLocal ? "创建时选择本地歌曲目录，歌单会直接读取所选目录中的歌曲。" : "网络歌单无需本地目录，可从搜索页保存网易云音乐或 QQ 音乐歌单。"}</p>
+            <label className="block text-xs font-medium text-foreground-muted" htmlFor={`new-${kind}-playlist-title`}>
+              歌单名称
+            </label>
+            <input
+              className="mt-1.5 w-full rounded-lg border border-surface-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+              id={`new-${kind}-playlist-title`}
+              maxLength={160}
+              onChange={(event) => onTitleChange(event.target.value)}
+              placeholder="例如：通勤歌单"
+              required
+              value={title}
+            />
           </div>
-          <Button aria-label="关闭" onClick={onCancel} size="icon" type="button" variant="ghost">
-            <svg aria-hidden="true" fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="16"><path d="m6 6 12 12M18 6 6 18" /></svg>
-          </Button>
-        </div>
-        <label className="mt-5 block text-xs font-medium text-foreground-muted" htmlFor={`new-${kind}-playlist-title`}>歌单名称</label>
-        <input
-          className="mt-2 w-full rounded-lg border border-surface-border bg-background px-3 py-2.5 text-sm text-foreground outline-none focus:border-accent focus:ring-1 focus:ring-accent"
-          id={`new-${kind}-playlist-title`}
-          maxLength={160}
-          onChange={(event) => onTitleChange(event.target.value)}
-          placeholder="例如：通勤歌单"
-          required
-          value={title}
-        />
-        <label className="mt-4 block text-xs font-medium text-foreground-muted" htmlFor={`new-${kind}-playlist-description`}>歌单简介（可选）</label>
-        <textarea
-          className="mt-2 min-h-24 w-full resize-y rounded-lg border border-surface-border bg-background px-3 py-2.5 text-sm text-foreground outline-none focus:border-accent focus:ring-1 focus:ring-accent"
-          id={`new-${kind}-playlist-description`}
-          maxLength={1000}
-          onChange={(event) => onDescriptionChange(event.target.value)}
-          placeholder="写点歌单备注"
-          value={description}
-        />
-        <div className="mt-5 flex justify-end gap-2">
-          <Button disabled={pending} onClick={onCancel} type="button" variant="ghost">取消</Button>
-          <Button disabled={pending || !title.trim()} type="submit">{pending ? "创建中…" : "创建歌单"}</Button>
-        </div>
-      </form>
-    </div>,
-    document.body
+          <div>
+            <label className="block text-xs font-medium text-foreground-muted" htmlFor={`new-${kind}-playlist-description`}>
+              歌单简介（可选）
+            </label>
+            <textarea
+              className="mt-1.5 min-h-24 w-full resize-y rounded-lg border border-surface-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+              id={`new-${kind}-playlist-description`}
+              maxLength={1000}
+              onChange={(event) => onDescriptionChange(event.target.value)}
+              placeholder="写点歌单备注"
+              value={description}
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button disabled={pending} onClick={onCancel} type="button" variant="ghost">
+              取消
+            </Button>
+            <Button disabled={pending || !title.trim()} type="submit">
+              {pending ? "创建中…" : "创建歌单"}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -179,28 +184,31 @@ export function PlaylistMoveDialog({
   );
 }
 
-export function DeletePlaylistDialog({ kind, playlist, pending, onConfirm, onCancel }: { kind: "local" | "network"; playlist: { title: string }; pending: boolean; onConfirm: () => void; onCancel: () => void }) {
+export function DeletePlaylistDialog({
+  kind,
+  playlist,
+  pending,
+  onConfirm,
+  onCancel
+}: {
+  kind: "local" | "network";
+  playlist: { title: string };
+  pending: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
   const label = kind === "local" ? "本地歌单" : "网络歌单";
-  return createPortal(
-    <div
-      className="light-modal-scrim z-[var(--z-modal)]"
-      onClick={(event) => {
-        if (!pending && event.target === event.currentTarget) {
-          onCancel();
-        }
-      }}
-      role="presentation"
-    >
-      <div aria-labelledby="delete-playlist-title" className="light-dialog-surface w-full max-w-sm rounded-2xl border border-white/15 bg-[#151a21] p-5 text-foreground shadow-[0_24px_80px_rgba(0,0,0,0.72)] sm:p-6" role="dialog" aria-modal="true">
-        <h2 className="text-lg font-semibold text-foreground" id="delete-playlist-title">删除{label}</h2>
-        <p className="mt-3 text-sm leading-6 text-foreground-muted">确定删除“{playlist.title}”吗？已下载到本地的歌曲不会被删除。</p>
-        <div className="mt-5 flex justify-end gap-2">
-          <Button disabled={pending} onClick={onCancel} type="button" variant="ghost">取消</Button>
-          <Button className="bg-red-500 hover:bg-red-400" disabled={pending} onClick={onConfirm} type="button">{pending ? "删除中…" : "确认删除"}</Button>
-        </div>
-      </div>
-    </div>,
-    document.body
+  return (
+    <ConfirmDialog
+      open
+      title={`删除${label}`}
+      description={`确定删除“${playlist.title}”吗？已下载到本地的歌曲不会被删除。`}
+      confirmLabel="确认删除"
+      destructive
+      pending={pending}
+      onCancel={onCancel}
+      onConfirm={onConfirm}
+    />
   );
 }
 

@@ -1,9 +1,14 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import type { BilibiliTrackCandidate } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle
+} from "@/components/ui/dialog";
 import { useBackHandler } from "@/lib/desktop/use-back-handler";
 import { musicRoomApi } from "@/lib/network/music-room-api";
 
@@ -39,22 +44,7 @@ export function BilibiliImportDialog({
     }
   }, [open]);
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !loading) {
-        onClose();
-      }
-    };
-    if (open) {
-      window.addEventListener("keydown", handleKeyDown);
-      return () => window.removeEventListener("keydown", handleKeyDown);
-    }
-  }, [open, loading, onClose]);
-
-  // Mirrors the Escape condition above: stay put while an import is running.
   useBackHandler(onClose, open && !loading);
-
-  if (!open) return null;
 
   async function handleResolve() {
     const trimmed = urlInput.trim();
@@ -105,36 +95,15 @@ export function BilibiliImportDialog({
     onClose();
   }
 
-  return createPortal(
-    <div
-      className="light-modal-scrim z-[var(--z-modal)] flex items-center justify-center p-4"
-      role="presentation"
-      onClick={(e) => {
-        if (!loading && e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div
-        aria-modal="true"
-        className="light-dialog-surface max-h-[85vh] w-full max-w-lg flex flex-col rounded-xl border border-surface-border bg-surface shadow-2xl overflow-hidden"
-        role="dialog"
-      >
+  return (
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && !loading && onClose()}>
+      <DialogContent className="max-w-lg p-0 gap-0 overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-surface-border px-4 py-3">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-foreground">导入 B 站收藏夹 / 合集</span>
-          </div>
-          <Button
-            aria-label="关闭"
-            disabled={loading}
-            onClick={onClose}
-            size="icon"
-            type="button"
-            variant="ghost"
-            className="h-7 w-7 rounded-md text-foreground-muted hover:text-foreground hover:bg-surface-hover"
-          >
-            <CloseIcon />
-          </Button>
-        </div>
+        <DialogHeader className="border-b border-surface-border px-5 py-4">
+          <DialogTitle className="text-base font-semibold text-foreground">
+            导入 B 站收藏夹 / 合集
+          </DialogTitle>
+        </DialogHeader>
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-5 space-y-4 text-xs">
@@ -231,16 +200,7 @@ export function BilibiliImportDialog({
             </>
           )}
         </div>
-      </div>
-    </div>,
-    document.body
-  );
-}
-
-function CloseIcon() {
-  return (
-    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="m6 6 12 12M18 6 6 18" />
-    </svg>
+      </DialogContent>
+    </Dialog>
   );
 }

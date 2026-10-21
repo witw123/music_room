@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import type { PersonalizationExclusion, PlaybackMode } from "@music-room/shared";
@@ -19,6 +20,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { CustomLayoutEditor } from "./CustomLayoutEditor";
 import { LocalStorageManagementCard } from "./LocalStorageSettingsSection";
 import { AboutSettingsSection } from "./AboutSettingsSection";
@@ -26,6 +28,7 @@ import { SettingRow, SettingsSection } from "./SettingRow";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
 import { musicRoomApi } from "@/lib/network/music-room-api";
+import { personalizationChangedEvent } from "@/features/personalization/use-personalization-reporter";
 import {
   getDefaultAppSettings,
   normalizeCustomLayoutSettings,
@@ -160,7 +163,16 @@ export function SettingsPage() {
   const settings = useAppSettings();
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isCustomLayoutEditorOpen, setIsCustomLayoutEditorOpen] = useState(false);
-  const [recommendationExclusions, setRecommendationExclusions] = useState<PersonalizationExclusion[]>([]);
+  const queryClient = useQueryClient();
+  const exclusionsQueryKey = useMemo(
+    () => ["personalization", activeSession?.userId ?? null, "exclusions"] as const,
+    [activeSession?.userId]
+  );
+  const { data: recommendationExclusions = [] } = useQuery({
+    queryKey: exclusionsQueryKey,
+    queryFn: ({ signal }) => musicRoomApi.listPersonalizationExclusions(signal),
+    enabled: Boolean(activeSession)
+  });
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermissionState>("default");
   const [showNotificationHelp, setShowNotificationHelp] = useState(false);
   const [directoryState, setDirectoryState] = useState<LocalAudioStorageState | null>(null);
@@ -168,6 +180,13 @@ export function SettingsPage() {
   const [activeCategory, setActiveCategory] = useState<SettingsCategoryId>("general");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSearchCategory, setSelectedSearchCategory] = useState<SettingsCategoryId | "all">("all");
+  const [confirmAction, setConfirmAction] = useState<{
+    title: string;
+    description: string;
+    confirmLabel: string;
+    destructive?: boolean;
+    onConfirm: () => void | Promise<void>;
+  } | null>(null);
 
   const refreshPermissions = useCallback(async () => {
     const state = await queryNotificationPermissionState();
@@ -212,13 +231,7 @@ export function SettingsPage() {
     };
   }, [isCustomLayoutEditorOpen]);
 
-  useEffect(() => {
-    if (!activeSession) {
-      setRecommendationExclusions([]);
-      return;
-    }
-    void musicRoomApi.listPersonalizationExclusions().then(setRecommendationExclusions).catch(() => undefined);
-  }, [activeSession]);
+
 
   const patchSettings = useCallback((patch: Parameters<typeof updateAppSettings>[0]) => {
     updateAppSettings(patch);
@@ -226,19 +239,36 @@ export function SettingsPage() {
   }, []);
 
   const resetSettings = useCallback(() => {
-    if (!window.confirm("确定要恢复默认设置吗？本地歌曲和歌单不会被删除。")) return;
-    resetAppSettings();
-    setStatusMessage("已恢复默认设置");
+    setConfirmAction({
+      title: "恢复默认设置",
+      description: "确定要恢复默认设置吗？本地歌曲和歌单不会被删除。",
+      confirmLabel: "恢复默认",
+      destructive: true,
+      onConfirm: () => {
+        resetAppSettings();
+        setStatusMessage("已恢复默认设置");
+        setConfirmAction(null);
+      }
+    });
   }, []);
 
-  const resetListeningProfile = useCallback(async () => {
-    if (!window.confirm("确定要重置听歌画像吗？此操作会清除当前账号的聆听记录和画像统计。")) return;
-    try {
-      await musicRoomApi.clearPersonalizationProfile();
-      setStatusMessage("听歌画像已重置");
-    } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : "听歌画像重置失败。");
-    }
+  const resetListeningProfile = useCallback(() => {
+    setConfirmAction({
+      title: "重置听歌画像",
+      description: "确定要重置听歌画像吗？此操作会清除当前账号的聆听记录和画像统计。",
+      confirmLabel: "确认重置",
+      destructive: true,
+      onConfirm: async () => {
+        try {
+          await musicRoomApi.clearPersonalizationProfile();
+          setStatusMessage("听歌画像已重置");
+        } catch (error) {
+          setStatusMessage(error instanceof Error ? error.message : "听歌画像重置失败。");
+        } finally {
+          setConfirmAction(null);
+        }
+      }
+    });
   }, []);
 
   const handleLogout = useCallback(async () => {
@@ -746,21 +776,21 @@ export function SettingsPage() {
       )
     },
     {
-      id: "fullyCachedPlaybackGuard",
+      id: "fullyCachedPlayback",
       categoryId: "playback",
       sectionTitle: "播放方式与缓存规则",
-      label: "缓存播放 (第三方歌曲)",
-      description: "播放未预置 OPS 资产的歌曲时，自动通过已绑定的网易云/QQ音乐账号获取并在本地缓存播放。必须至少绑定一个平台账号。",
-      keywords: ["缓存播放", "第三方", "网易云", "qq音乐", "平台账号", "cache playback"],
+      label: "平台歌曲缓存播放",
+      description: "播放未预置 OPS 资产或房间中的网易云/QQ 音乐歌曲时，自动通过绑定的平台账号缓存到本地播放。开启需至少绑定一个平台账号；与仅流式播放互斥。",
+      keywords: ["缓存播放", "第三方", "网易云", "qq音乐", "平台账号", "cache playback", "平台歌曲缓存"],
       render: () => (
         <SettingRow
-          key="fullyCachedPlaybackGuard"
-          label="缓存播放 (第三方歌曲)"
-          description="播放未预置 OPS 资产的歌曲时，自动通过已绑定的网易云/QQ音乐账号获取并在本地缓存播放。必须至少绑定一个平台账号。"
+          key="fullyCachedPlayback"
+          label="平台歌曲缓存播放"
+          description="播放未预置 OPS 资产或房间中的网易云/QQ 音乐歌曲时，自动通过绑定的平台账号缓存到本地播放。开启需至少绑定一个平台账号；与仅流式播放互斥。"
         >
           <Toggle
             checked={settings.playback.fullyCachedPlayback}
-            label="缓存播放"
+            label="平台歌曲缓存播放"
             onChange={async (checked) => {
               if (checked) {
                 const status = await checkAnyProviderAccountBound();
@@ -768,7 +798,12 @@ export function SettingsPage() {
                   window.alert("开启缓存播放必须先绑定网易云音乐或 QQ 音乐账号。请前往「我的页 → 平台账号」完成绑定。");
                   return;
                 }
-                patchSettings({ playback: { fullyCachedPlayback: true } });
+                patchSettings({
+                  playback: {
+                    fullyCachedPlayback: true,
+                    streamingOnlyPlayback: false
+                  }
+                });
               } else {
                 patchSettings({ playback: { fullyCachedPlayback: false } });
               }
@@ -819,34 +854,6 @@ export function SettingsPage() {
                 playback: {
                   streamingOnlyPlayback: checked,
                   ...(checked ? { fullyCachedPlayback: false } : {})
-                }
-              })
-            }
-          />
-        </SettingRow>
-      )
-    },
-    {
-      id: "fullyCachedPlaybackRoom",
-      categoryId: "playback",
-      sectionTitle: "播放方式与缓存规则",
-      label: "平台歌曲缓存播放",
-      description: "房间中的网易云和 QQ 音乐歌曲下载到当前用户缓存后播放，不保存到正式本地曲库；与流式播放同时开启时以流式播放为准。",
-      keywords: ["平台歌曲缓存", "下载播放", "平台缓存"],
-      render: () => (
-        <SettingRow
-          key="fullyCachedPlaybackRoom"
-          label="平台歌曲缓存播放"
-          description="房间中的网易云和 QQ 音乐歌曲下载到当前用户缓存后播放，不保存到正式本地曲库；与流式播放同时开启时以流式播放为准。"
-        >
-          <Toggle
-            checked={settings.playback.fullyCachedPlayback}
-            label="平台歌曲缓存播放"
-            onChange={(checked) =>
-              patchSettings({
-                playback: {
-                  fullyCachedPlayback: checked,
-                  ...(checked ? { streamingOnlyPlayback: false } : {})
                 }
               })
             }
@@ -1026,9 +1033,11 @@ export function SettingsPage() {
                         void musicRoomApi
                           .removePersonalizationExclusion(item.kind, item.key)
                           .then(() => {
-                            setRecommendationExclusions((current) =>
-                              current.filter((candidate) => candidate.key !== item.key || candidate.kind !== item.kind)
+                            queryClient.setQueryData<PersonalizationExclusion[]>(
+                              exclusionsQueryKey,
+                              (prev) => prev?.filter((candidate) => candidate.key !== item.key || candidate.kind !== item.kind) ?? []
                             );
+                            window.dispatchEvent(new Event(personalizationChangedEvent));
                             setStatusMessage("已恢复推荐。");
                           })
                           .catch((error) =>
@@ -1098,6 +1107,8 @@ export function SettingsPage() {
     showNotificationHelp,
     directoryState,
     recommendationExclusions,
+    exclusionsQueryKey,
+    queryClient,
     patchSettings,
     resetSettings,
     resetListeningProfile,
@@ -1476,6 +1487,17 @@ export function SettingsPage() {
     <main className="workspace-page settings-page-scroll overflow-y-auto pb-[calc(var(--room-mobile-bottom-inset)+2.5rem)] md:pl-60 md:pb-24 lg:pb-28">
       {content}
       {editor}
+      {confirmAction ? (
+        <ConfirmDialog
+          open
+          title={confirmAction.title}
+          description={confirmAction.description}
+          confirmLabel={confirmAction.confirmLabel}
+          destructive={confirmAction.destructive}
+          onCancel={() => setConfirmAction(null)}
+          onConfirm={() => void confirmAction.onConfirm()}
+        />
+      ) : null}
     </main>
   );
 }

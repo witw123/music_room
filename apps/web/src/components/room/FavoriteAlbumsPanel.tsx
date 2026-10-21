@@ -13,6 +13,7 @@ import type {
   TrackMeta
 } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
+import { MediaArtwork } from "@/components/ui/media-artwork";
 import { formatDuration } from "@/lib/domain/music-room-ui";
 import { musicRoomApi } from "@/lib/network/music-room-api";
 import { useFavoriteAlbums } from "@/features/favorites/use-favorite-albums";
@@ -604,14 +605,14 @@ function FavoriteAlbumDetail({
 
 function Artwork({ artworkUrl, title, size }: { artworkUrl: string | null; title: string; size: "sm" | "lg" }) {
   const sizeClass = size === "lg" ? "h-20 w-20 text-2xl" : "h-10 w-10 text-base";
-  return artworkUrl ? (
-    // External provider artwork is intentionally rendered without Next image optimization.
-    // eslint-disable-next-line @next/next/no-img-element
-    <img alt={`${title} 封面`} className={`shrink-0 rounded-lg border border-surface-border object-cover ${sizeClass}`} loading="lazy" src={artworkUrl} />
-  ) : (
-    <div aria-label={`${title} 封面`} className={`flex shrink-0 items-center justify-center rounded-lg border border-surface-border bg-surface font-bold text-foreground-muted ${sizeClass}`}>
-      {title.slice(0, 1).toUpperCase()}
-    </div>
+  return (
+    <MediaArtwork
+      alt={`${title} 封面`}
+      src={artworkUrl}
+      containerClassName={`shrink-0 ${sizeClass}`}
+      rounded="lg"
+      fallbackIcon={title.slice(0, 1).toUpperCase()}
+    />
   );
 }
 

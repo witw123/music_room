@@ -1,9 +1,10 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import type { Route } from "next";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { Home, Compass, ListMusic, User } from "lucide-react";
 
 type MobileNavIconName = "home" | "discover" | "playlist" | "profile";
 
@@ -54,59 +55,12 @@ export function MobileAppNavigation({ onNavigateAway }: { onNavigateAway?: () =>
 }
 
 function MobileNavIcon({ name }: { name: MobileNavIconName }) {
-  const commonProps = {
-    width: 20,
-    height: 20,
-    viewBox: "0 0 24 24",
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: 1.8,
-    strokeLinecap: "round" as const,
-    strokeLinejoin: "round" as const,
-    "aria-hidden": true
-  };
+  const className = "mobile-app-navigation__icon h-5 w-5";
 
-  if (name === "home") {
-    return (
-      <svg {...commonProps} className="mobile-app-navigation__icon">
-        <path d="m3 10 9-7 9 7" />
-        <path d="M5 9.5V21h14V9.5" />
-        <path d="M9 21v-6h6v6" />
-      </svg>
-    );
-  }
-
-  if (name === "discover") {
-    return (
-      <svg {...commonProps} className="mobile-app-navigation__icon">
-        <circle cx="12" cy="12" r="8.5" />
-        <path d="m15.8 8.2-2.1 5.5-5.5 2.1 2.1-5.5 5.5-2.1Z" />
-      </svg>
-    );
-  }
-
-  if (name === "playlist") {
-    return (
-      <svg {...commonProps} className="mobile-app-navigation__icon">
-        <path d="M4 5h11" />
-        <path d="M4 10h11" />
-        <path d="M4 15h7" />
-        <path d="M16 15.5V6l5-1v9.5" />
-        <circle cx="14" cy="18" r="2" />
-        <circle cx="19" cy="16.5" r="2" />
-      </svg>
-    );
-  }
-
-  if (name === "profile") {
-    return (
-      <svg {...commonProps} className="mobile-app-navigation__icon">
-        <circle cx="12" cy="8" r="3.5" />
-        <path d="M4.5 21a7.5 7.5 0 0 1 15 0" />
-      </svg>
-    );
-  }
-
+  if (name === "home") return <Home className={className} />;
+  if (name === "discover") return <Compass className={className} />;
+  if (name === "playlist") return <ListMusic className={className} />;
+  if (name === "profile") return <User className={className} />;
   return null;
 }
 

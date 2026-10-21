@@ -1,10 +1,9 @@
 "use client";
 
-import { useState } from "react";
 import type { BilibiliTrackCandidate } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
 import { formatDuration } from "@/lib/domain/music-room-ui";
-import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
+import { MediaArtwork } from "@/components/ui/media-artwork";
 import { PlayIcon, ChevronLeftIcon, HeartIcon, ListMusicIcon } from "@/components/icons/DiscoverIcons";
 import { Icon } from "./search-ui-primitives";
 import type { AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
@@ -53,7 +52,6 @@ export function BilibiliPartDetailView({
   onSaveCollectionAsPlaylist,
   onAddCollectionToPlaylist
 }: BilibiliPartDetailViewProps) {
-  const [imageError, setImageError] = useState(false);
   const totalDurationMs = detail.parts.reduce((acc, curr) => acc + (curr.durationMs || 0), 0);
 
   return (
@@ -70,23 +68,14 @@ export function BilibiliPartDetailView({
 
       {/* Video Hero Stage */}
       <div className="relative overflow-hidden rounded-xl border border-surface-border bg-surface/40 p-4 sm:p-5 backdrop-blur-md grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-[144px_minmax(0,1fr)] md:grid-cols-[160px_minmax(0,1fr)] items-center sm:items-end">
-        <div className="w-32 sm:w-36 md:w-40 max-w-[160px] mx-auto sm:mx-0 shrink-0 aspect-square rounded-xl overflow-hidden bg-surface relative border border-surface-border shadow-xs">
-          {detail.artworkUrl && !imageError ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              alt={detail.title}
-              className="h-full w-full object-cover"
-              loading="eager"
-              referrerPolicy="no-referrer"
-              src={getArtworkSourceUrl(detail.artworkUrl)}
-              onError={() => setImageError(true)}
-            />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center text-foreground-muted/40">
-              <Icon name="music" />
-            </div>
-          )}
-        </div>
+        <MediaArtwork
+          alt={detail.title}
+          containerClassName="w-32 sm:w-36 md:w-40 max-w-[160px] mx-auto sm:mx-0 shrink-0 shadow-xs"
+          fallbackIcon={<Icon name="music" />}
+          loading="eager"
+          rounded="xl"
+          src={detail.artworkUrl}
+        />
 
         <div className="relative z-10 flex min-w-0 flex-col justify-end text-center sm:text-left">
           <div className="inline-flex items-center justify-center sm:justify-start gap-2 mb-1.5">

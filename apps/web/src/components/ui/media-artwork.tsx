@@ -84,6 +84,7 @@ export const MediaArtwork = React.forwardRef<HTMLImageElement, MediaArtworkProps
           alt={alt || "专辑封面"}
           loading={loading}
           decoding={decoding}
+          referrerPolicy="no-referrer"
           onError={() => setHasError(true)}
           className={cn(
             "h-full w-full object-cover transition-opacity duration-200",

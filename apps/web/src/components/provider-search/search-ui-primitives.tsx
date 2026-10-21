@@ -1,6 +1,17 @@
 import type { BilibiliTrackCandidate, NeteaseTrackCandidate, QqMusicTrackCandidate } from "@music-room/shared";
+import {
+  Search,
+  Heart,
+  ListPlus,
+  Download,
+  Loader2,
+  ArrowLeft,
+  X,
+  ChevronRight,
+  Music
+} from "lucide-react";
 import { MusicRoomApiError } from "@/lib/network/music-room-api";
-import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
+import { MediaArtwork } from "@/components/ui/media-artwork";
 
 export type Provider = "netease" | "qqmusic" | "bilibili";
 export type Track = NeteaseTrackCandidate | QqMusicTrackCandidate | BilibiliTrackCandidate;
@@ -42,13 +53,15 @@ export function Artwork({
   className?: string;
 }) {
   const sizes = { sm: "h-9 w-9 rounded-lg border border-surface-border", md: "h-20 w-20 rounded-xl", lg: "rounded-2xl" };
-  return src ? (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img alt={alt} className={`object-cover ${sizes[size]} ${className}`} loading="lazy" referrerPolicy="no-referrer" src={getArtworkSourceUrl(src)} />
-  ) : (
-    <span aria-label={alt} className={`flex items-center justify-center bg-surface text-foreground-muted/40 ${sizes[size]} ${className}`}>
-      <Icon name="music" />
-    </span>
+  return (
+    <MediaArtwork
+      alt={alt}
+      src={src}
+      className={className}
+      containerClassName={`${sizes[size]} ${className}`}
+      rounded="none"
+      fallbackIcon={<Icon name="music" />}
+    />
   );
 }
 
@@ -90,39 +103,21 @@ export function TrackAlbumLink({
 export function Icon({
   name,
   filled = false,
-  className = ""
+  className = "w-4 h-4"
 }: {
   name: "search" | "heart" | "arrow-left" | "close" | "music" | "chevron-right" | "playlist-add" | "download" | "loading";
   filled?: boolean;
   className?: string;
 }) {
-  const common = {
-    width: 16,
-    height: 16,
-    viewBox: "0 0 24 24",
-    fill: filled ? "currentColor" : "none",
-    stroke: "currentColor",
-    strokeWidth: 1.8,
-    strokeLinecap: "round" as const,
-    strokeLinejoin: "round" as const,
-    "aria-hidden": true,
-    className
-  };
-  if (name === "search") return <svg {...common}><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4.5 4.5" /></svg>;
-  if (name === "heart") return <svg {...common}><path d="M20.8 8.7c0 5.2-8.8 10.3-8.8 10.3S3.2 13.9 3.2 8.7A4.7 4.7 0 0 1 12 6.1a4.7 4.7 0 0 1 8.8 2.6Z" /></svg>;
-  if (name === "playlist-add") return <svg {...common}><path d="M4 5.5h10M4 9.5h10M4 13.5h6" /><path d="M17 13v7M13.5 16.5h7" /></svg>;
-  if (name === "download") return <svg {...common}><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" /></svg>;
-  if (name === "loading") return <svg {...common} className={`animate-spin ${className}`}><path d="M12 3a9 9 0 1 0 9 9" /></svg>;
-  if (name === "arrow-left") return <svg {...common}><path d="m15 18-6-6 6-6" /><path d="M9 12h10" /></svg>;
-  if (name === "close") return <svg {...common}><path d="m6 6 12 12M18 6 6 18" /></svg>;
-  if (name === "chevron-right") return <svg {...common}><path d="m9 18 6-6-6-6" /></svg>;
-  return (
-    <svg {...common}>
-      <path d="M4 19.5V5.8a1.8 1.8 0 0 1 2.4-1.7l12 4.5a1.8 1.8 0 0 1 1.2 1.7v8.2" />
-      <circle cx="8" cy="19" r="2.5" />
-      <circle cx="18" cy="17" r="2.5" />
-    </svg>
-  );
+  if (name === "search") return <Search className={className} />;
+  if (name === "heart") return <Heart className={className} fill={filled ? "currentColor" : "none"} />;
+  if (name === "playlist-add") return <ListPlus className={className} />;
+  if (name === "download") return <Download className={className} />;
+  if (name === "loading") return <Loader2 className={`animate-spin ${className}`} />;
+  if (name === "arrow-left") return <ArrowLeft className={className} />;
+  if (name === "close") return <X className={className} />;
+  if (name === "chevron-right") return <ChevronRight className={className} />;
+  return <Music className={className} />;
 }
 
 export function toProviderErrorMessage(error: unknown, provider: Provider) {

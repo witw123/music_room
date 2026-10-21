@@ -1,7 +1,8 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Plus, RotateCw, User, LayoutGrid } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { Route } from "next";
@@ -240,7 +241,7 @@ export function RoomsHomePage({
               onClick={() => openCreateRoom("public")}
               type="button"
             >
-              <svg aria-hidden="true" fill="none" height="14" viewBox="0 0 24 24" width="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"><path d="M12 5v14M5 12h14" /></svg>
+              <Plus className="h-3.5 w-3.5" />
               <span>创建</span>
             </button>
             <button
@@ -257,14 +258,14 @@ export function RoomsHomePage({
               title="刷新房间列表"
               type="button"
             >
-              <svg aria-hidden="true" className={isPending ? "animate-spin" : ""} fill="none" height="14" viewBox="0 0 24 24" width="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><path d="M20 11a8 8 0 1 0 2 5.5" /><path d="M20 4v7h-7" /></svg>
+              <RotateCw className={`h-3.5 w-3.5 ${isPending ? "animate-spin" : ""}`} />
             </button>
             <Link
               aria-label="打开个人中心"
               className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-surface-border bg-surface text-foreground-muted shadow-sm transition-all hover:bg-surface-hover hover:text-foreground active:scale-95"
               href="/app/profile"
             >
-              <svg aria-hidden="true" fill="none" height="14" viewBox="0 0 24 24" width="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><circle cx="12" cy="8" r="3.5" /><path d="M4.5 21a7.5 7.5 0 0 1 15 0" /></svg>
+              <User className="h-3.5 w-3.5" />
             </Link>
           </div>
         </header>
@@ -371,20 +372,7 @@ export function RoomsHomePage({
           ) : (
             <div className="flex min-h-[260px] flex-col items-center justify-center py-14 text-center opacity-85 rounded-xl border border-surface-border/50 bg-surface/30">
               <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-surface-border bg-surface text-foreground-muted">
-                <svg
-                  width="24"
-                  height="24"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                  <line x1="3" y1="9" x2="21" y2="9" />
-                  <line x1="9" y1="21" x2="9" y2="9" />
-                </svg>
+                <LayoutGrid className="h-6 w-6" />
               </div>
               <h3 className="mb-2 font-semibold text-foreground">当前没有房间</h3>
               <p className="max-w-sm text-sm text-foreground-muted">

@@ -1,4 +1,4 @@
-﻿@tailwind base;
+@tailwind base;
 @tailwind components;
 @tailwind utilities;
 
@@ -1289,55 +1289,55 @@
 
   /* Secondary surfaces keep their dark-mode classes for the default theme,
      but use a clean elevated layer and a softer daylight shadow here. */
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) .light-dialog-surface,
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) .light-popover-surface,
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) .light-audio-surface {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) .light-dialog-surface,
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) .light-popover-surface,
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) .light-audio-surface {
     background-color: var(--background-secondary) !important;
     border-color: var(--surface-border) !important;
     box-shadow: 0 18px 50px rgba(15, 23, 42, 0.14) !important;
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) .light-overlay-control {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) .light-overlay-control {
     background-color: transparent !important;
     border-color: var(--surface-border) !important;
     color: var(--foreground) !important;
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) .light-overlay-control:hover {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) .light-overlay-control:hover {
     background-color: var(--surface-hover) !important;
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) .light-control-surface {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) .light-control-surface {
     background-color: transparent !important;
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) .light-control-surface:hover {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) .light-control-surface:hover {
     background-color: var(--surface-hover) !important;
   }
 
   /* Dark-mode button fills become transparent controls in the light theme;
      hover rules still provide feedback without leaving a resting gray block. */
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) button[class~="bg-black"],
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) button[class~="bg-white/5"],
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) button[class~="bg-white/10"],
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) button[class~="bg-white/15"],
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) button[class~="bg-white/[0.025]"],
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) button[class~="bg-white/[0.03]"],
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) button[class~="bg-white/[0.04]"],
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) button[class~="bg-white/[0.05]"],
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) button[class~="bg-white/[0.06]"],
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) button[class~="bg-white/[0.08]"],
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) button[class~="bg-white/[0.12]"] {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) button[class~="bg-black"],
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) button[class~="bg-white/5"],
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) button[class~="bg-white/10"],
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) button[class~="bg-white/15"],
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) button[class~="bg-white/[0.025]"],
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) button[class~="bg-white/[0.03]"],
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) button[class~="bg-white/[0.04]"],
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) button[class~="bg-white/[0.05]"],
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) button[class~="bg-white/[0.06]"],
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) button[class~="bg-white/[0.08]"],
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) button[class~="bg-white/[0.12]"] {
     background-color: transparent !important;
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) button[class~="hover:bg-white/5"]:hover,
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) button[class~="hover:bg-white/10"]:hover,
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) button[class~="hover:bg-white/15"]:hover,
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) button[class~="hover:bg-white/[0.06]"]:hover,
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) button[class~="hover:bg-white/[0.07]"]:hover,
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) button[class~="hover:bg-white/[0.08]"]:hover,
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) button[class~="hover:bg-white/[0.12]"]:hover {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) button[class~="hover:bg-white/5"]:hover,
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) button[class~="hover:bg-white/10"]:hover,
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) button[class~="hover:bg-white/15"]:hover,
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) button[class~="hover:bg-white/[0.06]"]:hover,
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) button[class~="hover:bg-white/[0.07]"]:hover,
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) button[class~="hover:bg-white/[0.08]"]:hover,
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) button[class~="hover:bg-white/[0.12]"]:hover {
     background-color: var(--surface-hover) !important;
   }
 
@@ -1366,26 +1366,26 @@
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4) !important;
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) .light-player-queue {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) .light-player-queue {
     background-color: var(--background-secondary) !important;
     border-color: var(--surface-border) !important;
     box-shadow: 0 18px 50px rgba(15, 23, 42, 0.14) !important;
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) .light-player-queue .light-player-queue-content {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) .light-player-queue .light-player-queue-content {
     background-color: var(--background-secondary) !important;
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) .light-player-queue-artwork {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) .light-player-queue-artwork {
     background-color: var(--surface) !important;
     border-color: var(--surface-border) !important;
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) .light-player-queue-pending {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) .light-player-queue-pending {
     background-color: color-mix(in srgb, var(--background-secondary) 86%, transparent) !important;
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) .light-player-queue-pending-pill {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) .light-player-queue-pending-pill {
     background-color: var(--background-secondary) !important;
     border-color: var(--surface-border) !important;
     box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12) !important;
@@ -1393,88 +1393,88 @@
 
   /* Accent and destructive actions must keep their white label on a filled
      color after the light theme remaps generic white text. */
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [class~="bg-accent/90"][class~="text-white"],
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [class~="bg-red-500"][class~="text-white"],
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [class~="bg-red-600"][class~="text-white"] {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [class~="bg-accent/90"][class~="text-white"],
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [class~="bg-red-500"][class~="text-white"],
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [class~="bg-red-600"][class~="text-white"] {
     color: #ffffff !important;
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [class~="text-zinc-200"],
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [class~="text-zinc-300"] {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [class~="text-zinc-200"],
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [class~="text-zinc-300"] {
     color: var(--foreground) !important;
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [class~="text-zinc-400"] {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [class~="text-zinc-400"] {
     color: var(--foreground-muted) !important;
   }
 
   /* White opacity utilities are tuned for a dark canvas in the source UI.
      Re-map their common levels to the light foreground hierarchy. */
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [class~="text-white/20"] {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [class~="text-white/20"] {
     color: color-mix(in srgb, var(--foreground) 40%, transparent) !important;
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [class~="text-white/30"],
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [class~="text-white/35"] {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [class~="text-white/30"],
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [class~="text-white/35"] {
     color: color-mix(in srgb, var(--foreground) 52%, transparent) !important;
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [class~="text-white/40"],
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [class~="text-white/45"] {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [class~="text-white/40"],
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [class~="text-white/45"] {
     color: color-mix(in srgb, var(--foreground) 60%, transparent) !important;
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [class~="text-white/50"],
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [class~="text-white/55"] {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [class~="text-white/50"],
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [class~="text-white/55"] {
     color: color-mix(in srgb, var(--foreground) 68%, transparent) !important;
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [class~="text-white/60"],
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [class~="text-white/70"],
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [class~="text-white/75"],
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [class~="text-white/80"] {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [class~="text-white/60"],
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [class~="text-white/70"],
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [class~="text-white/75"],
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [class~="text-white/80"] {
     color: color-mix(in srgb, var(--foreground) 82%, transparent) !important;
   }
 
   /* Status colors keep their meaning but gain enough contrast against white. */
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [class~="text-amber-100"],
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [class~="text-amber-100/65"],
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [class~="text-amber-100/80"],
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [class~="text-amber-200"],
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [class~="text-amber-300"] {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [class~="text-amber-100"],
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [class~="text-amber-100/65"],
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [class~="text-amber-100/80"],
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [class~="text-amber-200"],
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [class~="text-amber-300"] {
     color: #a16207 !important;
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [class~="text-emerald-200"],
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [class~="text-emerald-300"] {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [class~="text-emerald-200"],
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [class~="text-emerald-300"] {
     color: #047857 !important;
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [class~="text-sky-200"],
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [class~="text-sky-300"] {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [class~="text-sky-200"],
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [class~="text-sky-300"] {
     color: #0369a1 !important;
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [class~="text-red-200"],
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [class~="text-red-300"],
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [class~="text-red-400"] {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [class~="text-red-200"],
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [class~="text-red-300"],
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [class~="text-red-400"] {
     color: #b91c1c !important;
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [class~="text-green-400"] {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [class~="text-green-400"] {
     color: #15803d !important;
   }
 
   /* Room management surfaces are intentionally unstyled in dark mode and
      inherit the workspace there. Give them a quiet elevated layer in light. */
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) .material-surface {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) .material-surface {
     background: color-mix(in srgb, var(--background-secondary) 92%, var(--background)) !important;
     border-color: var(--surface-border) !important;
     box-shadow: none !important;
     color: var(--foreground);
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) .material-surface-header {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) .material-surface-header {
     background: color-mix(in srgb, var(--background-secondary) 88%, transparent) !important;
     border-color: var(--surface-border) !important;
     -webkit-backdrop-filter: blur(18px) saturate(140%);
@@ -1483,127 +1483,127 @@
 
   /* Artwork palettes are applied inline, so player chrome needs an explicit
      light-mode surface override. Keep the artwork accents and record material. */
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [data-testid="bottom-player"] {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [data-testid="bottom-player"] {
     background-color: var(--background-secondary) !important;
     border-color: var(--surface-border) !important;
     color: var(--foreground);
     box-shadow: 0 16px 40px rgba(15, 23, 42, 0.12);
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [data-testid="bottom-player"][data-mobile-variant="compact"] {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [data-testid="bottom-player"][data-mobile-variant="compact"] {
     background-color: color-mix(in srgb, var(--background-secondary) 94%, var(--background)) !important;
     box-shadow: 0 14px 34px rgba(15, 23, 42, 0.14);
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) .mobile-app-navigation {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) .mobile-app-navigation {
     background: color-mix(in srgb, var(--background-secondary) 82%, transparent);
     box-shadow: 0 -10px 30px color-mix(in srgb, #172033 10%, transparent);
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) .mobile-app-navigation__item--active {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) .mobile-app-navigation__item--active {
     background: color-mix(in srgb, #005fca 10%, transparent);
     color: #005fca;
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [data-testid="mini-player-overlay"] {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [data-testid="mini-player-overlay"] {
     background-color: var(--background-secondary) !important;
     border-color: var(--surface-border) !important;
     color: var(--foreground);
     box-shadow: 0 24px 80px rgba(15, 23, 42, 0.2);
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [data-testid="mini-player-overlay"] [data-player-header] {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [data-testid="mini-player-overlay"] [data-player-header] {
     border-color: var(--surface-border) !important;
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [data-testid="mini-player-overlay"] [data-player-header] [style] {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [data-testid="mini-player-overlay"] [data-player-header] [style] {
     color: var(--foreground) !important;
   }
 
   /* The cover remains a dark, image-backed control surface in either theme. */
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [data-testid="mini-player-cover"] [class~="text-white"],
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [data-testid="mini-player-cover"] [class*="text-white/"] {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [data-testid="mini-player-cover"] [class~="text-white"],
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [data-testid="mini-player-cover"] [class*="text-white/"] {
     color: rgba(255, 255, 255, 0.9) !important;
   }
 
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) .light-popover-surface-arrow {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) .light-popover-surface-arrow {
     border-top-color: var(--background-secondary) !important;
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [data-testid="bottom-player"] [data-testid="player-queue-button"] [class~="text-white"] {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [data-testid="bottom-player"] [data-testid="player-queue-button"] [class~="text-white"] {
     color: #ffffff !important;
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [data-testid="square-album-cover"][class~="bg-accent"] [class~="text-white"] {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [data-testid="square-album-cover"][class~="bg-accent"] [class~="text-white"] {
     color: #ffffff !important;
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) .home-room-backdrop {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) .home-room-backdrop {
     background-color: var(--background) !important;
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) .home-room-grid {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) .home-room-grid {
     background-image: linear-gradient(to right, rgba(15, 23, 42, 0.045) 1px, transparent 1px), linear-gradient(to bottom, rgba(15, 23, 42, 0.045) 1px, transparent 1px) !important;
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) .immersive-player-overlay {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) .immersive-player-overlay {
     background-color: var(--background) !important;
     color: var(--foreground);
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) .immersive-player-overlay [data-immersive-wash] {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) .immersive-player-overlay [data-immersive-wash] {
     background: linear-gradient(112deg, var(--background) 0%, color-mix(in srgb, var(--background-secondary) 72%, var(--background)) 52%, var(--background-secondary) 100%) !important;
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) .immersive-player-overlay [data-immersive-accent] {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) .immersive-player-overlay [data-immersive-accent] {
     background: linear-gradient(145deg, color-mix(in srgb, var(--accent) 10%, transparent), transparent 46%, var(--surface-border)) !important;
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) .immersive-player-overlay [class~="text-foreground"] {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) .immersive-player-overlay [class~="text-foreground"] {
     color: var(--foreground) !important;
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) .immersive-player-overlay [class~="text-foreground-muted"] {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) .immersive-player-overlay [class~="text-foreground-muted"] {
     color: var(--foreground-muted) !important;
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [role="dialog"][aria-label="沉浸式播放"] {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [role="dialog"][aria-label="沉浸式播放"] {
     color: var(--foreground);
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [role="dialog"][aria-label="沉浸式播放"] [class~="text-foreground"] {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [role="dialog"][aria-label="沉浸式播放"] [class~="text-foreground"] {
     color: var(--foreground) !important;
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [role="dialog"][aria-label="沉浸式播放"] [class~="text-foreground-muted"] {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [role="dialog"][aria-label="沉浸式播放"] [class~="text-foreground-muted"] {
     color: var(--foreground-muted) !important;
   }
 
   /* Keep text on the deliberately dark record/player materials bright after
      the general white-text remap changes light structural surfaces. */
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [class*="from-[#020202]"] [class~="text-white"],
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) [class*="from-[#020202]"] [class*="text-white/"] {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [class*="from-[#020202]"] [class~="text-white"],
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) [class*="from-[#020202]"] [class*="text-white/"] {
     color: rgba(255, 255, 255, 0.86) !important;
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) select,
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) option {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) select,
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) option {
     color-scheme: light;
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) .netease-results-scroll,
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) .qqmusic-results-scroll {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) .netease-results-scroll,
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) .qqmusic-results-scroll {
     scrollbar-color: rgba(0, 0, 0, 0.18) transparent;
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) .netease-results-scroll::-webkit-scrollbar-thumb,
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) .qqmusic-results-scroll::-webkit-scrollbar-thumb {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) .netease-results-scroll::-webkit-scrollbar-thumb,
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) .qqmusic-results-scroll::-webkit-scrollbar-thumb {
     background-color: rgba(0, 0, 0, 0.18);
   }
 
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) .netease-results-scroll::-webkit-scrollbar-thumb:hover,
-  :is(:is(html[data-theme="light"], html[data-theme-mode="light"]), html[data-theme-mode="light"]) .qqmusic-results-scroll::-webkit-scrollbar-thumb:hover {
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) .netease-results-scroll::-webkit-scrollbar-thumb:hover,
+  :is(html[data-theme="light"], html[data-theme-mode="light"]) .qqmusic-results-scroll::-webkit-scrollbar-thumb:hover {
     background-color: rgba(0, 0, 0, 0.32);
   }
 

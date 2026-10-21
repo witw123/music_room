@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Music, ChevronRight, X } from "lucide-react";
 import type { Playlist } from "@music-room/shared";
 import { AnchoredDialog, type AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
 import { Button } from "@/components/ui/button";
@@ -43,7 +44,7 @@ export function ProviderPlaylistPickerDialog({
           variant="ghost"
           className="h-7 w-7 rounded-md text-foreground-muted hover:text-foreground hover:bg-surface-hover"
         >
-          <Icon name="close" />
+          <X className="h-4 w-4" />
         </Button>
       </div>
       {loading ? <p className="mt-6 text-center text-sm text-foreground-muted">正在加载可用歌单…</p> : null}
@@ -68,13 +69,13 @@ export function ProviderPlaylistPickerDialog({
                   type="button"
                 >
                   <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-accent/10 text-accent">
-                    <Icon name="music" />
+                    <Music className="h-4 w-4" />
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-medium text-foreground">{item.title}</span>
                     <span className="mt-0.5 block truncate text-xs text-foreground-muted">{item.trackIds.length} 首歌曲</span>
                   </span>
-                  <Icon name="chevron-right" />
+                  <ChevronRight className="h-4 w-4 text-foreground-muted" />
                 </button>
               );
             })}
@@ -83,11 +84,4 @@ export function ProviderPlaylistPickerDialog({
       ) : null}
     </AnchoredDialog>
   );
-}
-
-function Icon({ name }: { name: "close" | "music" | "chevron-right" }) {
-  const common = { width: 16, height: 16, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
-  if (name === "close") return <svg {...common}><path d="m6 6 12 12M18 6 6 18" /></svg>;
-  if (name === "music") return <svg {...common}><path d="M9 18V5l10-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="16" cy="16" r="3" /></svg>;
-  return <svg {...common}><path d="m9 18 6-6-6-6" /></svg>;
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   ProviderPlaylistDetail,
   ProviderTrackCandidate
@@ -18,6 +18,7 @@ import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { musicRoomApi } from "@/lib/network/music-room-api";
 import { useWorkspacePageActive } from "@/features/workspace/page-activity";
 import { useFavoriteTracks } from "@/features/favorites/use-favorite-tracks";
+import { useNetworkPlaylists } from "@/features/playlist/use-network-playlists";
 import { useLocalPlayer } from "@/features/playback/local-player-context";
 import {
   listMergedLocalPlaylistTracks,
@@ -26,7 +27,6 @@ import {
   upsertLocalPlaylistTrack,
   type LocalPlaylistTrackRecord
 } from "@/features/playlist/local-playlist";
-import { isLocalPlaylistMirror } from "@/features/playlist/local-playlist-database";
 import {
   buildPlaybackStatusMessage,
   prepareTrackForImmediatePlayback,
@@ -93,7 +93,23 @@ export function DiscoverPage() {
   const [detail, setDetail] = useState<Detail | null>(null);
   useBackHandler(() => setDetail(null), detail !== null);
   const [detailLoading, setDetailLoading] = useState<string | null>(null);
-  const [favoritePlaylistKeys, setFavoritePlaylistKeys] = useState<Set<string>>(new Set());
+  const { playlists: networkPlaylists } = useNetworkPlaylists(activeSession?.userId, pageActive);
+
+  const favoritePlaylistKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const pl of networkPlaylists) {
+      for (const tag of pl.tags) {
+        if (tag.startsWith("network:")) {
+          const parts = tag.split(":");
+          if (parts.length >= 3) {
+            keys.add(`${parts[1]}:${parts.slice(2).join(":")}`);
+          }
+        }
+      }
+    }
+    return keys;
+  }, [networkPlaylists]);
+
   const [playlistPickerTrack, setPlaylistPickerTrack] = useState<Track | null>(null);
   const [playlistPickerAnchor, setPlaylistPickerAnchor] = useState<AnchoredDialogAnchor | null>(null);
   const [playlistPickerOptions, setPlaylistPickerOptions] = useState<ProviderPlaylistPickerOption[]>([]);
@@ -103,30 +119,6 @@ export function DiscoverPage() {
   const [localTracks, setLocalTracks] = useState<LocalPlaylistTrackRecord[]>([]);
   const [isSearchActive, setIsSearchActive] = useState(false);
   const [searchKeywords, setSearchKeywords] = useState("");
-  useEffect(() => {
-    if (!activeSession || !pageActive) return;
-    let cancelled = false;
-    const controller = new AbortController();
-    void musicRoomApi.listMyPlaylists(controller.signal).then((lists) => {
-      if (cancelled) return;
-      const keys = new Set<string>();
-      for (const pl of lists) {
-        for (const tag of pl.tags) {
-          if (tag.startsWith("network:")) {
-            const parts = tag.split(":");
-            if (parts.length >= 3) {
-              keys.add(`${parts[1]}:${parts.slice(2).join(":")}`);
-            }
-          }
-        }
-      }
-      setFavoritePlaylistKeys(keys);
-    }).catch(() => {});
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
-  }, [activeSession, pageActive]);
 
   useEffect(() => {
     if (!pageActive) return;
@@ -178,23 +170,11 @@ export function DiscoverPage() {
     if (pending) return;
     setPlaylistPickerTrack(track);
     setPlaylistPickerAnchor(anchor);
-    setPlaylistPickerLoading(true);
-    setPlaylistPickerOptions([]);
+    setPlaylistPickerLoading(false);
+    setPlaylistPickerOptions(
+      networkPlaylists.map((playlist) => ({ kind: "network" as const, playlist }))
+    );
     setErrorMessage(null);
-    setPending(`playlist-picker:${track.providerTrackId}`);
-    try {
-      const networkPlaylists = await musicRoomApi.listMyPlaylists();
-      setPlaylistPickerOptions(
-        networkPlaylists
-          .filter((item) => !isLocalPlaylistMirror(item))
-          .map((item) => ({ kind: "network" as const, playlist: item }))
-      );
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? `歌单加载失败：${error.message}` : "歌单加载失败，请稍后重试。");
-    } finally {
-      setPlaylistPickerLoading(false);
-      setPending(null);
-    }
   }
 
   async function addTrackToPlaylist(option: ProviderPlaylistPickerOption) {
@@ -333,16 +313,10 @@ export function DiscoverPage() {
     setErrorMessage(null);
     try {
       if (favoritePlaylistKeys.has(key)) {
-        const myLists = await musicRoomApi.listMyPlaylists();
-        const found = myLists.find((l) => l.tags.includes(`network:${key}`));
+        const found = networkPlaylists.find((l) => l.tags.includes(`network:${key}`));
         if (found) {
           await musicRoomApi.deletePlaylist(found.id);
         }
-        setFavoritePlaylistKeys((prev) => {
-          const next = new Set(prev);
-          next.delete(key);
-          return next;
-        });
         setStatusMessage(`已取消收藏歌单《${playlistDetail.title}》。`);
       } else {
         await musicRoomApi.createPlaylist({
@@ -360,7 +334,6 @@ export function DiscoverPage() {
             // The saved network playlist remains authoritative even if local cache fails
           }
         }));
-        setFavoritePlaylistKeys((prev) => new Set(prev).add(key));
         setStatusMessage(`《${playlistDetail.title}》已保存到我的歌单。`);
       }
     } catch (error) {

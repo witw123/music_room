@@ -9,6 +9,8 @@ import {
   upsertLocalPlaylistTrack
 } from "@/features/playlist/local-playlist";
 import { musicRoomApi } from "@/lib/network/music-room-api";
+import { useActiveSession } from "@/features/session/use-session-identity";
+import { useProviderAccount } from "@/features/providers/use-provider-account";
 
 type Provider = "netease" | "qqmusic";
 type ImportKind = "likedTracks" | "collectedPlaylists" | "collectedAlbums" | "followedArtists";
@@ -46,6 +48,8 @@ export function ProviderDataImportSection() {
 }
 
 function ProviderImporter({ provider }: { provider: Provider }) {
+  const activeSession = useActiveSession();
+  const { data: account } = useProviderAccount(activeSession?.userId, provider);
   const [snapshot, setSnapshot] = useState<ProviderLibrarySnapshot | null>(null);
   const [selected, setSelected] = useState<Record<ImportKind, boolean>>({
     likedTracks: true,
@@ -62,10 +66,6 @@ function ProviderImporter({ provider }: { provider: Provider }) {
     setPending("load");
     setMessage(null);
     try {
-      const account = provider === "netease"
-        ? await musicRoomApi.getNeteaseAccount().catch(() => null)
-        : await musicRoomApi.getQqMusicAccount().catch(() => null);
-
       if (!account?.connected) {
         setMessage(`尚未绑定${providerName}账号，请先在上方扫码绑定后再读取资料。`);
         return;

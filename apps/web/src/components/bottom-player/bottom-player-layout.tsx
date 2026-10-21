@@ -1,18 +1,17 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useRef, useState, type CSSProperties } from "react";
 import { formatDuration } from "@/lib/domain/music-room-ui";
-import { useBackHandler } from "@/lib/desktop/use-back-handler";
 import type { ProviderTrackCandidate, QueueItem, RoomMember, TrackMeta } from "@music-room/shared";
 import { PlayerQueueDrawer } from "./PlayerQueueDrawer";
 import { FavoriteTrackButton } from "@/components/ui/FavoriteTrackButton";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { getNextPlaybackMode, type PlaybackMode } from "./playback-mode";
 import { SquareAlbumCover } from "./PlayerArtwork";
 import { getArtworkSourceUrl, withAlpha } from "./artwork-colors";
 import {
-  getAppSettings,
   updateAppSettings,
-  appSettingsChangeEvent,
+  useAppSettings,
   type PlayerStyle,
   type AudioQualityPreference
 } from "@/features/settings/settings-store";
@@ -290,85 +289,63 @@ function VolumeControl({
   accentSoft?: string;
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
   const percentage = Math.round(Math.max(0, Math.min(1, volume)) * 100);
 
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const handlePointerDown = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setIsOpen(false);
-    };
-
-    document.addEventListener("pointerdown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [isOpen]);
-
-  useBackHandler(() => setIsOpen(false), isOpen);
-
   return (
-    <div ref={rootRef} className="relative shrink-0 flex items-center h-8">
-      {isOpen ? (
-        <div className="absolute bottom-full right-1/2 z-[60] mb-2 flex translate-x-1/2 flex-col items-center">
-          <div className="light-popover-surface flex h-[9.25rem] w-14 flex-col items-center rounded-2xl border border-surface-border bg-background-secondary px-2.5 py-2.5 shadow-lg backdrop-blur-xl">
-            <div className="relative h-24 w-5 shrink-0">
-              <div className="absolute left-1/2 top-0 h-full w-1.5 -translate-x-1/2 overflow-hidden rounded-full bg-white/10">
-                <div
-                  className="absolute inset-x-0 bottom-0 rounded-full transition-[height,background-color] duration-150"
-                  style={{
-                    height: `${percentage}%`,
-                    backgroundColor: accentColor
-                  }}
-                />
-              </div>
-              <div
-                aria-hidden="true"
-                className="absolute left-1/2 h-5 w-5 -translate-x-1/2 translate-y-1/2 rounded-full border border-white/20 bg-foreground shadow-[0_3px_9px_rgba(0,0,0,0.35)] transition-[bottom] duration-150"
-                style={{ bottom: `${percentage}%` }}
-              />
-              <input
-                aria-label="音量"
-                data-testid="player-volume-slider"
-                type="range"
-                min={0}
-                max={1}
-                step={0.01}
-                value={volume}
-                onChange={(event) => onChange(Number(event.target.value))}
-                className="absolute left-1/2 top-1/2 h-8 w-24 -translate-x-1/2 -translate-y-1/2 -rotate-90 cursor-pointer opacity-0 focus-visible:opacity-100 focus-visible:outline-none"
-              />
-            </div>
-            <span className="mt-2 text-xs tabular-nums text-foreground-muted">{percentage}%</span>
-          </div>
-          <div className="light-popover-surface-arrow h-0 w-0 border-x-[7px] border-t-[7px] border-x-transparent border-t-background-secondary" aria-hidden="true" />
-        </div>
-      ) : null}
-      <button
-        type="button"
-        data-testid="player-volume-button"
-        aria-expanded={isOpen}
-        aria-label={`音量 ${percentage}%，点击${isOpen ? "收起" : "调整"}`}
-        title={`音量 ${percentage}%`}
-        onClick={() => setIsOpen((current) => !current)}
-        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-foreground-muted transition-colors hover:text-[var(--hover-color)] hover:bg-[var(--hover-bg)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-        style={{
-          "--hover-color": accentColor,
-          "--hover-bg": accentSoft,
-          ...(isOpen ? { color: accentColor, backgroundColor: accentSoft } : {})
-        } as CSSProperties}
+    <Popover open={isOpen} onOpenChange={setIsOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          data-testid="player-volume-button"
+          aria-expanded={isOpen}
+          aria-label={`音量 ${percentage}%，点击${isOpen ? "收起" : "调整"}`}
+          title={`音量 ${percentage}%`}
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-foreground-muted transition-colors hover:text-[var(--hover-color)] hover:bg-[var(--hover-bg)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer"
+          style={{
+            "--hover-color": accentColor,
+            "--hover-bg": accentSoft,
+            ...(isOpen ? { color: accentColor, backgroundColor: accentSoft } : {})
+          } as CSSProperties}
+        >
+          <VolumeIcon volume={volume} />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        side="top"
+        align="center"
+        sideOffset={8}
+        className="light-popover-surface flex h-[9.25rem] w-14 flex-col items-center rounded-2xl border border-surface-border bg-background-secondary p-2.5 shadow-lg backdrop-blur-xl"
       >
-        <VolumeIcon volume={volume} />
-      </button>
-    </div>
+        <div className="relative h-24 w-5 shrink-0">
+          <div className="absolute left-1/2 top-0 h-full w-1.5 -translate-x-1/2 overflow-hidden rounded-full bg-white/10">
+            <div
+              className="absolute inset-x-0 bottom-0 rounded-full transition-[height,background-color] duration-150"
+              style={{
+                height: `${percentage}%`,
+                backgroundColor: accentColor
+              }}
+            />
+          </div>
+          <div
+            aria-hidden="true"
+            className="absolute left-1/2 h-5 w-5 -translate-x-1/2 translate-y-1/2 rounded-full border border-white/20 bg-foreground shadow-[0_3px_9px_rgba(0,0,0,0.35)] transition-[bottom] duration-150"
+            style={{ bottom: `${percentage}%` }}
+          />
+          <input
+            aria-label="音量"
+            data-testid="player-volume-slider"
+            type="range"
+            min={0}
+            max={1}
+            step={0.01}
+            value={volume}
+            onChange={(event) => onChange(Number(event.target.value))}
+            className="absolute left-1/2 top-1/2 h-8 w-24 -translate-x-1/2 -translate-y-1/2 -rotate-90 cursor-pointer opacity-0 focus-visible:opacity-100 focus-visible:outline-none"
+          />
+        </div>
+        <span className="mt-2 text-xs tabular-nums text-foreground-muted">{percentage}%</span>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -671,42 +648,8 @@ export function QualityBadge({
   accentSoft?: string;
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const [preferredQuality, setPreferredQuality] = useState<AudioQualityPreference>(() => {
-    return getAppSettings().playback.preferredAudioQuality;
-  });
-
-  useEffect(() => {
-    const handleSettingsChange = () => {
-      setPreferredQuality(getAppSettings().playback.preferredAudioQuality);
-    };
-    window.addEventListener(appSettingsChangeEvent, handleSettingsChange);
-    return () => {
-      window.removeEventListener(appSettingsChangeEvent, handleSettingsChange);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const handlePointerDown = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setIsOpen(false);
-    };
-
-    document.addEventListener("pointerdown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [isOpen]);
-
-  useBackHandler(() => setIsOpen(false), isOpen);
+  const settings = useAppSettings();
+  const preferredQuality = settings.playback.preferredAudioQuality;
 
   const activeQuality = (quality as AudioQualityPreference) || preferredQuality;
   const currentOption =
@@ -719,123 +662,116 @@ export function QualityBadge({
         preferredAudioQuality: val
       }
     });
-    setPreferredQuality(val);
     setIsOpen(false);
   };
 
   const isCapsule = variant === "capsule";
 
   return (
-    <div
-      ref={rootRef}
-      className={`relative inline-flex shrink-0 items-center h-8 ${isCapsule ? "justify-self-center" : ""}`}
-      onClick={(e) => e.stopPropagation()}
-    >
-      <button
-        type="button"
-        onClick={() => setIsOpen((prev) => !prev)}
-        aria-label={`音频音质设置：当前${currentOption.label}`}
-        aria-expanded={isOpen}
-        title="点击切换首选音质"
-        className={
-          isCapsule
-            ? `inline-flex h-8 items-center justify-center gap-1 rounded-lg bg-white/[0.12] px-2.5 text-xs font-medium leading-none text-white/80 active:scale-95 transition-all select-none hover:bg-white/[0.18] hover:text-white cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/40 ${className}`
-            : `inline-flex h-8 items-center justify-center gap-1 rounded-lg px-2 text-xs font-medium leading-none text-foreground-muted select-none transition-colors cursor-pointer hover:text-[var(--hover-color)] hover:bg-[var(--hover-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent active:scale-95 ${className}`
-        }
-        style={
-          isCapsule
-            ? undefined
-            : ({
-                "--hover-color": accentColor,
-                "--hover-bg": accentSoft,
-                ...(isOpen
-                  ? {
-                      color: accentColor,
-                      backgroundColor: accentSoft
-                    }
-                  : {})
-              } as CSSProperties)
-        }
-      >
-        <span className="leading-none">{currentOption.badge}</span>
-        <svg
-          width={10}
-          height={10}
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className={`opacity-60 transition-transform duration-150 ${isOpen ? "rotate-180" : ""}`}
-          aria-hidden="true"
+    <Popover open={isOpen} onOpenChange={setIsOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={`音频音质设置：当前${currentOption.label}`}
+          aria-expanded={isOpen}
+          title="点击切换首选音质"
+          className={
+            isCapsule
+              ? `inline-flex h-8 items-center justify-center gap-1 rounded-lg bg-white/[0.12] px-2.5 text-xs font-medium leading-none text-white/80 active:scale-95 transition-all select-none hover:bg-white/[0.18] hover:text-white cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/40 ${className}`
+              : `inline-flex h-8 items-center justify-center gap-1 rounded-lg px-2 text-xs font-medium leading-none text-foreground-muted select-none transition-colors cursor-pointer hover:text-[var(--hover-color)] hover:bg-[var(--hover-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent active:scale-95 ${className}`
+          }
+          style={
+            isCapsule
+              ? undefined
+              : ({
+                  "--hover-color": accentColor,
+                  "--hover-bg": accentSoft,
+                  ...(isOpen
+                    ? {
+                        color: accentColor,
+                        backgroundColor: accentSoft
+                      }
+                    : {})
+                } as CSSProperties)
+          }
         >
-          <path d="m6 9 6 6 6-6" />
-        </svg>
-      </button>
+          <span className="leading-none">{currentOption.badge}</span>
+          <svg
+            width={10}
+            height={10}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={`opacity-60 transition-transform duration-150 ${isOpen ? "rotate-180" : ""}`}
+            aria-hidden="true"
+          >
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </button>
+      </PopoverTrigger>
 
-      {isOpen && (
-        <div
-          className={`light-popover-surface absolute bottom-full z-[70] mb-2 w-48 rounded-xl border border-surface-border bg-background-secondary p-1.5 shadow-lg animate-in fade-in zoom-in-95 duration-150 ${
-            popoverPlacement === "center" ? "left-1/2 -translate-x-1/2" : "right-0"
-          }`}
-          onClick={(e) => e.stopPropagation()}
-          onPointerDown={(e) => e.stopPropagation()}
-        >
-          <div className="px-2 py-1 text-[10px] font-semibold text-foreground-muted tracking-wider">
-            首选音质偏好
-          </div>
-          <div className="space-y-0.5">
-            {AUDIO_QUALITY_OPTIONS.map((opt) => {
-              const isSelected = opt.value === activeQuality;
-              return (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => handleSelect(opt.value)}
-                  className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-xs transition-colors ${
-                    isSelected
-                      ? "font-semibold shadow-sm"
-                      : "text-foreground-secondary hover:bg-surface-hover hover:text-foreground"
-                  }`}
-                  style={
-                    isSelected
-                      ? {
-                          backgroundColor: accentSoft,
-                          color: accentColor
-                        }
-                      : undefined
-                  }
-                >
-                  <div className="flex items-center gap-1.5">
-                    <span>{opt.label}</span>
-                    <span className="text-[10px] text-foreground-muted">({opt.bitrate})</span>
-                  </div>
-                  {isSelected && (
-                    <svg
-                      width="13"
-                      height="13"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      aria-hidden="true"
-                    >
-                      <path d="M20 6 9 17l-5-5" />
-                    </svg>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-          <div className="mt-1 border-t border-surface-border px-2 pt-1 text-[9px] text-foreground-muted leading-tight">
-            平台无高规格或无权限时平滑降级
-          </div>
+      <PopoverContent
+        side="top"
+        align={popoverPlacement === "center" ? "center" : "end"}
+        sideOffset={8}
+        className="light-popover-surface w-48 rounded-xl border border-surface-border bg-background-secondary p-1.5 shadow-lg"
+      >
+        <div className="px-2 py-1 text-[10px] font-semibold text-foreground-muted tracking-wider">
+          首选音质偏好
         </div>
-      )}
-    </div>
+        <div className="space-y-0.5">
+          {AUDIO_QUALITY_OPTIONS.map((opt) => {
+            const isSelected = opt.value === activeQuality;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => handleSelect(opt.value)}
+                className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-xs transition-colors cursor-pointer ${
+                  isSelected
+                    ? "font-semibold shadow-sm"
+                    : "text-foreground-secondary hover:bg-surface-hover hover:text-foreground"
+                }`}
+                style={
+                  isSelected
+                    ? {
+                        backgroundColor: accentSoft,
+                        color: accentColor
+                      }
+                    : undefined
+                }
+              >
+                <div className="flex items-center gap-1.5">
+                  <span>{opt.label}</span>
+                  <span className="text-[10px] text-foreground-muted">({opt.bitrate})</span>
+                </div>
+                {isSelected && (
+                  <svg
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M20 6 9 17l-5-5" />
+                  </svg>
+                )}
+              </button>
+            );
+          })}
+        </div>
+        <div className="mt-1 border-t border-surface-border px-2 pt-1 text-[9px] text-foreground-muted leading-tight">
+          平台无高规格或无权限时平滑降级
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 

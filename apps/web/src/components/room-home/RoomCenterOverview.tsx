@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 import type { AuthSession, RoomSnapshot } from "@music-room/shared";
-import { musicRoomApi, type RoomActivitySummary, type RoomInteractionStats } from "@/lib/network/music-room-api";
+import { musicRoomApi, type RoomActivitySummary } from "@/lib/network/music-room-api";
 import { getOnlineMemberCount } from "@/lib/domain/music-room-ui";
 import {
   UsersIcon,
@@ -15,26 +16,48 @@ import {
 import { roomTypeLabel } from "./room-home-types";
 
 export function RoomCenterOverview({ activeSession }: { activeSession: AuthSession }) {
-  const [ownedRooms, setOwnedRooms] = useState<RoomSnapshot[]>([]);
-  const [recentRooms, setRecentRooms] = useState<RoomActivitySummary[]>([]);
-  const [stats, setStats] = useState<RoomInteractionStats | null>(null);
   const [showAllOwned, setShowAllOwned] = useState(false);
   const [showAllRecent, setShowAllRecent] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    void Promise.all([
-      musicRoomApi.listOwnedRooms(),
-      musicRoomApi.getRoomActivity(),
-      musicRoomApi.getRoomInteractionStats()
-    ]).then(([owned, recent, nextStats]) => {
-      if (cancelled) return;
-      setOwnedRooms(owned);
-      setRecentRooms(recent);
-      setStats(nextStats);
-    }).catch(() => undefined);
-    return () => { cancelled = true; };
-  }, [activeSession.userId]);
+  const { data, isLoading } = useQuery({
+    queryKey: ["room-center-overview", activeSession.userId],
+    queryFn: async () => {
+      const [owned, recent, nextStats] = await Promise.all([
+        musicRoomApi.listOwnedRooms(),
+        musicRoomApi.getRoomActivity(),
+        musicRoomApi.getRoomInteractionStats()
+      ]);
+      return { owned, recent, stats: nextStats };
+    },
+    staleTime: 30 * 1000
+  });
+
+  const ownedRooms = data?.owned ?? [];
+  const recentRooms = data?.recent ?? [];
+  const stats = data?.stats ?? null;
+
+  if (isLoading && !data) {
+    return (
+      <div className="space-y-6 animate-pulse">
+        <section className="rounded-2xl border border-surface-border/40 bg-surface/30 p-5 sm:p-6">
+          <div className="h-5 w-28 bg-surface-hover rounded mb-4" />
+          <div className="grid grid-cols-3 gap-3 sm:gap-4">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-20 rounded-xl bg-surface/50 border border-surface-border/30" />
+            ))}
+          </div>
+        </section>
+        <section className="rounded-2xl border border-surface-border/40 bg-surface/30 p-5 sm:p-6">
+          <div className="h-5 w-32 bg-surface-hover rounded mb-4" />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-24 rounded-xl bg-surface/50 border border-surface-border/30" />
+            ))}
+          </div>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">

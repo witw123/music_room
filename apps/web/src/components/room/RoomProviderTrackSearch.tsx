@@ -5,10 +5,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type {
   BilibiliTrackCandidate,
-  NeteaseAccountStatus,
   NeteaseTrackCandidate,
   ProviderPlaylistSummary,
-  QqMusicAccountStatus,
   QqMusicTrackCandidate,
   TrackMeta
 } from "@music-room/shared";
@@ -18,10 +16,11 @@ import { formatDuration } from "@/lib/domain/music-room-ui";
 import { musicRoomApi } from "@/lib/network/music-room-api";
 import { isBilibiliCollection, bilibiliTrackToPlaylistSummary } from "@/features/library/bilibili-collection";
 import { importTaskStore, useVisibleImportTasks } from "@/features/upload/import-task-store";
+import { useActiveSession } from "@/features/session/use-session-identity";
+import { useProviderAccount } from "@/features/providers/use-provider-account";
 
 type Provider = "netease" | "qqmusic" | "bilibili";
 export type ProviderTrack = NeteaseTrackCandidate | QqMusicTrackCandidate | BilibiliTrackCandidate;
-type ProviderAccount = NeteaseAccountStatus | QqMusicAccountStatus;
 
 const enabledSearchProviders: Provider[] = [
   ...(process.env.NEXT_PUBLIC_NETEASE_ENABLED === "true" ? ["netease" as const] : []),
@@ -124,8 +123,14 @@ export function RoomProviderTrackSearch({
   surface = "framed",
   testId = "room-provider-track-search"
 }: RoomProviderTrackSearchProps) {
+  const activeSession = useActiveSession();
   const [provider, setProvider] = useState<Provider>(enabledSearchProviders[0] ?? "bilibili");
-  const [account, setAccount] = useState<ProviderAccount | null>(null);
+  const { data: currentProviderAccount } = useProviderAccount(
+    activeSession?.userId,
+    provider === "bilibili" ? "netease" : provider,
+    provider !== "bilibili"
+  );
+  const account = provider === "bilibili" ? null : (currentProviderAccount ?? null);
   const [keywords, setKeywords] = useState("");
   const [results, setResults] = useState<ProviderTrack[]>([]);
   const [bilibiliCollections, setBilibiliCollections] = useState<ProviderPlaylistSummary[]>([]);
@@ -166,30 +171,14 @@ export function RoomProviderTrackSearch({
 
   useEffect(() => {
     if (enabledSearchProviders.length === 0) return;
-    let cancelled = false;
     searchRequestRef.current += 1;
-    setAccount(null);
     setResults([]);
     setBilibiliCollections([]);
     setBilibiliPartDetail(null);
     setErrorMessage(null);
     setSearchSuggestionsOpen(false);
     setRemoteSuggestions([]);
-    setRemoteHotWords([]);
-
-    if (provider === "bilibili") {
-      setRemoteHotWords(bilibiliDefaultHotWords);
-      return;
-    }
-
-    const load = provider === "netease" ? musicRoomApi.getNeteaseAccount : musicRoomApi.getQqMusicAccount;
-    void load()
-      .then((nextAccount) => { if (!cancelled) setAccount(nextAccount); })
-      .catch((error) => { if (!cancelled) setErrorMessage(toSearchErrorMessage(error)); });
-    return () => {
-      cancelled = true;
-      searchRequestRef.current += 1;
-    };
+    setRemoteHotWords(provider === "bilibili" ? bilibiliDefaultHotWords : []);
   }, [provider]);
 
   const providerName = provider === "netease" ? "网易云音乐" : provider === "qqmusic" ? "QQ 音乐" : "哔哩哔哩";

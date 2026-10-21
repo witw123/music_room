@@ -3,6 +3,13 @@
 import { useState, type FormEvent } from "react";
 import type { SystemAnnouncement } from "@music-room/shared";
 import { adminApi } from "@/lib/network/admin-api";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle
+} from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Icon, formatDateTime } from "../ui";
 
 export function Announcements({
@@ -145,116 +152,97 @@ export function Announcements({
       ) : null}
 
       {/* 创建 / 编辑模态弹窗 */}
-      {modalMode ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-lg rounded-xl border border-surface-border bg-surface p-5 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-surface-border pb-3">
-              <h3 className="text-sm font-semibold text-foreground">
-                {modalMode === "create" ? "发布新系统通知" : "编辑系统通知"}
-              </h3>
-              <button
-                onClick={closeModal}
-                className="rounded p-1 text-foreground-muted hover:text-foreground hover:bg-surface-border/40"
-              >
-                ✕
-              </button>
+      <Dialog open={modalMode !== null} onOpenChange={(open) => !open && closeModal()}>
+        <DialogContent className="max-w-lg p-5">
+          <DialogHeader className="pr-6">
+            <DialogTitle className="text-sm font-semibold text-foreground">
+              {modalMode === "create" ? "发布新系统通知" : "编辑系统通知"}
+            </DialogTitle>
+          </DialogHeader>
+
+          <form onSubmit={handleSubmit} className="space-y-3.5">
+            <div>
+              <label className="block text-xs font-medium text-foreground mb-1">
+                通知标题 <span className="text-red-400">*</span>
+              </label>
+              <input
+                type="text"
+                maxLength={200}
+                required
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="例如：【功能更新】现已支持B站音频解析与导入"
+                className="w-full rounded-md border border-surface-border bg-background px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-[var(--accent,#3b82f6)]"
+              />
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-3.5">
-              <div>
-                <label className="block text-xs font-medium text-foreground mb-1">
-                  通知标题 <span className="text-red-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  maxLength={200}
-                  required
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="例如：【功能更新】现已支持B站音频解析与导入"
-                  className="w-full rounded-md border border-surface-border bg-background px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-[var(--accent,#3b82f6)]"
-                />
-              </div>
+            <div>
+              <label className="block text-xs font-medium text-foreground mb-1">
+                通知内容（支持多行） <span className="text-red-400">*</span>
+              </label>
+              <textarea
+                rows={5}
+                maxLength={5000}
+                required
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                placeholder="请输入通知详细内容，换行段落将在前台完整展示..."
+                className="w-full rounded-md border border-surface-border bg-background p-3 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-[var(--accent,#3b82f6)] resize-y font-sans leading-relaxed"
+              />
+            </div>
 
-              <div>
-                <label className="block text-xs font-medium text-foreground mb-1">
-                  通知内容（支持多行） <span className="text-red-400">*</span>
-                </label>
-                <textarea
-                  rows={5}
-                  maxLength={5000}
-                  required
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                  placeholder="请输入通知详细内容，换行段落将在前台完整展示..."
-                  className="w-full rounded-md border border-surface-border bg-background p-3 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-[var(--accent,#3b82f6)] resize-y font-sans leading-relaxed"
-                />
-              </div>
+            <div className="flex items-center gap-2 pt-1">
+              <input
+                type="checkbox"
+                id="announcement-active-toggle"
+                checked={isActive}
+                onChange={(e) => setIsActive(e.target.checked)}
+                className="rounded border-surface-border bg-background text-[var(--accent,#3b82f6)] focus:ring-0 cursor-pointer"
+              />
+              <label htmlFor="announcement-active-toggle" className="text-xs text-foreground select-none cursor-pointer">
+                立即启用（发布后前台首页可见）
+              </label>
+            </div>
 
-              <div className="flex items-center gap-2 pt-1">
-                <input
-                  type="checkbox"
-                  id="announcement-active-toggle"
-                  checked={isActive}
-                  onChange={(e) => setIsActive(e.target.checked)}
-                  className="rounded border-surface-border bg-background text-[var(--accent,#3b82f6)] focus:ring-0 cursor-pointer"
-                />
-                <label htmlFor="announcement-active-toggle" className="text-xs text-foreground select-none cursor-pointer">
-                  立即启用（发布后前台首页可见）
-                </label>
-              </div>
+            {actionError ? (
+              <p className="text-xs text-red-400">{actionError}</p>
+            ) : null}
 
-              {actionError ? (
-                <p className="text-xs text-red-400">{actionError}</p>
-              ) : null}
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-surface-border">
-                <button
-                  type="button"
-                  onClick={closeModal}
-                  disabled={submitting}
-                  className="rounded-md border border-surface-border bg-surface px-3 py-1.5 text-xs text-foreground hover:bg-surface-border/40 transition-colors"
-                >
-                  取消
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="rounded-md bg-[var(--accent,#3b82f6)] px-3.5 py-1.5 text-xs font-medium text-white hover:opacity-90 transition-opacity disabled:opacity-50"
-                >
-                  {submitting ? "保存中..." : modalMode === "create" ? "确认发布" : "保存修改"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      ) : null}
-
-      {/* 删除确认弹窗 */}
-      {deleteConfirmId ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-sm rounded-xl border border-surface-border bg-surface p-4 shadow-2xl space-y-3">
-            <h3 className="text-sm font-semibold text-foreground">确认删除此通知？</h3>
-            <p className="text-xs text-foreground-muted">
-              删除后通知将无法恢复，前台也将立即移除该通知。
-            </p>
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="flex justify-end gap-2 pt-2 border-t border-surface-border">
               <button
-                onClick={() => setDeleteConfirmId(null)}
-                className="rounded-md border border-surface-border bg-surface px-3 py-1.5 text-xs text-foreground hover:bg-surface-border/40"
+                type="button"
+                onClick={closeModal}
+                disabled={submitting}
+                className="rounded-md border border-surface-border bg-surface px-3 py-1.5 text-xs text-foreground hover:bg-surface-border/40 transition-colors cursor-pointer"
               >
                 取消
               </button>
               <button
-                onClick={() => void handleDelete(deleteConfirmId)}
-                className="rounded-md bg-red-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-600"
+                type="submit"
+                disabled={submitting}
+                className="rounded-md bg-[var(--accent,#3b82f6)] px-3.5 py-1.5 text-xs font-medium text-white hover:opacity-90 transition-opacity disabled:opacity-50 cursor-pointer"
               >
-                确认删除
+                {submitting ? "保存中..." : modalMode === "create" ? "确认发布" : "保存修改"}
               </button>
             </div>
-          </div>
-        </div>
-      ) : null}
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* 删除确认弹窗 */}
+      <ConfirmDialog
+        open={deleteConfirmId !== null}
+        title="确认删除此通知？"
+        description="删除后通知将无法恢复，前台也将立即移除该通知。"
+        confirmLabel="确认删除"
+        destructive
+        onCancel={() => setDeleteConfirmId(null)}
+        onConfirm={() => {
+          if (deleteConfirmId) {
+            void handleDelete(deleteConfirmId);
+          }
+        }}
+      />
 
       {/* 通知列表表格 */}
       <div className="overflow-x-auto rounded-lg border border-surface-border bg-surface">

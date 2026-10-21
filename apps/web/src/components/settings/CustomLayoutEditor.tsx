@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
@@ -279,7 +279,7 @@ export function CustomLayoutEditor({ value, onApply, onReset, onClose }: CustomL
               </div>
             </div>
             <div
-              className="relative w-full overflow-hidden rounded-2xl border border-surface-border bg-background-secondary shadow-[0_24px_80px_rgba(0,0,0,0.28)] touch-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+              className="relative w-full overflow-hidden rounded-xl border border-surface-border bg-background-secondary shadow-xl touch-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
               onPointerDown={(event) => {
                 canvasRef.current?.focus({ preventScroll: true });
                 if (event.target === event.currentTarget) setSelectedItemId("content");
