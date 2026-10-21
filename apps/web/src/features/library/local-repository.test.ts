@@ -1,4 +1,4 @@
-﻿import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { RoomSnapshot, TrackMeta } from "@music-room/shared";
 import {
   createRepositoryTrackRecord,
@@ -265,5 +265,22 @@ describe("LocalRepository", () => {
     const file = await repository.readPlaybackUnit(persisted[0]!.units[0]!);
     expect(file).not.toBeNull();
     expect([...new Uint8Array(await file!.arrayBuffer())]).toEqual([1, 2, 3]);
+  });
+
+  it("writes data-url artwork without network fetch", async () => {
+    const root = new MemoryDirectoryHandle("Music Room") as unknown as FileSystemDirectoryHandle;
+    const repository = await LocalRepository.initialize(root);
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const dataUrl = "data:image/jpeg;base64,/9j/4AAQSkZJRg==";
+    const path = await repository.writeArtworkFromUrl({
+      fileHash: "f".repeat(64),
+      artworkUrl: dataUrl,
+      retention: "library"
+    });
+    expect(path).toBe(`.music-room/library/artwork/${"f".repeat(64)}.jpg`);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    const file = await repository.readPath(path!);
+    expect(file).not.toBeNull();
+    fetchSpy.mockRestore();
   });
 });

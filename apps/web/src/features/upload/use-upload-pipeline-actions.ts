@@ -151,7 +151,7 @@ export function useUploadPipelineActions({
         });
         await upsertCachedLibraryTrack(cachedRecord);
       }
-      if (roomSnapshot?.room.id === input.roomId) {
+      if (input.refreshCache !== false && roomSnapshot?.room.id === input.roomId) {
         const tracks = roomSnapshot.tracks.some((track) => track.id === input.track.id)
           ? roomSnapshot.tracks
           : [...roomSnapshot.tracks, input.track as TrackMeta];

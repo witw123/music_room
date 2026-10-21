@@ -25,6 +25,8 @@ import {
   putLocallyGeneratedAssetUnits,
   upsertTranscodeJob
 } from "@/features/library/indexeddb";
+import { getConfiguredLocalRepository } from "./local-audio-storage";
+import type { LocalRepository } from "./local-repository";
 import { opusPreSkipSamples } from "@audio/opus-encode";
 import { OpusSegmentEncoder } from "./opus-segment-encoder";
 import { parseWavHeader, type WavHeader } from "@/features/audio-codecs/wav-parser";
@@ -177,61 +179,107 @@ export async function prepareAudioAssets(input: {
       errorMessage: null
     });
     const playback = await playbackPromise;
-    const preexistingAssetIds = new Set(
-      (
-        await Promise.all([
-          getAssetManifest(source.originalAsset.assetId, { includeLocalRepository: false }),
-          getAssetManifest(playback.playbackAsset.assetId, { includeLocalRepository: false })
-        ])
-      )
-        .filter((record) => !!record)
-        .map((record) => record.assetId)
-    );
-    const createdAssetIds = [source.originalAsset.assetId, playback.playbackAsset.assetId]
-      .filter((assetId) => !preexistingAssetIds.has(assetId));
-    try {
-      await putAssetManifest(source.originalAsset, { complete: true });
-      input.onProgress?.({
-        stage: "persisting-original",
-        completed: source.originalAsset.unitCount,
-        total: source.originalAsset.unitCount
-      });
-      await putAssetManifest(playback.playbackAsset);
-      if (playback.draftId) {
-        await persistPlaybackDraftUnits({
-          draftId: playback.draftId,
-          playback,
-          onProgress: input.onProgress
-        });
-      } else {
-        const encodedUnits = playback.encodedUnits ?? [];
-        await putLocallyGeneratedAssetUnits({
-          assetId: playback.playbackAsset.assetId,
-          units: encodedUnits.map((unit, unitIndex) => ({
-            descriptor: {
-              ...unit.descriptor,
-              assetId: playback.playbackAsset.assetId,
-              contentHash: playback.leafHashes[unitIndex]!,
-              proof: playback.proofs[unitIndex]!
-            },
-            payload: unit.payload
-          })),
-          complete: true
-        });
-        for (let unitIndex = 0; unitIndex < encodedUnits.length; unitIndex += 1) {
-          input.onProgress?.({
-            stage: "persisting-playback",
-            completed: unitIndex + 1,
-            total: encodedUnits.length
+    const localRepository = await getConfiguredLocalRepository().catch(() => null);
+    if (localRepository) {
+      try {
+        if (playback.draftId) {
+          await persistPlaybackDraftUnits({
+            draftId: playback.draftId,
+            playback,
+            onProgress: input.onProgress,
+            repository: localRepository
           });
+        } else {
+          const encodedUnits = playback.encodedUnits ?? [];
+          await localRepository.writePlaybackAsset({
+            manifest: playback.playbackAsset,
+            units: encodedUnits.map((unit, unitIndex) => ({
+              descriptor: {
+                ...unit.descriptor,
+                assetId: playback.playbackAsset.assetId,
+                contentHash: playback.leafHashes[unitIndex]!,
+                proof: playback.proofs[unitIndex]!
+              },
+              payload: unit.payload
+            }))
+          });
+          for (let unitIndex = 0; unitIndex < encodedUnits.length; unitIndex += 1) {
+            input.onProgress?.({
+              stage: "persisting-playback",
+              completed: unitIndex + 1,
+              total: encodedUnits.length
+            });
+          }
         }
+        await localRepository.writeOriginalManifest(source.originalAsset, "").catch(() => undefined);
+        input.onProgress?.({
+          stage: "persisting-original",
+          completed: source.originalAsset.unitCount,
+          total: source.originalAsset.unitCount
+        });
+      } catch (error) {
+        if (playbackDraftId) {
+          await deletePlaybackAssetDraft(playbackDraftId).catch(() => undefined);
+        }
+        throw error;
       }
-    } catch (error) {
-      await Promise.allSettled([
-        ...createdAssetIds.map((assetId) => deleteAudioAsset(assetId)),
-        ...(playbackDraftId ? [deletePlaybackAssetDraft(playbackDraftId)] : [])
-      ]);
-      throw error;
+    } else {
+      const preexistingAssetIds = new Set(
+        (
+          await Promise.all([
+            getAssetManifest(source.originalAsset.assetId, { includeLocalRepository: false }),
+            getAssetManifest(playback.playbackAsset.assetId, { includeLocalRepository: false })
+          ])
+        )
+          .filter((record) => !!record)
+          .map((record) => record.assetId)
+      );
+      const createdAssetIds = [source.originalAsset.assetId, playback.playbackAsset.assetId]
+        .filter((assetId) => !preexistingAssetIds.has(assetId));
+      try {
+        await putAssetManifest(source.originalAsset, { complete: true });
+        input.onProgress?.({
+          stage: "persisting-original",
+          completed: source.originalAsset.unitCount,
+          total: source.originalAsset.unitCount
+        });
+        await putAssetManifest(playback.playbackAsset);
+        if (playback.draftId) {
+          await persistPlaybackDraftUnits({
+            draftId: playback.draftId,
+            playback,
+            onProgress: input.onProgress
+          });
+        } else {
+          const encodedUnits = playback.encodedUnits ?? [];
+          await putLocallyGeneratedAssetUnits({
+            assetId: playback.playbackAsset.assetId,
+            units: encodedUnits.map((unit, unitIndex) => ({
+              descriptor: {
+                ...unit.descriptor,
+                assetId: playback.playbackAsset.assetId,
+                contentHash: playback.leafHashes[unitIndex]!,
+                proof: playback.proofs[unitIndex]!
+              },
+              payload: unit.payload
+            })),
+            complete: true
+          });
+          for (let unitIndex = 0; unitIndex < encodedUnits.length; unitIndex += 1) {
+            input.onProgress?.({
+              stage: "persisting-playback",
+              completed: unitIndex + 1,
+              total: encodedUnits.length
+            });
+          }
+        }
+      } catch (error) {
+        await Promise.allSettled([
+          ...createdAssetIds.map((assetId) => deleteAudioAsset(assetId)),
+          ...(playbackDraftId ? [deletePlaybackAssetDraft(playbackDraftId)] : [])
+        ]);
+        throw error;
+      }
     }
     await upsertTranscodeJob({
       sourceFileHash: source.fileHash,
@@ -650,9 +698,11 @@ async function persistPlaybackDraftUnits(input: {
   draftId: string;
   playback: PreparedPlaybackAsset;
   onProgress?: (progress: AssetPreparationProgress) => void;
+  repository?: LocalRepository | null;
 }) {
   const batchSize = 8;
   let offset = 0;
+  const allUnits: Array<{ descriptor: AssetUnitDescriptor; payload: ArrayBuffer }> = [];
   while (offset < input.playback.leafHashes.length) {
     const records = await getPlaybackAssetDraftUnitBatch(input.draftId, offset, batchSize);
     if (records.length === 0) {
@@ -686,15 +736,25 @@ async function persistPlaybackDraftUnits(input: {
       };
     });
     offset += records.length;
-    await putLocallyGeneratedAssetUnits({
-      assetId: input.playback.playbackAsset.assetId,
-      units,
-      complete: offset === input.playback.leafHashes.length
-    });
+    if (input.repository) {
+      allUnits.push(...units.map((u) => ({ descriptor: u.descriptor as AssetUnitDescriptor, payload: u.payload })));
+    } else {
+      await putLocallyGeneratedAssetUnits({
+        assetId: input.playback.playbackAsset.assetId,
+        units,
+        complete: offset === input.playback.leafHashes.length
+      });
+    }
     input.onProgress?.({
       stage: "persisting-playback",
       completed: offset,
       total: input.playback.leafHashes.length
+    });
+  }
+  if (input.repository) {
+    await input.repository.writePlaybackAsset({
+      manifest: input.playback.playbackAsset,
+      units: allUnits
     });
   }
   await deletePlaybackAssetDraft(input.draftId);

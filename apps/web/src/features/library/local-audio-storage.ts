@@ -539,11 +539,20 @@ export async function saveAudioFileToLocalDirectory(input: {
     }
   }
   const remoteArtworkUrl = input.track?.artworkUrl?.trim() || null;
-  const downloadedArtwork = input.track?.provider === "qqmusic" && remoteArtworkUrl && /^https?:\/\//i.test(remoteArtworkUrl)
-    ? await musicRoomApi.downloadQqMusicArtwork(remoteArtworkUrl).then((response) => response.blob).catch(() => null)
+  const isDataOrBlobUrl = Boolean(remoteArtworkUrl && /^(?:data|blob):/i.test(remoteArtworkUrl));
+  const downloadedArtwork = !isDataOrBlobUrl && input.track?.provider === "qqmusic" && remoteArtworkUrl && /^https?:\/\//i.test(remoteArtworkUrl)
+    ? await (async () => {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 3_000);
+        try {
+          return await musicRoomApi.downloadQqMusicArtwork(remoteArtworkUrl, controller.signal).then((response) => response.blob).catch(() => null);
+        } finally {
+          clearTimeout(timer);
+        }
+      })()
     : null;
   const artworkUrl = remoteArtworkUrl
-    ? await resolveLocalArtworkUrl(input.file, remoteArtworkUrl, downloadedArtwork)
+    ? (isDataOrBlobUrl ? remoteArtworkUrl : await resolveLocalArtworkUrl(input.file, remoteArtworkUrl, downloadedArtwork).catch(() => null))
     : existingTrack?.artworkUrl ?? null;
   const artworkProvider = input.track?.provider;
   const artworkPath = artworkUrl
@@ -554,7 +563,7 @@ export async function saveAudioFileToLocalDirectory(input: {
         provider: artworkProvider === "netease" || artworkProvider === "qqmusic" || artworkProvider === "bilibili" || artworkProvider === "alist"
           ? artworkProvider
           : "local_upload"
-      }) ?? existingTrack?.artworkPath ?? null
+      }).catch(() => null) ?? existingTrack?.artworkPath ?? null
     : existingTrack?.artworkPath ?? null;
   const lyricsPath = input.track?.lyrics?.trim()
     ? await repository.writeLyrics(input.fileHash, input.track.lyrics)

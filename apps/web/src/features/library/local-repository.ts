@@ -20,7 +20,25 @@ export const localRepositoryFormat = "music-room-local-repository" as const;
 export const localRepositorySchemaVersion = 1 as const;
 
 const repositoryManifestFileName = "repository.json";
-const playbackWriteConcurrency = 4;
+const playbackWriteConcurrency = 2;
+
+function dataUrlToBlob(dataUrl: string): Blob | null {
+  try {
+    const parts = dataUrl.split(",");
+    const header = parts[0] || "";
+    const mimeMatch = header.match(/:(.*?);/);
+    const mime = mimeMatch ? mimeMatch[1] : "image/jpeg";
+    const base64Data = parts[1] || "";
+    const binary = atob(base64Data);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return new Blob([bytes], { type: mime });
+  } catch {
+    return null;
+  }
+}
 
 export type LocalRepositoryManifest = {
   format: typeof localRepositoryFormat;
@@ -260,6 +278,22 @@ export class LocalRepository {
     return `${localRepositoryDirectoryName}/library/lyrics/${fileHash}.lrc`;
   }
 
+  async writeArtworkBlob(input: {
+    fileHash: string;
+    blob: Blob;
+    retention: "library" | "cache";
+    provider?: "netease" | "qqmusic" | "bilibili" | "alist" | "local_upload";
+  }) {
+    if (input.blob.size <= 0) return null;
+    const extension = inferArtworkExtension(input.blob.type, "");
+    const baseDirectory = input.retention === "library"
+      ? `${localRepositoryDirectoryName}/library/artwork`
+      : `${localRepositoryDirectoryName}/cache/artwork/${input.provider ?? "local_upload"}`;
+    const relativePath = `${baseDirectory}/${input.fileHash}${extension ? `.${extension}` : ""}`;
+    await this.writeBlob(relativePath, input.blob);
+    return relativePath;
+  }
+
   async writeArtworkFromUrl(input: {
     fileHash: string;
     artworkUrl: string;
@@ -269,30 +303,33 @@ export class LocalRepository {
     const normalizedUrl = input.artworkUrl.trim();
     if (!normalizedUrl) return null;
 
-    let artwork: Blob;
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10_000);
+    let artwork: Blob | null = null;
+    if (normalizedUrl.startsWith("data:")) {
+      artwork = dataUrlToBlob(normalizedUrl);
+    } else {
       try {
-        artwork = await fetch(normalizedUrl, { signal: controller.signal }).then(async (response) => {
-          if (!response.ok) throw new Error(`Artwork request failed with ${response.status}.`);
-          return response.blob();
-        });
-      } finally {
-        clearTimeout(timeout);
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 4_000);
+        try {
+          artwork = await fetch(normalizedUrl, { signal: controller.signal }).then(async (response) => {
+            if (!response.ok) throw new Error(`Artwork request failed with ${response.status}.`);
+            return response.blob();
+          });
+        } finally {
+          clearTimeout(timeout);
+        }
+      } catch {
+        return null;
       }
-    } catch {
-      return null;
     }
-    if (artwork.size <= 0 || (artwork.type && !artwork.type.startsWith("image/"))) return null;
+    if (!artwork || artwork.size <= 0 || (artwork.type && !artwork.type.startsWith("image/"))) return null;
 
-    const extension = inferArtworkExtension(artwork.type, normalizedUrl);
-    const baseDirectory = input.retention === "library"
-      ? `${localRepositoryDirectoryName}/library/artwork`
-      : `${localRepositoryDirectoryName}/cache/artwork/${input.provider ?? "local_upload"}`;
-    const relativePath = `${baseDirectory}/${input.fileHash}${extension ? `.${extension}` : ""}`;
-    await this.writeBlob(relativePath, artwork);
-    return relativePath;
+    return this.writeArtworkBlob({
+      fileHash: input.fileHash,
+      blob: artwork,
+      retention: input.retention,
+      provider: input.provider
+    });
   }
 
   getArtworkPath(input: {
@@ -416,6 +453,12 @@ export class LocalRepository {
     for (const track of snapshot.tracks) {
       const existing = await this.readTrack(track.fileHash);
       const existingRoomRefs = existing?.roomRefs ?? [];
+      const hasCurrentRoomRef = existingRoomRefs.some(
+        (ref) => ref.roomId === snapshot.room.id && ref.trackId === track.id
+      );
+      if (existing && hasCurrentRoomRef) {
+        continue;
+      }
       const roomRefs = [
         ...existingRoomRefs.filter((ref) => !(ref.roomId === snapshot.room.id && ref.trackId === track.id)),
         {
@@ -425,9 +468,9 @@ export class LocalRepository {
           ownerNickname: track.ownerNickname
         }
       ];
-      const lyricsPath = track.lyrics?.trim()
+      const lyricsPath = track.lyrics?.trim() && !existing?.lyricsPath
         ? await this.writeLyrics(track.fileHash, track.lyrics)
-        : null;
+        : existing?.lyricsPath ?? null;
       if (!lyricsPath && existing?.lyricsPath) {
         await this.removePath(existing.lyricsPath);
       }
@@ -619,6 +662,13 @@ export class LocalRepository {
     } satisfies LocalRepositoryTempWrite);
     const unitDescriptors: LocalRepositoryPlaybackUnit[] = new Array(input.units.length);
     try {
+      const unitsDirectory = await getDirectoryByParts(
+        this.root,
+        splitSafePath(`${basePath}/units`),
+        true
+      );
+      if (!unitsDirectory) throw new Error("无法创建播放分片目录。");
+
       let nextUnitIndex = 0;
       await Promise.all(
         Array.from({ length: Math.min(playbackWriteConcurrency, input.units.length) }, async () => {
@@ -628,9 +678,17 @@ export class LocalRepository {
             const unit = input.units[unitIndex]!;
             const fileName = `${String(unit.descriptor.unitIndex).padStart(6, "0")}.opus`;
             const relativePath = `${basePath}/units/${fileName}`;
-            await this.writeBlob(relativePath, new Blob([new Uint8Array(unit.payload)], {
-              type: "audio/ogg"
-            }));
+            const fileHandle = await unitsDirectory.getFileHandle(fileName, { create: true });
+            const writable = await fileHandle.createWritable();
+            try {
+              await writable.write(new Blob([new Uint8Array(unit.payload)], {
+                type: "audio/ogg"
+              }));
+              await writable.close();
+            } catch (err) {
+              await writable.abort().catch(() => undefined);
+              throw err;
+            }
             unitDescriptors[unitIndex] = {
               descriptor: unit.descriptor,
               relativePath

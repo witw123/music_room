@@ -6,6 +6,7 @@ import type {
   TrackMeta
 } from "@music-room/shared";
 import {
+  deleteCachedLibraryTrackFile,
   getCachedLibraryTrack,
   upsertCachedLibraryTrack
 } from "@/features/library/indexeddb";
@@ -204,6 +205,10 @@ async function importOfflineProviderTrack(input: {
       // older cache entry here could leave the local path pointing at a
       // truncated or stale download while the returned File plays correctly.
       reuseExisting: false
+    }).then(async (saved) => {
+      if (saved) {
+        await deleteCachedLibraryTrackFile(track.fileHash).catch(() => undefined);
+      }
     }).catch(() => undefined);
     notifyCacheLibraryChanged();
 

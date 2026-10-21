@@ -83,13 +83,16 @@ export async function cacheProviderTrackForPlayback(
   // Yield a task so playback can bind its audio before optional work starts.
   setTimeout(async () => {
     await completePlaybackMetadata(actualTrack, response.blob, fileHash).catch(() => undefined);
-    await saveCachedAudioFileToLocalDirectory({
+    const saved = await saveCachedAudioFileToLocalDirectory({
       file: response.blob,
       fileHash,
       title: actualTrack.title,
       mimeType,
       provider: actualTrack.provider
-    }).catch(() => undefined);
+    }).catch(() => null);
+    if (saved) {
+      await deleteCachedLibraryTrackFile(fileHash).catch(() => undefined);
+    }
   }, 0);
 
   return {
