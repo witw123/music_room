@@ -1,6 +1,6 @@
 # REST API
 
-最后更新：`2026-09-13`
+最后更新：`2026-10-23`
 当前版本：`1.0.0`
 
 ## 使用约定
@@ -100,6 +100,46 @@ QQ 音乐默认关闭。启用后，用户在服务端绑定 QQ 音乐账号，C
 - `GET /v1/providers/qqmusic/discover/banners`：推荐页 Banner；上游不可用时返回空 `items`，不影响其它发现接口
 
 QQ 发现数据同样有短时缓存和旧值容错。QQ 当前 SDK 未稳定暴露与网易云“每日推荐”同等的个性化歌单/歌曲接口，因此不伪造账号推荐数据；绑定账号后的个人歌单仍通过 `GET /v1/providers/qqmusic/playlists` 读取。
+
+## B 站（哔哩哔哩）provider
+
+B 站音频接口支持音视频检索、多分 P 解析与音轨提取，由服务端负责 WBI 签名请求、反爬降级与流代理。
+
+### `GET /v1/providers/bilibili/search`
+
+根据关键词搜索视频与音乐，查询参数：`keyword`、`page`、`pageSize`、`tid`（分区 ID，可选）。返回规范化候选曲目列表。
+
+### `GET /v1/providers/bilibili/ranking`
+
+获取 B 站音乐榜单，查询参数：`subType`（榜单子类型）。
+
+### `POST /v1/providers/bilibili/favorites/import`
+
+导入公开收藏夹。请求体：`{ "url": string }`，查询参数：`page`、`pageSize`。
+
+### `GET /v1/providers/bilibili/view/{bvid}`
+
+获取指定 B 站视频的详细元数据与封面。
+
+### `GET /v1/providers/bilibili/view/{bvid}/parts`
+
+获取多分 P 视频的各个分 P 列表（包含 cid、分 P 标题与时长）。
+
+### `GET /v1/providers/bilibili/tracks/{trackId}`
+
+读取规范化曲目详情。若为分 P 视频，可通过 `cid` 参数指定分 P。
+
+### `GET /v1/providers/bilibili/tracks/{trackId}/lyrics`
+
+解析并返回 B 站内置字幕/歌词或智能匹配的 LRC 歌词。
+
+### `GET /v1/providers/bilibili/tracks/{trackId}/audio-url`
+
+服务端完成 WBI 签名校验并解析 CDN 音频临时直链，支持 `cid` 与 `quality` 参数。
+
+### `GET /v1/providers/bilibili/tracks/{trackId}/audio`
+
+服务端代理流式转发音频，支持 `Range` 头与 `quality` 参数，自动校验上游 CDN 并在探测失败时故障转移。
 
 ## 标准错误码
 

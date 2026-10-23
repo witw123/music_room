@@ -1,6 +1,6 @@
-﻿# 项目状态
+# 项目状态
 
-最后更新：`2026-09-24`
+最后更新：`2026-10-23`
 当前版本：`1.0.0`
 
 ## 当前主链路
@@ -24,6 +24,8 @@
 - 屏蔽与负反馈并入画像页底部的折叠入口；纯设置项（通用、播放策略、界面、播放、通知与推送、隐私与数据、账号）在独立路由 `/app/settings`，从个人页头部齿轮进入
 - 房间工作区为 `曲库`、`我的歌单`、`成员`；共享队列由房间舞台和全局播放器管理
 - 暂离房间会保留实时成员关系，用户可从大厅恢复原房间
+- 桌面端（Tauri 2）已接入 Windows SMTC、macOS Now Playing、Linux MPRIS 硬件媒体快捷键与桌面独立悬浮歌词
+- 移动端（Capacitor 7）已接入 Android 原生 MediaSession、后台播放常驻服务与锁屏通知栏控制
 
 ## 稳定性措施
 
@@ -39,6 +41,11 @@
 
 ## 已完成
 
+- **1.0.0 正式版发布与品牌统一**：项目全栈更名为 Soqaro，Monorepo 作用域完整切换为 `@soqaro/*`（`@soqaro/server`, `@soqaro/web`, `@soqaro/desktop`, `@soqaro/mobile`, `@soqaro/shared`），全仓库清理历史残留字样。
+- **全平台自动化发布流水线落地**：接入 GitHub Actions `Release Apps` 工作流，由 `create-release` 任务协调统一 Release，并发矩阵构建全平台客户端（Windows `.exe` / `.msi`、macOS Universal `.dmg` / `.app.tar.gz`、Linux `.AppImage` / `.deb` / `.rpm`、Android `.apk`），所有发布资产自动回传。
+- **Tauri 2 跨平台桌面端与自动更新**：支持 Windows SMTC、Linux MPRIS 与 macOS Now Playing 原生媒体控制与快捷键；支持独立桌面悬浮歌词与 rAF 节流渲染；打通 Tauri Action 自动签名与 `latest.json` 自动更新发布。
+- **Capacitor 7 移动端与生产发布签名**：支持 Android 原生 MediaSession、后台音频前台服务常驻与系统锁屏/通知栏交互；建立完整的 CI 密钥库与 Base64 解密签名流（`soqaro-release.jks`），基于语义化版本推导 `versionCode`。
+- **官方规范中英文 README 与下载矩阵**：重构根目录 `README.md` 与 `README.en.md`，提供符合主流开源标准的无 emoji、高信息密度表格化多平台下载 UI，直连 GitHub 官方 Releases 产物。
 - 旧 PCM、MSE、FLAC progressive 播放链路、旧 playback orchestrator、旧 source controller 和旧 fallback 已移除
 - FLAC parser、metadata、frame index 和上传阶段 PCM 工具仍保留在非播放模块
 - 房间缓存下载、手动缓存、P2P 资产分片传输和 availability 广播已移除
@@ -65,6 +72,3 @@
 - 多人听歌只认源成员分发的本地歌曲资产：源成员离线或资产未就绪时房间统一暂停，严禁各端偷跑播放；源成员上线后自动准备并恢复时钟。有 `player` 权限的成员可控制播放（默认 true）；房主拥有全部权限。服务端 watchdog 会在曲目超时未切歌时自动推进。
 - 当前正式部署仍限制为单个 `server` 实例；多实例房间权威和事件顺序尚未完成生产验证
 - 外部 provider 受上游登录态、接口、版权和可用音质影响，不是本地曲库的可靠替代
-
-
-

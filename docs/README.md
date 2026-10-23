@@ -1,16 +1,18 @@
 # 文档总览
 
-最后更新：`2026-09`
+最后更新：`2026-10-23`
 当前版本：`1.0.0`
 
 ## 当前项目现状
 
 Soqaro 是一套围绕“本地与外部音乐多人同步播放”构建的多端协作应用：
 
-- Next.js 15 Web 前端（自适应桌面与移动端浏览器，支持 PWA）
-- Tauri 2 桌面端（集成 Windows SMTC 与桌面悬浮歌词）
-- Capacitor 7 移动端（集成 Android 原生 MediaSession 与后台播放服务）
-- NestJS 11 API / Socket.IO 服务端
+- Next.js 15 Web 前端（自适应桌面与移动端浏览器，支持 PWA，基于 `@soqaro/web`）
+- Tauri 2 桌面端（支持 Windows、macOS 与 Linux，集成 Windows SMTC / Linux MPRIS / macOS Now Playing 与桌面独立悬浮歌词，基于 `@soqaro/desktop`）
+- Capacitor 7 移动端（支持 Android，集成 Android 原生 MediaSession 与前台音频播放服务，基于 `@soqaro/mobile`）
+- NestJS 11 API / Socket.IO 服务端（基于 `@soqaro/server`）
+- 共享类型契约与 Schema 层（基于 `@soqaro/shared`）
+- 自动化多平台发布矩阵：GitHub Actions `Release Apps` 工作流由 `create-release` 任务协调，矩阵打包并发布 Windows（`.exe`, `.msi`）、macOS（`.dmg`, `.app.tar.gz`）、Linux（`.AppImage`, `.deb`, `.rpm`）与 Android（`.apk`）安装包，并生成 Tauri 自动更新签名及 `latest.json`
 - PostgreSQL、Redis、coturn 生产依赖
 - 本地 IndexedDB 个人上传资源、provider 导入资源和分段 Opus 播放资产
 - 单一 Segmented Opus/WebRTC RTP 媒体广播链路
@@ -18,7 +20,6 @@ Soqaro 是一套围绕“本地与外部音乐多人同步播放”构建的多�
 - `/app/search`、`/app/playlists`、`/app/favorites`、`/app/profile` 和 `/app/settings` 工作区
 - 个人页为「听歌画像 / 房间足迹 / 平台账号」三个 Tab，画像页以可点击开启漫游电台的口味标签为核心；纯设置项在独立路由 `/app/settings`
 - 房间模式支持标准协作房与点歌房（电台模式，观众搜索点歌 + 房主审批入队）
-
 
 服务端只保存账号、房间、队列、播放状态和音频元数据，不保存音频文件。房间不提供缓存下载、音频资产互传或房间级缓存同步。IndexedDB 用于恢复当前用户自己上传或 provider 导入的歌曲及其本地生成的资产。
 
@@ -37,6 +38,7 @@ Soqaro 是一套围绕“本地与外部音乐多人同步播放”构建的多�
 - 本地存储仓库设计：[architecture/local-storage.md](./architecture/local-storage.md)
 - 播放同步：[architecture/playback-sync.md](./architecture/playback-sync.md)
 - 实时链路：[architecture/realtime.md](./architecture/realtime.md)
+- Android 发布与签名指南：[deploy/android-release.md](./deploy/android-release.md)
 - TURN 网络检查：[deploy/turn-network-checklist.md](./deploy/turn-network-checklist.md)
 - 测试策略：[engineering/testing.md](./engineering/testing.md)
 - 工程路线：[engineering/roadmap.md](./engineering/roadmap.md)
@@ -85,6 +87,3 @@ Web 前端默认使用当前页面 origin，不需要把生产域名硬编码进
 ### Docker Nginx 配置边界
 
 `deploy/linux/nginx/soqaro.conf` 中的 `web:3000` 和 `server:3001` upstream 只适用于 Docker 网络。宿主机部署时必须改为本机地址，例如 `127.0.0.1:3000` 和 `127.0.0.1:3001`。
-
-
-

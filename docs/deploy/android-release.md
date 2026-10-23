@@ -1,6 +1,6 @@
 # Android 发布签名
 
-最后更新：`2026-09-19`
+最后更新：`2026-10-23`
 
 CI 的 `release-android` 任务用固定的上传密钥签名并产出正式 APK。密钥只存在于仓库 Secret 里，仓库内不保存任何签名文件。
 
@@ -49,13 +49,13 @@ base64 -i soqaro-release.jks -o keystore.b64
 
 ## 三、发布
 
-打 tag 后由 `Release Apps` 工作流构建，产物为 `Soqaro-Android-<tag>.apk`：
+打 tag 后由 `Release Apps` 工作流构建，产物为 `soqaro-<tag>-universal.apk`：
 
 ```bash
-git tag v0.3.4 && git push origin v0.3.4
+git tag v1.0.0 && git push origin v1.0.0
 ```
 
-工作流把 tag 去掉 `v` 后作为 `ANDROID_VERSION_NAME` 传给 Gradle。`versionCode` 由版本号推导（`0.3.4 → 304`），不需要手工维护——Android 只按 `versionCode` 判断能否覆盖安装，手写数字迟早会忘记递增。旧的手写值 `33` 到 `0.3.3` 为止，`303 > 33`，已安装的包仍可继续升级。
+工作流把 tag 去掉 `v` 后作为 `ANDROID_VERSION_NAME` 传给 Gradle。`versionCode` 由语义化版本自动推导（公式为 `major * 10000 + minor * 100 + patch`，如 `1.0.0 → 10000`），不需要手工维护——Android 只按 `versionCode` 判断能否覆盖安装。
 
 ## 四、本地构建签名包
 

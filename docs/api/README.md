@@ -1,18 +1,18 @@
-﻿# 接口文档
+# 接口文档
 
-最后更新：`2026-09-13`
+最后更新：`2026-10-23`
 当前版本：`1.0.0`
 
 ## 适用范围
 
-这套文档面向前后端联调、功能测试、回归测试和浏览器接入服务端时的协议核对，覆盖：
+这套文档面向前后端联调、功能测试、回归测试和浏览器/客户端接入服务端时的协议核对，覆盖：
 
 - REST API
 - Socket.IO 事件
 - 共享模型与版本字段
 - 播放媒体会话和 WebRTC 诊断
-- NetEase / QQ Music provider 账号、搜索、推荐发现、歌单、专辑和导入接口
-- Web 测试入口与前置条件
+- NetEase / QQ Music / Bilibili provider 账号、搜索、推荐发现、分 P 浏览、歌单、专辑和导入接口
+- Web / Desktop / Mobile 测试入口与前置条件
 
 ## 测试环境基线
 
@@ -56,5 +56,3 @@ pnpm dev
 - 房间不提供音频资产下载、成员间缓存同步或播放 fallback
 - 成员与诊断页面用于查看 AudioContext、buffer、underrun、limiter、RTP、ICE 和 Track identity
 - 房间工作区当前使用 `Library / My Playlists / Members`；共享队列由房间状态和播放器承载
-
-

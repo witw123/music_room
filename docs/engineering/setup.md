@@ -1,6 +1,6 @@
 # 本地开发环境
 
-最后更新：`2026-09-13`
+最后更新：`2026-10-23`
 当前版本：`1.0.0`
 
 ## 版本要求
@@ -15,10 +15,12 @@
 
 仓库当前是 Monorepo，主要模块包括：
 
-- `apps/web`：Next.js Web 前端
-- `apps/server`：NestJS API / Socket.IO 服务端
-- `packages/shared`：共享协议与类型
-- `packages/opus-encode`：浏览器导入流程使用的 Ogg Opus 编码包
+- `apps/web`：Next.js Web 前端（`@soqaro/web`）
+- `apps/server`：NestJS API / Socket.IO 服务端（`@soqaro/server`）
+- `apps/desktop`：Tauri 2 跨平台桌面端（`@soqaro/desktop`，Windows / macOS / Linux）
+- `apps/mobile`：Capacitor 7 移动原生端（`@soqaro/mobile`，Android / iOS 原生桥接）
+- `packages/shared`：共享协议与类型契约（`@soqaro/shared`）
+- `packages/opus-encode`：浏览器与移动端导入流程使用的 Ogg Opus 编码包（`@soqaro/opus-encode`）
 
 本地默认联调地址：
 
@@ -86,8 +88,5 @@ pnpm deploy:check
   - `我的歌单`
   - `成员与诊断`
 - 共享队列由房间舞台和全局播放器管理，不再是独立的房间 Tab
-- provider 默认关闭；启用网易云或 QQ 音乐时，服务端和 Web 构建都要同步设置对应开关
+- provider 默认关闭；启用网易云、QQ 音乐或 B 站时，服务端和 Web 构建都要同步设置对应开关
 - `pnpm e2e` 使用 `AUTH_FAKE_PERSISTENCE=true` 和 Redis DB `15`，不会复用本地登录数据
-
-
-
