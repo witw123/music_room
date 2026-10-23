@@ -60,5 +60,6 @@
     "turbo": "^2.5.0",
     "typescript-eslint": "^8.26.1",
     "typescript": "^5.8.2"
-  }
+  },
+  "description": "跨平台多端协同听歌与音乐房应用（Web / Windows / macOS / Linux / Android），支持本地曲库与多音源毫秒级低延迟实时同步"
 }
