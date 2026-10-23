@@ -1,4 +1,4 @@
-import type { BilibiliTrackCandidate, NeteaseTrackCandidate, ProviderLyrics, QqMusicTrackCandidate } from "@music-room/shared";
+﻿import type { BilibiliTrackCandidate, NeteaseTrackCandidate, ProviderLyrics, QqMusicTrackCandidate } from "@soqaro/shared";
 import type { CachedLibraryTrackSummaryRecord, LocalPlaylistTrackRecord } from "@/features/library/indexeddb";
 import type { LocalRepositoryPlaylistRecord } from "@/features/library/local-repository";
 

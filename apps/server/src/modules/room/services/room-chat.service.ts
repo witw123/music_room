@@ -1,6 +1,6 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException, ServiceUnavailableException } from "@nestjs/common";
+﻿import { BadRequestException, ForbiddenException, Injectable, NotFoundException, ServiceUnavailableException } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
-import type { RoomChatDeletedPayload, RoomChatHistoryResponse, RoomChatMessage } from "@music-room/shared";
+import type { RoomChatDeletedPayload, RoomChatHistoryResponse, RoomChatMessage } from "@soqaro/shared";
 import { PrismaService } from "../../../infra/prisma/prisma.service";
 import { assertHost, assertMember } from "../room-mutation";
 import { RoomRecordRepository } from "../repositories/room-record.repository";

@@ -1,7 +1,7 @@
-import type {
+﻿import type {
   PeerDiagnosticsSnapshot,
   RoomMediaConnectionState
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import type { PeerConnectionStatsSample } from "./connection-stats";
 
 export type PeerTransportScore = "healthy" | "degraded" | "unstable" | "failed";
@@ -101,7 +101,7 @@ const softRecoveryBudgetMs = 800;
 const iceRestartBudgetMs = 2_500;
 const hardRecreateBudgetMs = 8_000;
 const fullResubscribeBudgetMs = 15_000;
-const storageKeyPrefix = "music-room:stable-transport";
+const storageKeyPrefix = "soqaro:stable-transport";
 
 export function createPeerConnectionSupervisorState(input: {
   peerId: string;

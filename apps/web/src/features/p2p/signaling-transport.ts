@@ -1,4 +1,4 @@
-import type { PeerSignalMessage } from "@music-room/shared";
+﻿import type { PeerSignalMessage } from "@soqaro/shared";
 
 export type SignalType = PeerSignalMessage["type"];
 export type PeerLinkKind = "data" | "media";

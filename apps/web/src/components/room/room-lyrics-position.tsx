@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import {
   createContext,
@@ -9,7 +9,7 @@ import {
   type MutableRefObject,
   type ReactNode
 } from "react";
-import type { PlaybackSnapshot } from "@music-room/shared";
+import type { PlaybackSnapshot } from "@soqaro/shared";
 import { getPlaybackEffectivePositionMs } from "@/features/playback/use-room-playback";
 import type { RoomPlaybackBarrierClock } from "@/features/playback/room-playback-clock";
 

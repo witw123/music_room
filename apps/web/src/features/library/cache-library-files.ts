@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   CachedLibraryTrackRecord,
   CachedLibraryTrackSummaryRecord
 } from "@/features/library/indexeddb";
@@ -6,7 +6,7 @@ import type {
   CachedLibraryTrack,
   CachedLibraryTrackFile
 } from "@/features/library/audio-utils";
-import type { TrackMeta } from "@music-room/shared";
+import type { TrackMeta } from "@soqaro/shared";
 
 export function createInFlightCachedLibraryTrackFileLoader(
   loadCachedTrackFile: (fileHash: string) => Promise<CachedLibraryTrackFile | null>

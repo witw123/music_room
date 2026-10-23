@@ -1,12 +1,12 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default capability for Music Room desktop application",
+  "description": "Default capability for Soqaro desktop application",
   "windows": ["main", "lyrics"],
   "remote": {
     "urls": [
-      "https://musicroom.witw.top",
-      "https://musicroom.witw.top/*",
+      "https://soqaro.witw.top",
+      "https://soqaro.witw.top/*",
       "http://localhost:*",
       "http://localhost:*/*"
     ]

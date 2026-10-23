@@ -1,4 +1,4 @@
-import type { TrackMeta } from "@music-room/shared";
+﻿import type { TrackMeta } from "@soqaro/shared";
 import type {
   CachedLibraryTrackRecord,
   CachedLibraryTrackSummaryRecord
@@ -16,7 +16,7 @@ import {
 } from "./cache-library-files";
 import { resolveProviderTrackSource } from "./provider-track-identity";
 
-export const cacheLibraryChangedEventName = "music-room-cache-library-changed";
+export const cacheLibraryChangedEventName = "soqaro-cache-library-changed";
 
 export function notifyCacheLibraryChanged() {
   if (typeof window !== "undefined") {

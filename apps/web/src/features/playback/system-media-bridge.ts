@@ -102,7 +102,7 @@ export function useSystemMediaTransport(input: SystemMediaTransportInput) {
     if (!isCapacitorRuntime()) return;
     const plugin = capacitorPlugin("SystemMediaControls");
     if (roomId) {
-      void plugin?.enableKeepAlive?.({ roomName: roomTitle ?? "Music Room" });
+      void plugin?.enableKeepAlive?.({ roomName: roomTitle ?? "Soqaro" });
       void plugin?.requestIgnoreBatteryOptimizations?.({});
     } else {
       void plugin?.disableKeepAlive?.({});

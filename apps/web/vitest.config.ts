@@ -9,7 +9,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": resolve(__dirname, "src"),
-      "@music-room/shared": resolve(__dirname, "../../packages/shared/src/index.ts")
+      "@soqaro/shared": resolve(__dirname, "../../packages/shared/src/index.ts")
     }
   }
 });

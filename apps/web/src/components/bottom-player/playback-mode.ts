@@ -1,8 +1,8 @@
-export {
+﻿export {
   shuffleTrackIds,
   synchronizeShuffleBagTrackIds,
   takeNextShuffleTrack
-} from "@music-room/shared";
+} from "@soqaro/shared";
 
 export type PlaybackMode = "sequence" | "shuffle" | "single";
 

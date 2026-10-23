@@ -1,6 +1,6 @@
-import { HttpException } from "@nestjs/common";
-import type { NeteaseAccountStatus } from "@music-room/shared";
-import { errorCodes } from "@music-room/shared";
+﻿import { HttpException } from "@nestjs/common";
+import type { NeteaseAccountStatus } from "@soqaro/shared";
+import { errorCodes } from "@soqaro/shared";
 import { fetchProviderUrl } from "../provider-fetch";
 import { NeteaseApiError } from "./netease-api.client";
 import { NeteaseService } from "./netease.service";
@@ -140,7 +140,7 @@ describe("NeteaseService", () => {
       status: "failed",
       message: "二维码已扫码，但网易云登录验证失败，请重新生成二维码。"
     });
-    expect(redis.delete).toHaveBeenCalledWith("music-room:netease:qr:attempt_1");
+    expect(redis.delete).toHaveBeenCalledWith("soqaro:netease:qr:attempt_1");
   });
 
   it("upgrades NetEase CDN HTTP links before the HTTPS-only provider fetch", async () => {

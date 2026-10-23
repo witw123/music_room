@@ -1,12 +1,12 @@
-# Music Room Design System
+# Soqaro Design System
 
 Last updated: `2026-09-24`
 
 ## Purpose
 
-This document defines how Music Room looks and feels across the marketing landing page, responsive web workspace, desktop app, and mobile interfaces.
+This document defines how Soqaro looks and feels across the marketing landing page, responsive web workspace, desktop app, and mobile interfaces.
 
-Music Room is not a generic streaming product. It is a real-time collaborative listening workspace for local and multi-source music. The UI feels like a hybrid of:
+Soqaro is not a generic streaming product. It is a real-time collaborative listening workspace for local and multi-source music. The UI feels like a hybrid of:
 
 - a focused, low-distraction audio stage
 - a precise collaboration console
@@ -206,7 +206,7 @@ The stage should dominate attention first. The workspace should feel structured 
 
 ### Marketing Homepage
 
-- Present Music Room as a focused infrastructure-like product for collaborative listening
+- Present Soqaro as a focused infrastructure-like product for collaborative listening
 - Hero should communicate synchronization, local music, and room-based collaboration
 - Visuals should resemble an operating environment, not a generic SaaS landing page
 
@@ -252,7 +252,7 @@ The stage should dominate attention first. The workspace should feel structured 
 
 ## AI Implementation Notes
 
-When generating or refactoring UI for Music Room:
+When generating or refactoring UI for Soqaro:
 
 - Default to restraint, convention, and high information density
 - Start from a solid black canvas (`#09090b`) with crisp, subtle borders

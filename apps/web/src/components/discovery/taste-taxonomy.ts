@@ -1,4 +1,4 @@
-import type { ColdStartTasteDimension } from "@music-room/shared";
+﻿import type { ColdStartTasteDimension } from "@soqaro/shared";
 
 /**
  * 发现页「调整偏好」分类目录。

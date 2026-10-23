@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import { isBilibiliCollection, bilibiliTrackToPlaylistSummary } from "./bilibili-collection";
-import type { BilibiliTrackCandidate } from "@music-room/shared";
+import type { BilibiliTrackCandidate } from "@soqaro/shared";
 
 describe("bilibili-collection helpers", () => {
   it("correctly identifies collections by pageCount, duration, or title keywords", () => {

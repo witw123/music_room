@@ -1,4 +1,4 @@
-package com.musicroom.app;
+package com.soqaro.app;
 
 import android.app.DownloadManager;
 import android.content.BroadcastReceiver;
@@ -29,7 +29,7 @@ import java.io.File;
  */
 @CapacitorPlugin(name = "AppUpdater")
 public class AppUpdaterPlugin extends Plugin {
-    private static final String FILE_PROVIDER_AUTHORITY = "com.musicroom.app.fileprovider";
+    private static final String FILE_PROVIDER_AUTHORITY = "com.soqaro.app.fileprovider";
     private static final long STALE_DOWNLOAD_MS = 30 * 60 * 1000L;
 
     private long downloadId = -1;
@@ -57,8 +57,8 @@ public class AppUpdaterPlugin extends Plugin {
         unregisterCompletionReceiver();
 
         DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
-        String fileName = "MusicRoom-" + versionName + ".apk";
-        request.setTitle("Music Room " + versionName);
+        String fileName = "Soqaro-" + versionName + ".apk";
+        request.setTitle("Soqaro " + versionName);
         request.setDescription("正在下载更新包…");
         request.setMimeType("application/vnd.android.package-archive");
         request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
@@ -183,7 +183,7 @@ public class AppUpdaterPlugin extends Plugin {
         if (downloadUri == null) {
             // 下载记录可能已被清理:回退到 Downloads 公共目录里的同名文件。
             File downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
-            File fallback = new File(downloadsDir, "MusicRoom-update.apk");
+            File fallback = new File(downloadsDir, "Soqaro-update.apk");
             if (fallback.exists()) {
                 downloadUri = FileProvider.getUriForFile(
                     context, FILE_PROVIDER_AUTHORITY, fallback

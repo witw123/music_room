@@ -1,8 +1,8 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useRef, useState, type RefObject, type SyntheticEvent } from "react";
-import type { PlaybackSnapshot, TrackMeta } from "@music-room/shared";
-import { shouldReplacePlaybackSnapshot } from "@/lib/domain/music-room-ui";
+import type { PlaybackSnapshot, TrackMeta } from "@soqaro/shared";
+import { shouldReplacePlaybackSnapshot } from "@/lib/domain/soqaro-ui";
 import {
   getRoomPlaybackClockNowMs,
   resolveRoomPlaybackPositionMs,

@@ -10,7 +10,7 @@ slug: apps-web-src-components-productlandingpage-tsx
 ---
 ⚠️ DEGRADED: single-context (no sub-agent tool exposed; browser-control plugin unavailable, local Playwright fallback used)
 
-# Music Room 前端界面审查
+# Soqaro 前端界面审查
 
 审查范围：
 - 主要目标：`apps/web/src/components/ProductLandingPage.tsx`
@@ -45,7 +45,7 @@ Reading this as: 面向音乐极客的实时协作听歌产品，包含营销、
 
 ### LLM assessment
 
-结果明显为 Music Room 定制：实时房间码、Vinyl 播放舞台、本地文件、WebRTC 状态和共享队列共同组成了产品自己的视觉语法，不是换个文案就能套到普通 SaaS 的模板。`DESIGN.md` 对“播放是视觉重心”和“stage/workspace 双区”的判断也确实落进了 `RoomDashboardView` 与 `RoomStage`。
+结果明显为 Soqaro 定制：实时房间码、Vinyl 播放舞台、本地文件、WebRTC 状态和共享队列共同组成了产品自己的视觉语法，不是换个文案就能套到普通 SaaS 的模板。`DESIGN.md` 对“播放是视觉重心”和“stage/workspace 双区”的判断也确实落进了 `RoomDashboardView` 与 `RoomStage`。
 
 但营销页首屏的 `ProductRoomPreview` 是手写的静态伪产品截图，和真实房间组件分开维护；这会让产品最重要的证明材料在迭代后最容易失真。英文营销短语和“下一代”式表达也削弱了本来很好的技术声誉感。
 
@@ -72,7 +72,7 @@ Impeccable detector 在 `apps/web/src/components` 和 `apps/web/src/app` 发现 
 
 ### [P1] 营销页仍暴露占位链接和无效法律入口
 
-**证据**：`ProductLandingPage.tsx:8`、`:374-381` 与 `TopBar.tsx:42` 使用 `https://example.test/music-room`；Privacy 和 Terms 使用 `#`。
+**证据**：`ProductLandingPage.tsx:8`、`:374-381` 与 `TopBar.tsx:42` 使用 `https://example.test/soqaro`；Privacy 和 Terms 使用 `#`。
 
 **为什么重要**：GitHub 是首屏公开入口，当前点击会把用户带到测试域名；Privacy/Terms 看起来像正式链接却不产生有效导航，直接损伤可信度。
 
@@ -149,7 +149,7 @@ Impeccable detector 在 `apps/web/src/components` 和 `apps/web/src/app` 发现 
 - 首屏真正要证明的是“实时同步能力”还是“房间里的听感和氛围”？现在两者都写了，但没有一个可验证的主证据。
 - 如果把伪产品预览替换成真实只读 room surface，哪些信息必须保留，哪些只是装饰性的技术标签？
 - 移动端常驻播放器和底部导航是否都需要同时存在，还是可以把其中一层收进沉浸式播放器？
-- Music Room 是否要正式支持浅色主题？如果不支持，设置中的主题切换和全局浅色 token 是否应该收窄范围？
+- Soqaro 是否要正式支持浅色主题？如果不支持，设置中的主题切换和全局浅色 token 是否应该收窄范围？
 
 ## Evidence Notes
 

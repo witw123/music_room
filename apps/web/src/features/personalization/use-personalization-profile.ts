@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { useWorkspacePageActive } from "@/features/workspace/page-activity";
 import { personalizationChangedEvent } from "./use-personalization-reporter";
@@ -14,13 +14,13 @@ import {
 export function usePersonalizationProfile() {
   const pageActive = useWorkspacePageActive();
   const { activeSession } = useSessionIdentity({
-    sessionStorageKey: "music-room-session",
+    sessionStorageKey: "soqaro-session",
     initialStatusMessage: ""
   });
   const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: ["personalization", activeSession?.userId ?? null, "profile"],
-    queryFn: ({ signal }) => musicRoomApi.getPersonalizationProfile(signal),
+    queryFn: ({ signal }) => soqaroApi.getPersonalizationProfile(signal),
     enabled: pageActive && Boolean(activeSession)
   });
   const [localProfile, setLocalProfile] = useState(getLocalStoredProfile);

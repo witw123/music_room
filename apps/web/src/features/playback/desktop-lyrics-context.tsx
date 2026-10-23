@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import {
   createContext,
@@ -10,7 +10,7 @@ import {
   useState,
   type ReactNode
 } from "react";
-import type { TrackMeta } from "@music-room/shared";
+import type { TrackMeta } from "@soqaro/shared";
 import {
   appSettingsChangeEvent,
   getAppSettings,
@@ -82,9 +82,9 @@ type CachedLyrics = Omit<DesktopLyricsState, "status" | "currentLine" | "transla
   wordSyncedLyric?: string | null;
 };
 
-const desktopLyricsPositionStorageKey = "music-room-desktop-lyrics-position-v1";
-const desktopLyricsBridgeChannelName = "music-room-desktop-lyrics";
-const desktopLyricsBridgeSnapshotKey = "music-room-desktop-lyrics-snapshot";
+const desktopLyricsPositionStorageKey = "soqaro-desktop-lyrics-position-v1";
+const desktopLyricsBridgeChannelName = "soqaro-desktop-lyrics";
+const desktopLyricsBridgeSnapshotKey = "soqaro-desktop-lyrics-snapshot";
 const lyricRequestCache = new Map<string, Promise<CachedLyrics>>();
 
 type NativeDesktopLyricsPlugin = {
@@ -98,7 +98,7 @@ function getNativeDesktopLyricsPlugin(): NativeDesktopLyricsPlugin | undefined {
   return capacitorPlugin("DesktopLyrics") as NativeDesktopLyricsPlugin | undefined;
 }
 
-export const musicRoomCloseDesktopLyricsEvent = "music-room:close-desktop-lyrics";
+export const soqaroCloseDesktopLyricsEvent = "soqaro:close-desktop-lyrics";
 
 export function closeDesktopLyricsNative() {
   if (isTauriRuntime()) {
@@ -107,7 +107,7 @@ export function closeDesktopLyricsNative() {
     void getNativeDesktopLyricsPlugin()?.hide?.({});
   }
   if (typeof window !== "undefined") {
-    window.dispatchEvent(new CustomEvent(musicRoomCloseDesktopLyricsEvent));
+    window.dispatchEvent(new CustomEvent(soqaroCloseDesktopLyricsEvent));
   }
 }
 
@@ -152,8 +152,8 @@ export function DesktopLyricsProvider({
 
   useEffect(() => {
     const handleClose = () => close();
-    window.addEventListener(musicRoomCloseDesktopLyricsEvent, handleClose);
-    return () => window.removeEventListener(musicRoomCloseDesktopLyricsEvent, handleClose);
+    window.addEventListener(soqaroCloseDesktopLyricsEvent, handleClose);
+    return () => window.removeEventListener(soqaroCloseDesktopLyricsEvent, handleClose);
   }, [close]);
 
   const selectActivePlayer = useCallback(() => {

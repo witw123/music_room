@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
@@ -11,11 +11,11 @@ import type {
   ProviderTrackCandidate,
   QqMusicTrackCandidate,
   TrackMeta
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import { Button } from "@/components/ui/button";
 import { MediaArtwork } from "@/components/ui/media-artwork";
-import { formatDuration } from "@/lib/domain/music-room-ui";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import { formatDuration } from "@/lib/domain/soqaro-ui";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 import { useFavoriteAlbums } from "@/features/favorites/use-favorite-albums";
 import { CheckIcon } from "@/components/icons/DiscoverIcons";
 import { providerTrackKey } from "@/features/playlist/local-playlist";
@@ -80,10 +80,10 @@ export function FavoriteAlbumsPanel({
     setDetailLoading(true);
     setErrorMessage(null);
     const request = selectedAlbum.provider === "netease"
-      ? musicRoomApi.getNeteaseAlbum(selectedAlbum.providerAlbumId)
+      ? soqaroApi.getNeteaseAlbum(selectedAlbum.providerAlbumId)
       : selectedAlbum.provider === "qqmusic"
-        ? musicRoomApi.getQqMusicAlbum(selectedAlbum.providerAlbumId)
-        : musicRoomApi.getBilibiliVideoParts(selectedAlbum.providerAlbumId).then((partsDetail) => ({
+        ? soqaroApi.getQqMusicAlbum(selectedAlbum.providerAlbumId)
+        : soqaroApi.getBilibiliVideoParts(selectedAlbum.providerAlbumId).then((partsDetail) => ({
             provider: "bilibili" as const,
             providerAlbumId: partsDetail.bvid,
             title: partsDetail.title,
@@ -136,10 +136,10 @@ export function FavoriteAlbumsPanel({
       let albumTracks: ProviderTrackCandidate[] = [];
       try {
         const d = album.provider === "netease"
-          ? await musicRoomApi.getNeteaseAlbum(album.providerAlbumId)
+          ? await soqaroApi.getNeteaseAlbum(album.providerAlbumId)
           : album.provider === "qqmusic"
-            ? await musicRoomApi.getQqMusicAlbum(album.providerAlbumId)
-            : await musicRoomApi.getBilibiliVideoParts(album.providerAlbumId).then((p) => ({
+            ? await soqaroApi.getQqMusicAlbum(album.providerAlbumId)
+            : await soqaroApi.getBilibiliVideoParts(album.providerAlbumId).then((p) => ({
                 tracks: p.parts
               }));
         albumTracks = d.tracks;
@@ -162,7 +162,7 @@ export function FavoriteAlbumsPanel({
       const trackIds = rawTrackIds
         .filter((id) => typeof id === "string" && id.trim().length > 0);
 
-      await musicRoomApi.createPlaylist({
+      await soqaroApi.createPlaylist({
         title: (album.title || "未命名专辑").trim().slice(0, 160),
         description: (album.description ?? `收藏专辑 / ${providerName(album.provider)}`).trim().slice(0, 4000),
         trackIds,

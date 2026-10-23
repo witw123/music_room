@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import type { RepositoryDirectoryHandle as FileSystemDirectoryHandle } from "./directory-handle";
 import { hasNativeStorage } from "./native-storage";
@@ -9,7 +9,7 @@ import type {
   OriginalAssetManifest,
   PlaybackAssetManifest,
   TrackLoudness
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import {
   deleteAudioAsset,
   deleteCachedLibraryTrack,
@@ -51,7 +51,7 @@ export {
 } from "./indexeddb";
 import { enqueueLocalRepositoryWrite } from "./local-repository-queue";
 import { resolveLocalArtworkUrl } from "./audio-metadata";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 import {
   asPermissionedHandle,
   buildLocalAudioFileName,
@@ -240,7 +240,7 @@ export async function listLocalAudioFilesInDirectory(
 async function getWritableLocalAudioDirectory() {
   const directory = await getLocalAudioDirectory();
   if (!directory) {
-    throw new Error("请先选择 Music Room 根目录。");
+    throw new Error("请先选择 Soqaro 根目录。");
   }
 
   const permission = await requestDirectoryPermission(
@@ -248,7 +248,7 @@ async function getWritableLocalAudioDirectory() {
     "readwrite"
   );
   if (!permission) {
-    throw new Error("没有获得 Music Room 本地存储文件夹写入权限，请重新选择根文件夹。 ");
+    throw new Error("没有获得 Soqaro 本地存储文件夹写入权限，请重新选择根文件夹。 ");
   }
   return directory;
 }
@@ -545,7 +545,7 @@ export async function saveAudioFileToLocalDirectory(input: {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 3_000);
         try {
-          return await musicRoomApi.downloadQqMusicArtwork(remoteArtworkUrl, controller.signal).then((response) => response.blob).catch(() => null);
+          return await soqaroApi.downloadQqMusicArtwork(remoteArtworkUrl, controller.signal).then((response) => response.blob).catch(() => null);
         } finally {
           clearTimeout(timer);
         }
@@ -939,7 +939,7 @@ async function removeUnreferencedTrackAssets(repository: LocalRepository, remove
   ]);
   for (const track of removed) {
     if (track.originalAsset && !protectedIds.has(track.originalAsset.assetId)) {
-      await repository.removeDirectory(`.music-room/assets/original/${track.originalAsset.assetId}`);
+      await repository.removeDirectory(`.soqaro/assets/original/${track.originalAsset.assetId}`);
       await deleteAudioAsset(track.originalAsset.assetId);
     }
     if (track.playbackAsset && !protectedIds.has(track.playbackAsset.assetId)) {
@@ -1088,8 +1088,8 @@ async function collectSelectedLocalAudioFiles(
       continue;
     }
 
-    // Music Room's managed files are indexed separately.
-    if (!parentPath && entry.name === ".music-room") {
+    // Soqaro's managed files are indexed separately.
+    if (!parentPath && entry.name === ".soqaro") {
       continue;
     }
     await collectSelectedLocalAudioFiles(entry, fileName, files, signal, yieldIfFrameBudgetExhausted);

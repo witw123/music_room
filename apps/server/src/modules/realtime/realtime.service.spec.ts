@@ -1,6 +1,6 @@
-import { createHmac } from "node:crypto";
+﻿import { createHmac } from "node:crypto";
 
-jest.mock("@music-room/shared", () => ({
+jest.mock("@soqaro/shared", () => ({
   iceConfigResponseSchema: {
     parse: (value: unknown) => value,
     shape: {
@@ -67,18 +67,18 @@ describe("RealtimeService", () => {
     process.env.TURN_ENABLED = "true";
     process.env.TURN_PUBLIC_HOST = "localhost";
     process.env.TURN_PUBLIC_HOST_USE_REQUEST_HOST = "1";
-    process.env.TURN_REQUEST_HOST_ALLOWLIST = "music-room.example.test";
+    process.env.TURN_REQUEST_HOST_ALLOWLIST = "soqaro.example.test";
     delete process.env.APP_DOMAIN;
     process.env.TURN_SHARED_SECRET = "turn-secret";
     const service = new RealtimeService();
 
     const config = service.buildIceConfig("user_1", {
-      requestHost: "music-room.example.test"
+      requestHost: "soqaro.example.test"
     });
 
     expect(config.source).toBe("ephemeral");
     expect(config.iceServers[1]).toMatchObject({
-      urls: expect.arrayContaining(["turn:music-room.example.test:3478?transport=udp"])
+      urls: expect.arrayContaining(["turn:soqaro.example.test:3478?transport=udp"])
     });
   });
 
@@ -100,7 +100,7 @@ describe("RealtimeService", () => {
   it("derives the independent TURN root host from a subdomain app domain", () => {
     process.env.TURN_ENABLED = "true";
     delete process.env.TURN_PUBLIC_HOST;
-    process.env.APP_DOMAIN = "music-room.example.test";
+    process.env.APP_DOMAIN = "soqaro.example.test";
     process.env.TURN_SHARED_SECRET = "turn-secret";
     const service = new RealtimeService();
 

@@ -1,5 +1,5 @@
 ﻿import { useCallback, type Dispatch, type SetStateAction } from "react";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 import {
   ensureDefaultLocalPlaylist,
   getDefaultLocalPlaylistTrackIds,
@@ -22,14 +22,14 @@ export async function resolveTrackArtwork(track: Track): Promise<Track> {
   if (track.artworkUrl) return track;
   try {
     if (track.provider === "netease") {
-      return await musicRoomApi.getNeteaseTrack(track.providerTrackId);
+      return await soqaroApi.getNeteaseTrack(track.providerTrackId);
     }
     if (track.provider === "qqmusic") {
-      return await musicRoomApi.getQqMusicTrack(track.providerTrackId);
+      return await soqaroApi.getQqMusicTrack(track.providerTrackId);
     }
     if (track.provider === "bilibili") {
       const bvid = track.bvid ?? track.providerTrackId.split(":")[0]!;
-      const detail = await musicRoomApi.getBilibiliView(bvid);
+      const detail = await soqaroApi.getBilibiliView(bvid);
       return {
         ...track,
         artworkUrl: detail.pic

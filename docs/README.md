@@ -1,11 +1,11 @@
 # 文档总览
 
 最后更新：`2026-09`
-当前版本：`0.3.2`
+当前版本：`1.0.0`
 
 ## 当前项目现状
 
-Music Room 是一套围绕“本地与外部音乐多人同步播放”构建的多端协作应用：
+Soqaro 是一套围绕“本地与外部音乐多人同步播放”构建的多端协作应用：
 
 - Next.js 15 Web 前端（自适应桌面与移动端浏览器，支持 PWA）
 - Tauri 2 桌面端（集成 Windows SMTC 与桌面悬浮歌词）
@@ -84,7 +84,7 @@ Web 前端默认使用当前页面 origin，不需要把生产域名硬编码进
 
 ### Docker Nginx 配置边界
 
-`deploy/linux/nginx/music-room.conf` 中的 `web:3000` 和 `server:3001` upstream 只适用于 Docker 网络。宿主机部署时必须改为本机地址，例如 `127.0.0.1:3000` 和 `127.0.0.1:3001`。
+`deploy/linux/nginx/soqaro.conf` 中的 `web:3000` 和 `server:3001` upstream 只适用于 Docker 网络。宿主机部署时必须改为本机地址，例如 `127.0.0.1:3000` 和 `127.0.0.1:3001`。
 
 
 

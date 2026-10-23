@@ -1,11 +1,11 @@
-"use client";
+﻿"use client";
 
-import type { PlaybackSnapshot, RoomMember, RoomSnapshot, TrackMeta } from "@music-room/shared";
+import type { PlaybackSnapshot, RoomMember, RoomSnapshot, TrackMeta } from "@soqaro/shared";
 import {
   normalizeRoomMembers,
   shouldAcceptPresenceSnapshot,
   shouldReplacePlaybackSnapshot
-} from "@/lib/domain/music-room-ui";
+} from "@/lib/domain/soqaro-ui";
 
 type RoomStateSource = "bootstrap" | "authoritative";
 

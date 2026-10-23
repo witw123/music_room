@@ -1,4 +1,4 @@
-import { Body, BadRequestException, Controller, Delete, Get, Headers, Ip, Query, Patch, Param, Post, ServiceUnavailableException, UnauthorizedException } from "@nestjs/common";
+﻿import { Body, BadRequestException, Controller, Delete, Get, Headers, Ip, Query, Patch, Param, Post, ServiceUnavailableException, UnauthorizedException } from "@nestjs/common";
 import {
   batchDeleteTracksRequestSchema,
   computeAssetId,
@@ -21,7 +21,7 @@ import {
   type RegisterTracksRequest,
   type RoomJoinResponse,
   type RoomMemberPermissions
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import { parseRequestBody } from "../../common/validation/zod-validation";
 import { AbuseProtectionService } from "../../common/security/abuse-protection.service";
 import { AuthService } from "../auth/auth.service";
@@ -64,7 +64,7 @@ export class RoomController {
     @Body()
     body: {
       visibility?: "private" | "public";
-      roomType: import("@music-room/shared").RoomType;
+      roomType: import("@soqaro/shared").RoomType;
       name?: string;
       description?: string | null;
       password?: string;

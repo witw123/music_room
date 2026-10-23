@@ -1,6 +1,6 @@
-import { Injectable } from "@nestjs/common";
+﻿import { Injectable } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
-import type { NeteaseAccountStatus } from "@music-room/shared";
+import type { NeteaseAccountStatus } from "@soqaro/shared";
 import { PrismaService } from "../../../infra/prisma/prisma.service";
 import { NeteaseCryptoService } from "./netease-crypto.service";
 

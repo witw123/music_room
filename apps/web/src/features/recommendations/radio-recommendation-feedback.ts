@@ -1,8 +1,8 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef } from "react";
-import type { ProviderTrackCandidate, QueueItem, RoomSnapshot, TrackMeta } from "@music-room/shared";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import type { ProviderTrackCandidate, QueueItem, RoomSnapshot, TrackMeta } from "@soqaro/shared";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 import { recordPersonalizationFavoriteCandidate, toPersonalizationTrack } from "@/features/personalization/use-personalization-reporter";
 
 type FavoriteTracksChangedDetail = {
@@ -59,7 +59,7 @@ export function useRadioRecommendationFeedback(input: {
         const candidate = currentTracks.get(queueItem.trackId);
         const recommendation = candidate ? toPersonalizationTrack(candidate) : null;
         if (!recommendation) continue;
-        void musicRoomApi.recordPersonalizationEvent({
+        void soqaroApi.recordPersonalizationEvent({
           id: `queue:${queueItem.id}:manual-selection`,
           track: recommendation,
           type: "manual-selection",
@@ -74,7 +74,7 @@ export function useRadioRecommendationFeedback(input: {
         const candidate = previousTracks.get(queueItem.trackId);
         const recommendation = candidate ? toPersonalizationTrack(candidate) : null;
         if (!recommendation) continue;
-        void musicRoomApi.recordPersonalizationEvent({
+        void soqaroApi.recordPersonalizationEvent({
           id: `queue:${queueItem.id}:dismissed`,
           track: recommendation,
           type: "dismissed",
@@ -133,7 +133,7 @@ export function useRadioRecommendationFeedback(input: {
     if (!session || session.completed || !session.wasPlaying || session.durationMs <= 0) return;
     if (session.maxProgressMs / session.durationMs < 0.7) return;
     session.completed = true;
-    void musicRoomApi.recordPersonalizationEvent({
+    void soqaroApi.recordPersonalizationEvent({
       id: `playback:${session.queueItemId}:${session.mediaEpoch}:completion`,
       track: toPersonalizationTrack(session.track)!,
       type: "completion",
@@ -149,8 +149,8 @@ export function useRadioRecommendationFeedback(input: {
       if (!detail?.isFavorite || detail.userId !== input.activeUserId) return;
       void recordPersonalizationFavoriteCandidate(detail.track, true).catch(() => undefined);
     };
-    window.addEventListener("music-room-favorite-tracks-changed", handleFavoriteChange);
-    return () => window.removeEventListener("music-room-favorite-tracks-changed", handleFavoriteChange);
+    window.addEventListener("soqaro-favorite-tracks-changed", handleFavoriteChange);
+    return () => window.removeEventListener("soqaro-favorite-tracks-changed", handleFavoriteChange);
   }, [contextKey, input.activeUserId, isRadioHost]);
 }
 
@@ -159,7 +159,7 @@ export function recordRadioRecommendationUnavailable(input: {
   roomId: string;
   candidate: ProviderTrackCandidate;
 }) {
-  return musicRoomApi.recordPersonalizationEvent({
+  return soqaroApi.recordPersonalizationEvent({
     id: `radio:${input.roomId}:unavailable:${input.candidate.provider}:${input.candidate.providerTrackId}:${Date.now()}`,
     track: {
       provider: input.candidate.provider,
@@ -181,7 +181,7 @@ export function recordRadioRecommendationUnavailable(input: {
 
 function settlePlaybackSession(session: PlaybackSession, _userId: string, _contextKey: string) {
   if (session.completed || !session.wasPlaying || session.maxProgressMs >= 30_000) return;
-  void musicRoomApi.recordPersonalizationEvent({
+  void soqaroApi.recordPersonalizationEvent({
     id: `playback:${session.queueItemId}:${session.mediaEpoch}:quick-skip`,
     track: toPersonalizationTrack(session.track)!,
     type: "quick-skip",

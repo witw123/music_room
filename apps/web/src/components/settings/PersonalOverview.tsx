@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
-import type { AuthSession } from "@music-room/shared";
+import type { AuthSession } from "@soqaro/shared";
 import { useLocalPlayer } from "@/features/playback/local-player-context";
 import { usePersonalizationProfile } from "@/features/personalization/use-personalization-profile";
 import { SettingsIcon } from "@/components/icons/DiscoverIcons";

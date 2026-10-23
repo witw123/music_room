@@ -1,15 +1,15 @@
-import {
+﻿import {
   assetUnitDescriptorSchema,
   playbackProfileId,
   verifyAssetUnit,
   type AssetUnitDescriptor,
   type AudioAssetManifest
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import { LocalRepository } from "../local-repository";
 import { getLocalAudioDirectory } from "./storage-records";
 import {
   assetUnitId,
-  musicRoomDatabase,
+  soqaroDatabase,
   type AudioAssetManifestRecord,
   type AudioAssetUnitRecord,
   type TrackAssetLinkRecord,
@@ -21,8 +21,8 @@ export async function putAssetManifest(
   options?: { complete?: boolean }
 ) {
   const now = new Date().toISOString();
-  const existing = await musicRoomDatabase.assetManifests.get(manifest.assetId);
-  await musicRoomDatabase.assetManifests.put({
+  const existing = await soqaroDatabase.assetManifests.get(manifest.assetId);
+  await soqaroDatabase.assetManifests.put({
     assetId: manifest.assetId,
     kind: manifest.kind,
     sourceFileHash:
@@ -38,10 +38,10 @@ export async function getAssetManifest(
   assetId: string,
   options?: { includeLocalRepository?: boolean }
 ) {
-  const record = await musicRoomDatabase.assetManifests.get(assetId);
+  const record = await soqaroDatabase.assetManifests.get(assetId);
   if (record?.complete || options?.includeLocalRepository === false) {
     if (record) {
-      await musicRoomDatabase.assetManifests.update(assetId, {
+      await soqaroDatabase.assetManifests.update(assetId, {
         lastAccessedAt: new Date().toISOString()
       });
     }
@@ -77,7 +77,7 @@ export async function getAssetManifest(
   }
 
   if (record) {
-    await musicRoomDatabase.assetManifests.update(assetId, {
+    await soqaroDatabase.assetManifests.update(assetId, {
       lastAccessedAt: new Date().toISOString()
     });
     return record;
@@ -86,7 +86,7 @@ export async function getAssetManifest(
 }
 
 export async function getCompleteAssetPairForSourceFileHash(fileHash: string) {
-  const records = await musicRoomDatabase.assetManifests
+  const records = await soqaroDatabase.assetManifests
     .where("sourceFileHash")
     .equals(fileHash)
     .toArray();
@@ -125,13 +125,13 @@ export async function getCompleteAssetPairForSourceFileHash(fileHash: string) {
 }
 
 export async function deleteAudioAsset(assetId: string) {
-  await musicRoomDatabase.transaction(
+  await soqaroDatabase.transaction(
     "rw",
-    musicRoomDatabase.assetManifests,
-    musicRoomDatabase.assetUnits,
+    soqaroDatabase.assetManifests,
+    soqaroDatabase.assetUnits,
     async () => {
-      await musicRoomDatabase.assetUnits.where("assetId").equals(assetId).delete();
-      await musicRoomDatabase.assetManifests.delete(assetId);
+      await soqaroDatabase.assetUnits.where("assetId").equals(assetId).delete();
+      await soqaroDatabase.assetManifests.delete(assetId);
     }
   );
 }
@@ -142,7 +142,7 @@ export async function putVerifiedAssetUnit(input: {
   protectedUntil?: string | null;
 }) {
   const descriptor = assetUnitDescriptorSchema.parse(input.descriptor);
-  const manifestRecord = await musicRoomDatabase.assetManifests.get(descriptor.assetId);
+  const manifestRecord = await soqaroDatabase.assetManifests.get(descriptor.assetId);
   if (!manifestRecord || manifestRecord.kind !== descriptor.kind) {
     throw new Error("Asset manifest is missing or does not match the unit kind.");
   }
@@ -167,16 +167,16 @@ export async function putVerifiedAssetUnit(input: {
   }
 
   const now = new Date().toISOString();
-  await musicRoomDatabase.assetUnits.put({
+  await soqaroDatabase.assetUnits.put({
     ...descriptor,
     unitId: assetUnitId(descriptor.assetId, descriptor.unitIndex),
     payload: input.payload,
     lastAccessedAt: now,
     protectedUntil: input.protectedUntil ?? null
   });
-  const unitCount = await musicRoomDatabase.assetUnits.where("assetId").equals(descriptor.assetId).count();
+  const unitCount = await soqaroDatabase.assetUnits.where("assetId").equals(descriptor.assetId).count();
   if (unitCount >= manifestRecord.manifest.unitCount) {
-    await musicRoomDatabase.assetManifests.update(descriptor.assetId, {
+    await soqaroDatabase.assetManifests.update(descriptor.assetId, {
       complete: true,
       lastAccessedAt: now
     });
@@ -189,7 +189,7 @@ export async function putLocallyGeneratedAssetUnits(input: {
   complete?: boolean;
 }) {
   if (input.units.length === 0) return;
-  const manifestRecord = await musicRoomDatabase.assetManifests.get(input.assetId);
+  const manifestRecord = await soqaroDatabase.assetManifests.get(input.assetId);
   if (!manifestRecord) {
     throw new Error("Asset manifest is missing for locally generated units.");
   }
@@ -212,21 +212,21 @@ export async function putLocallyGeneratedAssetUnits(input: {
       protectedUntil: null
     } satisfies AudioAssetUnitRecord;
   });
-  await musicRoomDatabase.transaction(
+  await soqaroDatabase.transaction(
     "rw",
-    musicRoomDatabase.assetManifests,
-    musicRoomDatabase.assetUnits,
+    soqaroDatabase.assetManifests,
+    soqaroDatabase.assetUnits,
     async () => {
-      await musicRoomDatabase.assetUnits.bulkPut(records);
+      await soqaroDatabase.assetUnits.bulkPut(records);
       if (input.complete) {
-        const unitCount = await musicRoomDatabase.assetUnits
+        const unitCount = await soqaroDatabase.assetUnits
           .where("assetId")
           .equals(input.assetId)
           .count();
         if (unitCount !== manifestRecord.manifest.unitCount) {
           throw new Error("Locally generated asset is incomplete after persistence.");
         }
-        await musicRoomDatabase.assetManifests.update(input.assetId, {
+        await soqaroDatabase.assetManifests.update(input.assetId, {
           complete: true,
           lastAccessedAt: now
         });
@@ -237,9 +237,9 @@ export async function putLocallyGeneratedAssetUnits(input: {
 
 export async function getAssetUnit(assetId: string, unitIndex: number) {
   const unitId = assetUnitId(assetId, unitIndex);
-  const record = await musicRoomDatabase.assetUnits.get(unitId);
+  const record = await soqaroDatabase.assetUnits.get(unitId);
   if (record) {
-    await musicRoomDatabase.assetUnits.update(unitId, {
+    await soqaroDatabase.assetUnits.update(unitId, {
       lastAccessedAt: new Date().toISOString()
     });
     return record;
@@ -253,7 +253,7 @@ export async function getAssetUnits(assetId: string, unitIndexes: readonly numbe
   if (uniqueIndexes.length === 0) {
     return [];
   }
-  const records = await musicRoomDatabase.assetUnits.bulkGet(
+  const records = await soqaroDatabase.assetUnits.bulkGet(
     uniqueIndexes.map((index) => assetUnitId(assetId, index))
   );
   const byIndex = new Map(
@@ -282,7 +282,7 @@ export async function getAssetUnits(assetId: string, unitIndexes: readonly numbe
 }
 
 export async function getAssetUnitIndexes(assetId: string) {
-  const keys = await musicRoomDatabase.assetUnits.where("assetId").equals(assetId).primaryKeys();
+  const keys = await soqaroDatabase.assetUnits.where("assetId").equals(assetId).primaryKeys();
   const indexes = keys.flatMap((key) => {
     if (typeof key !== "string") {
       return [];
@@ -348,14 +348,14 @@ async function getLocalPlaybackUnitFromRepository(
 }
 
 export async function linkTrackAssets(input: Omit<TrackAssetLinkRecord, "linkedAt">) {
-  await musicRoomDatabase.trackAssetLinks.put({
+  await soqaroDatabase.trackAssetLinks.put({
     ...input,
     linkedAt: new Date().toISOString()
   });
 }
 
 export async function getTrackAssetLink(trackId: string) {
-  return (await musicRoomDatabase.trackAssetLinks.get(trackId)) ?? null;
+  return (await soqaroDatabase.trackAssetLinks.get(trackId)) ?? null;
 }
 
 export async function deleteOriginalAssetForTrack(trackId: string) {
@@ -373,7 +373,7 @@ export async function upsertTranscodeJob(
     ...input,
     updatedAt: new Date().toISOString()
   } satisfies TranscodeJobRecord;
-  await musicRoomDatabase.transcodeJobs.put(record);
+  await soqaroDatabase.transcodeJobs.put(record);
 
   if (options?.persistRepository === false) return;
   const directory = await getLocalAudioDirectory();
@@ -385,5 +385,5 @@ export async function upsertTranscodeJob(
 }
 
 export async function listQueuedTranscodeJobs() {
-  return musicRoomDatabase.transcodeJobs.where("status").equals("queued").toArray();
+  return soqaroDatabase.transcodeJobs.where("status").equals("queued").toArray();
 }

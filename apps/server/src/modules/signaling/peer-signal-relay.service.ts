@@ -1,5 +1,5 @@
-import { Injectable } from "@nestjs/common";
-import type { PeerSignalMessage } from "@music-room/shared";
+﻿import { Injectable } from "@nestjs/common";
+import type { PeerSignalMessage } from "@soqaro/shared";
 import type { Server } from "socket.io";
 import { RoomSessionLeaseService } from "./room-session-lease.service";
 

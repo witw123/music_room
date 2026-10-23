@@ -1,11 +1,11 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
+﻿import { BadRequestException, Injectable } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
-import type { Playlist, Room, RoomMemberPermissions, RoomType } from "@music-room/shared";
+import type { Playlist, Room, RoomMemberPermissions, RoomType } from "@soqaro/shared";
 import {
   defaultRoomMemberPermissions,
   getNewMemberPermissions,
   inactiveRadioAutopilot
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import type { RoomRecord } from "../room.types";
 import {
   assertHost,

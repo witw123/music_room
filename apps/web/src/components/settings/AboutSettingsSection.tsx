@@ -54,7 +54,7 @@ export function AboutSettingsSection() {
         <div className="flex min-h-16 flex-col justify-between gap-4 py-3 sm:flex-row sm:items-center">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <p className="text-sm font-medium text-foreground">Music Room</p>
+              <p className="text-sm font-medium text-foreground">Soqaro</p>
               <span className="rounded bg-surface-hover px-1.5 py-0.5 text-xs font-mono text-foreground-muted">
                 v{currentVersion}
               </span>
@@ -175,7 +175,7 @@ export function AboutSettingsSection() {
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <Button
-              onClick={() => void openExternalUrl("https://github.com/witw123/music_room")}
+              onClick={() => void openExternalUrl("https://github.com/witw123/soqaro")}
               size="sm"
               type="button"
               variant="outline"
@@ -184,7 +184,7 @@ export function AboutSettingsSection() {
               <span className="ml-1.5">GitHub 仓库</span>
             </Button>
             <Button
-              onClick={() => void openExternalUrl("https://github.com/witw123/music_room/releases")}
+              onClick={() => void openExternalUrl("https://github.com/witw123/soqaro/releases")}
               size="sm"
               type="button"
               variant="outline"

@@ -1,11 +1,11 @@
-import { Body, Controller, Delete, Get, Headers, Param, Post, Query, Req, UnauthorizedException } from "@nestjs/common";
+﻿import { Body, Controller, Delete, Get, Headers, Param, Post, Query, Req, UnauthorizedException } from "@nestjs/common";
 import {
   coldStartTasteInputSchema,
   personalizationFeedbackSchema,
   personalizationRecommendationsQuerySchema,
   recordPersonalizationEventSchema,
   trackRadioQuerySchema
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import { parseRequestBody } from "../../common/validation/zod-validation";
 import { AuthService } from "../auth/auth.service";
 import { resolveClientIp } from "../../common/security/client-ip";

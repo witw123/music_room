@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { PeerSignalMessage } from "@music-room/shared";
+﻿import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { PeerSignalMessage } from "@soqaro/shared";
 import { P2PMesh } from "./mesh";
 import { SignalingTransport } from "./signaling-transport";
 import { PeerConnectionLifecycleManager } from "./peer-connection-lifecycle-manager";

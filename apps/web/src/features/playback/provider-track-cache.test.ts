@@ -52,7 +52,7 @@ const playlistMocks = vi.hoisted(() => ({
 }));
 
 const apiMocks = vi.hoisted(() => ({
-  musicRoomApi: {
+  soqaroApi: {
     downloadNeteaseTrack: vi.fn(),
     downloadQqMusicTrack: vi.fn(),
     getNeteaseLyrics: vi.fn(),
@@ -71,7 +71,7 @@ vi.mock("./loudness", () => loudnessMocks);
 vi.mock("@/features/library/indexeddb", () => indexedDbMocks);
 vi.mock("@/features/library/local-audio-storage", () => storageMocks);
 vi.mock("@/features/playlist/local-playlist", () => playlistMocks);
-vi.mock("@/lib/network/music-room-api", () => apiMocks);
+vi.mock("@/lib/network/soqaro-api", () => apiMocks);
 
 import type { ProviderTrack } from "@/features/playlist/local-playlist";
 import {
@@ -130,13 +130,13 @@ describe("provider playback cache lifecycle", () => {
     indexedDbMocks.listLocalAudioCacheFiles.mockResolvedValue([]);
     indexedDbMocks.listLocalAudioFiles.mockResolvedValue([]);
     storageMocks.saveCachedAudioFileToLocalDirectory.mockResolvedValue(null);
-    apiMocks.musicRoomApi.getNeteaseLyrics.mockResolvedValue({ plainLyric: null });
-    apiMocks.musicRoomApi.getQqMusicLyrics.mockResolvedValue({ plainLyric: null });
-    apiMocks.musicRoomApi.downloadNeteaseTrack.mockResolvedValue({
+    apiMocks.soqaroApi.getNeteaseLyrics.mockResolvedValue({ plainLyric: null });
+    apiMocks.soqaroApi.getQqMusicLyrics.mockResolvedValue({ plainLyric: null });
+    apiMocks.soqaroApi.downloadNeteaseTrack.mockResolvedValue({
       blob: new Blob(["audio"], { type: "audio/mpeg" }),
       contentType: "audio/mpeg"
     });
-    apiMocks.musicRoomApi.downloadQqMusicTrack.mockResolvedValue({
+    apiMocks.soqaroApi.downloadQqMusicTrack.mockResolvedValue({
       blob: new Blob(["audio"], { type: "audio/mpeg" }),
       contentType: "audio/mpeg"
     });
@@ -153,7 +153,7 @@ describe("provider playback cache lifecycle", () => {
   ] as const)("downloads %s into the browser cache before playback", async (provider, method) => {
     await cacheProviderTrackForPlayback(buildTrack(provider));
 
-    expect(apiMocks.musicRoomApi[method]).toHaveBeenCalledOnce();
+    expect(apiMocks.soqaroApi[method]).toHaveBeenCalledOnce();
     expect(indexedDbMocks.upsertCachedLibraryTrack).toHaveBeenCalledOnce();
     expect(storageMocks.saveCachedAudioFileToLocalDirectory).not.toHaveBeenCalled();
     await vi.runAllTimersAsync();
@@ -178,7 +178,7 @@ describe("provider playback cache lifecycle", () => {
 
   it("passes cancellation into the download and does not persist cancelled audio", async () => {
     const controller = new AbortController();
-    apiMocks.musicRoomApi.downloadNeteaseTrack.mockImplementationOnce(
+    apiMocks.soqaroApi.downloadNeteaseTrack.mockImplementationOnce(
       async (_id, _quality, signal: AbortSignal) => {
         expect(signal).toBe(controller.signal);
         controller.abort();
@@ -229,7 +229,7 @@ describe("provider playback cache lifecycle", () => {
 
     expect(record.fileHash).toBe("hash_1");
     expect(record.fileName).toBe("Song [hash_1].mp3");
-    expect(apiMocks.musicRoomApi.downloadNeteaseTrack).not.toHaveBeenCalled();
+    expect(apiMocks.soqaroApi.downloadNeteaseTrack).not.toHaveBeenCalled();
     await expect(hasProviderTrackPlaybackCache("hash_1")).resolves.toBe(true);
   });
 

@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
 import { memo } from "react";
-import type { AuthSession } from "@music-room/shared";
+import type { AuthSession } from "@soqaro/shared";
 import { Button } from "@/components/ui/button";
 
 type TopBarProps = {
@@ -25,7 +25,7 @@ function TopBarBase({ activeSession, onLogout, variant = "app" }: TopBarProps) {
             </svg>
           </div>
           <div className="min-w-0 leading-none">
-            <span className="block truncate text-sm font-bold tracking-tight text-foreground">Music Room</span>
+            <span className="block truncate text-sm font-bold tracking-tight text-foreground">Soqaro</span>
             <span className="hidden text-[11px] text-foreground-muted sm:block">实时协作听歌空间</span>
           </div>
         </div>
@@ -39,7 +39,7 @@ function TopBarBase({ activeSession, onLogout, variant = "app" }: TopBarProps) {
                 <a className="transition-colors hover:text-foreground" href="#architecture">技术架构</a>
               </nav>
               <a
-                href="https://example.test/music-room"
+                href="https://example.test/soqaro"
                 target="_blank"
                 rel="noreferrer"
                 className="rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm font-medium text-foreground-muted transition-colors hover:bg-surface-hover hover:text-foreground"

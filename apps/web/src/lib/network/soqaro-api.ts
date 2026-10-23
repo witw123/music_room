@@ -55,7 +55,7 @@ import type {
   SystemAnnouncement,
   TrackMeta,
   UpdateRoomRequest
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import { apiBaseUrl } from "./api-client";
 import {
   downloadDirectTrack,
@@ -67,9 +67,9 @@ import {
   type RadioAutopilotNextTrackMutationResponse,
   type RoomActivitySummary,
   type RoomInteractionStats
-} from "./music-room-api.base";
+} from "./soqaro-api.base";
 
-export * from "./music-room-api.base";
+export * from "./soqaro-api.base";
 
 export type ProviderAudioQuality = "standard" | "high" | "exhigh" | "lossless" | "hires";
 
@@ -136,7 +136,7 @@ async function downloadQualityProviderTrack(
   });
 }
 
-export const musicRoomApi = {
+export const soqaroApi = {
   getAuthConfig: () => request<AuthConfig>("/v1/auth/config"),
   register: (
     username: string,
@@ -633,7 +633,7 @@ export const musicRoomApi = {
     onProgress?: (loaded: number, total: number | null) => void
   ) =>
     downloadDirectTrack({
-      resolve: () => musicRoomApi.resolveBilibiliAudio(trackId, signal),
+      resolve: () => soqaroApi.resolveBilibiliAudio(trackId, signal),
       headers: {
         Referer: "https://www.bilibili.com/",
         "User-Agent":

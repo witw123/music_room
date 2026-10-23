@@ -4,7 +4,7 @@ import {
   toCachedLibraryTrackSummaryRecord
 } from "./cached-library";
 import {
-  musicRoomDatabase,
+  soqaroDatabase,
   type AudioAssetManifestRecord
 } from "./database";
 import { LocalRepository } from "../local-repository";
@@ -22,22 +22,22 @@ export async function deleteLocalTrackDataForTracks(
   const deletedLocalFileHashes = new Set<string>();
   const deletedLocalAssetManifests = new Map<string, AudioAssetManifestRecord>();
 
-  await musicRoomDatabase.transaction(
+  await soqaroDatabase.transaction(
     "rw",
     [
-      musicRoomDatabase.cachedTrackLibrary,
-      musicRoomDatabase.cachedTrackLibraryMetadata,
-      musicRoomDatabase.trackAssetLinks,
-      musicRoomDatabase.assetManifests,
-      musicRoomDatabase.assetUnits,
-      musicRoomDatabase.transcodeJobs
+      soqaroDatabase.cachedTrackLibrary,
+      soqaroDatabase.cachedTrackLibraryMetadata,
+      soqaroDatabase.trackAssetLinks,
+      soqaroDatabase.assetManifests,
+      soqaroDatabase.assetUnits,
+      soqaroDatabase.transcodeJobs
     ],
     async () => {
-      const cachedSummaryKeys = await musicRoomDatabase.cachedTrackLibraryMetadata
+      const cachedSummaryKeys = await soqaroDatabase.cachedTrackLibraryMetadata
         .where("sourceTrackIds")
         .anyOf(uniqueTrackIds)
         .primaryKeys();
-      const cachedRecordKeys = await musicRoomDatabase.cachedTrackLibrary
+      const cachedRecordKeys = await soqaroDatabase.cachedTrackLibrary
         .where("sourceTrackIds")
         .anyOf(uniqueTrackIds)
         .primaryKeys();
@@ -49,8 +49,8 @@ export async function deleteLocalTrackDataForTracks(
         )
       ];
       for (const fileHash of fileHashes) {
-        const record = await musicRoomDatabase.cachedTrackLibrary.get(fileHash);
-        const summary = await musicRoomDatabase.cachedTrackLibraryMetadata.get(fileHash);
+        const record = await soqaroDatabase.cachedTrackLibrary.get(fileHash);
+        const summary = await soqaroDatabase.cachedTrackLibraryMetadata.get(fileHash);
         const source = record ?? summary;
         if (!source) {
           continue;
@@ -63,22 +63,22 @@ export async function deleteLocalTrackDataForTracks(
         );
 
         if (record) {
-          await musicRoomDatabase.cachedTrackLibrary.put({ ...record, ...nextReferences });
+          await soqaroDatabase.cachedTrackLibrary.put({ ...record, ...nextReferences });
         }
         const nextSummary = summary ?? (record ? toCachedLibraryTrackSummaryRecord(record) : null);
         if (nextSummary) {
-          await musicRoomDatabase.cachedTrackLibraryMetadata.put({
+          await soqaroDatabase.cachedTrackLibraryMetadata.put({
             ...nextSummary,
             ...nextReferences
           });
         }
       }
 
-      const removedLinks = await musicRoomDatabase.trackAssetLinks
+      const removedLinks = await soqaroDatabase.trackAssetLinks
         .where("trackId")
         .anyOf(uniqueTrackIds)
         .toArray();
-      const remainingLinks = await musicRoomDatabase.trackAssetLinks
+      const remainingLinks = await soqaroDatabase.trackAssetLinks
         .filter((link) => !uniqueTrackIds.includes(link.trackId))
         .toArray();
       const remainingAssetIds = new Set(
@@ -89,7 +89,7 @@ export async function deleteLocalTrackDataForTracks(
           removedLinks.flatMap((link) => [link.originalAssetId, link.playbackAssetId])
         )
       ].filter((assetId) => !remainingAssetIds.has(assetId));
-      const removableManifests = await musicRoomDatabase.assetManifests.bulkGet(removableAssetIds);
+      const removableManifests = await soqaroDatabase.assetManifests.bulkGet(removableAssetIds);
       for (const manifest of removableManifests) {
         if (manifest) deletedLocalAssetManifests.set(manifest.assetId, manifest);
       }
@@ -99,26 +99,26 @@ export async function deleteLocalTrackDataForTracks(
           .map((manifest) => manifest.sourceFileHash)
       );
 
-      await musicRoomDatabase.trackAssetLinks.bulkDelete(uniqueTrackIds);
+      await soqaroDatabase.trackAssetLinks.bulkDelete(uniqueTrackIds);
       if (removableAssetIds.length > 0) {
-        await musicRoomDatabase.assetUnits.where("assetId").anyOf(removableAssetIds).delete();
-        await musicRoomDatabase.assetManifests.bulkDelete(removableAssetIds);
+        await soqaroDatabase.assetUnits.where("assetId").anyOf(removableAssetIds).delete();
+        await soqaroDatabase.assetManifests.bulkDelete(removableAssetIds);
       }
 
       if (removableSourceFileHashes.size > 0) {
         const remainingCachedHashes = new Set(
-          (await musicRoomDatabase.cachedTrackLibraryMetadata.toCollection().primaryKeys())
+          (await soqaroDatabase.cachedTrackLibraryMetadata.toCollection().primaryKeys())
             .filter((key): key is string => typeof key === "string")
         );
         const remainingAssetSourceFileHashes = new Set(
-          (await musicRoomDatabase.assetManifests.toArray()).map((manifest) => manifest.sourceFileHash)
+          (await soqaroDatabase.assetManifests.toArray()).map((manifest) => manifest.sourceFileHash)
         );
         const sourceFileHashesToDelete = [...removableSourceFileHashes].filter(
           (fileHash) =>
             !remainingCachedHashes.has(fileHash) && !remainingAssetSourceFileHashes.has(fileHash)
         );
         if (sourceFileHashesToDelete.length > 0) {
-          await musicRoomDatabase.transcodeJobs.bulkDelete(sourceFileHashesToDelete);
+          await soqaroDatabase.transcodeJobs.bulkDelete(sourceFileHashesToDelete);
         }
       }
     }
@@ -151,7 +151,7 @@ async function cleanupDeletedLocalRepositoryData(
   const protectedLocalAssetIds = new Set<string>();
   for (const fileHash of fileHashes) {
     const record = await repository.readTrack(fileHash);
-    const localFile = await musicRoomDatabase.localAudioFiles.get(fileHash);
+    const localFile = await soqaroDatabase.localAudioFiles.get(fileHash);
     const isSavedLocally =
       localFile && (localFile.storageKind ?? "saved") === "saved";
     if (isSavedLocally || record?.retention === "library") {
@@ -175,8 +175,8 @@ async function cleanupDeletedLocalRepositoryData(
     }
     await repository.removePath(record.source.relativePath);
     await repository.deleteTrack(fileHash);
-    await musicRoomDatabase.localAudioFiles.delete(fileHash);
-    await musicRoomDatabase.localAudioCacheFiles.delete(fileHash);
+    await soqaroDatabase.localAudioFiles.delete(fileHash);
+    await soqaroDatabase.localAudioCacheFiles.delete(fileHash);
   }
 
   for (const record of manifests.values()) {
@@ -206,25 +206,25 @@ export async function cleanupOrphanedLocalAudioStorage(input: {
   const preservedTrackIds = new Set(input.preserveTrackIds.filter(Boolean));
   const preservedAssetIds = new Set(input.preserveAssetIds?.filter(Boolean) ?? []);
 
-  return musicRoomDatabase.transaction(
+  return soqaroDatabase.transaction(
     "rw",
     [
-      musicRoomDatabase.cachedTrackLibrary,
-      musicRoomDatabase.cachedTrackLibraryMetadata,
-      musicRoomDatabase.trackAssetLinks,
-      musicRoomDatabase.assetManifests,
-      musicRoomDatabase.assetUnits,
-      musicRoomDatabase.transcodeJobs
+      soqaroDatabase.cachedTrackLibrary,
+      soqaroDatabase.cachedTrackLibraryMetadata,
+      soqaroDatabase.trackAssetLinks,
+      soqaroDatabase.assetManifests,
+      soqaroDatabase.assetUnits,
+      soqaroDatabase.transcodeJobs
     ],
     async () => {
-      const summaries = await musicRoomDatabase.cachedTrackLibraryMetadata.toArray();
+      const summaries = await soqaroDatabase.cachedTrackLibraryMetadata.toArray();
       let deletedCacheCount = 0;
       const deletedCacheHashes = new Set<string>();
 
       for (const summary of summaries) {
         if (summary.sourceTrackIds.length === 0) {
-          await musicRoomDatabase.cachedTrackLibrary.delete(summary.fileHash);
-          await musicRoomDatabase.cachedTrackLibraryMetadata.delete(summary.fileHash);
+          await soqaroDatabase.cachedTrackLibrary.delete(summary.fileHash);
+          await soqaroDatabase.cachedTrackLibraryMetadata.delete(summary.fileHash);
           deletedCacheCount += 1;
           deletedCacheHashes.add(summary.fileHash);
           continue;
@@ -236,33 +236,33 @@ export async function cleanupOrphanedLocalAudioStorage(input: {
           continue;
         }
 
-        const record = await musicRoomDatabase.cachedTrackLibrary.get(summary.fileHash);
+        const record = await soqaroDatabase.cachedTrackLibrary.get(summary.fileHash);
         const nextReferences = removeCachedLibrarySourceReferences(summary, staleTrackIds);
         if (nextReferences.isUnreferenced) {
-          await musicRoomDatabase.cachedTrackLibrary.delete(summary.fileHash);
-          await musicRoomDatabase.cachedTrackLibraryMetadata.delete(summary.fileHash);
+          await soqaroDatabase.cachedTrackLibrary.delete(summary.fileHash);
+          await soqaroDatabase.cachedTrackLibraryMetadata.delete(summary.fileHash);
           deletedCacheCount += 1;
           deletedCacheHashes.add(summary.fileHash);
           continue;
         }
 
         if (record) {
-          await musicRoomDatabase.cachedTrackLibrary.put({ ...record, ...nextReferences });
+          await soqaroDatabase.cachedTrackLibrary.put({ ...record, ...nextReferences });
         }
-        await musicRoomDatabase.cachedTrackLibraryMetadata.put({
+        await soqaroDatabase.cachedTrackLibraryMetadata.put({
           ...summary,
           ...nextReferences
         });
       }
 
-      const links = await musicRoomDatabase.trackAssetLinks.toArray();
+      const links = await soqaroDatabase.trackAssetLinks.toArray();
       const staleLinks = links.filter((link) => !preservedTrackIds.has(link.trackId));
       const remainingLinks = links.filter((link) => preservedTrackIds.has(link.trackId));
       const remainingCachedHashes = new Set(
-        (await musicRoomDatabase.cachedTrackLibraryMetadata.toCollection().primaryKeys())
+        (await soqaroDatabase.cachedTrackLibraryMetadata.toCollection().primaryKeys())
           .filter((key): key is string => typeof key === "string")
       );
-      const manifests = await musicRoomDatabase.assetManifests.toArray();
+      const manifests = await soqaroDatabase.assetManifests.toArray();
       const referencedAssetIds = new Set([
         ...preservedAssetIds,
         ...remainingLinks.flatMap((link) => [link.originalAssetId, link.playbackAssetId]),
@@ -276,13 +276,13 @@ export async function cleanupOrphanedLocalAudioStorage(input: {
       const orphanedAssetIds = orphanedManifests.map((manifest) => manifest.assetId);
 
       if (staleLinks.length > 0) {
-        await musicRoomDatabase.trackAssetLinks.bulkDelete(
+        await soqaroDatabase.trackAssetLinks.bulkDelete(
           staleLinks.map((link) => link.trackId)
         );
       }
       if (orphanedAssetIds.length > 0) {
-        await musicRoomDatabase.assetUnits.where("assetId").anyOf(orphanedAssetIds).delete();
-        await musicRoomDatabase.assetManifests.bulkDelete(orphanedAssetIds);
+        await soqaroDatabase.assetUnits.where("assetId").anyOf(orphanedAssetIds).delete();
+        await soqaroDatabase.assetManifests.bulkDelete(orphanedAssetIds);
       }
 
       const remainingAssetSourceFileHashes = new Set(
@@ -300,7 +300,7 @@ export async function cleanupOrphanedLocalAudioStorage(input: {
           !remainingCachedHashes.has(fileHash) && !remainingAssetSourceFileHashes.has(fileHash)
       );
       if (sourceFileHashesToDelete.length > 0) {
-        await musicRoomDatabase.transcodeJobs.bulkDelete(sourceFileHashesToDelete);
+        await soqaroDatabase.transcodeJobs.bulkDelete(sourceFileHashesToDelete);
       }
 
       return {

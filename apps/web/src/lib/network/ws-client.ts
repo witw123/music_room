@@ -1,4 +1,4 @@
-import type { ClientToServerEvents, ServerToClientEvents } from "@music-room/shared";
+﻿import type { ClientToServerEvents, ServerToClientEvents } from "@soqaro/shared";
 import { io, type Socket } from "socket.io-client";
 
 const localHostnames = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);

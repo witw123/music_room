@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
@@ -9,12 +9,12 @@ import type {
   ProviderTrackCandidate,
   QqMusicAccountStatus,
   QqMusicTrackCandidate
-} from "@music-room/shared";
-import { formatDuration } from "@/lib/domain/music-room-ui";
+} from "@soqaro/shared";
+import { formatDuration } from "@/lib/domain/soqaro-ui";
 import {
-  MusicRoomApiError,
-  musicRoomApi
-} from "@/lib/network/music-room-api";
+  SoqaroApiError,
+  soqaroApi
+} from "@/lib/network/soqaro-api";
 import { Button } from "@/components/ui/button";
 import { SearchBar } from "@/components/ui/search-bar";
 
@@ -80,11 +80,11 @@ const neteaseAdapter: ProviderSourceAdapter<NeteaseTrackCandidate, NeteaseAccoun
   },
   stopQrPollingCodes: ["UNAUTHORIZED", "NETEASE_DISABLED", "NETEASE_AUTH_EXPIRED", "NETEASE_QR_EXPIRED"],
   api: {
-    getAccount: () => musicRoomApi.getNeteaseAccount(),
-    getQrStatus: (attemptId) => musicRoomApi.getNeteaseQrStatus(attemptId),
-    startQrLogin: () => musicRoomApi.startNeteaseQrLogin(),
-    searchTracks: (query) => musicRoomApi.searchNeteaseTracks(query),
-    disconnect: () => musicRoomApi.disconnectNeteaseAccount()
+    getAccount: () => soqaroApi.getNeteaseAccount(),
+    getQrStatus: (attemptId) => soqaroApi.getNeteaseQrStatus(attemptId),
+    startQrLogin: () => soqaroApi.startNeteaseQrLogin(),
+    searchTracks: (query) => soqaroApi.searchNeteaseTracks(query),
+    disconnect: () => soqaroApi.disconnectNeteaseAccount()
   }
 };
 
@@ -112,11 +112,11 @@ const qqmusicAdapter: ProviderSourceAdapter<QqMusicTrackCandidate, QqMusicAccoun
   },
   stopQrPollingCodes: ["UNAUTHORIZED", "QQMUSIC_DISABLED", "QQMUSIC_AUTH_EXPIRED", "QQMUSIC_QR_EXPIRED"],
   api: {
-    getAccount: () => musicRoomApi.getQqMusicAccount(),
-    getQrStatus: (attemptId) => musicRoomApi.getQqMusicQrStatus(attemptId),
-    startQrLogin: () => musicRoomApi.startQqMusicQrLogin(),
-    searchTracks: (query) => musicRoomApi.searchQqMusicTracks(query),
-    disconnect: () => musicRoomApi.disconnectQqMusicAccount()
+    getAccount: () => soqaroApi.getQqMusicAccount(),
+    getQrStatus: (attemptId) => soqaroApi.getQqMusicQrStatus(attemptId),
+    startQrLogin: () => soqaroApi.startQqMusicQrLogin(),
+    searchTracks: (query) => soqaroApi.searchQqMusicTracks(query),
+    disconnect: () => soqaroApi.disconnectQqMusicAccount()
   }
 };
 
@@ -419,7 +419,7 @@ function ProviderSourcePanelBase<TrackT extends ProviderTrackCandidate, AccountT
 }
 
 function toProviderErrorMessage(adapter: { errorMessages: Record<string, string>; label: string }, error: unknown) {
-  if (error instanceof MusicRoomApiError) {
+  if (error instanceof SoqaroApiError) {
     const mapped = error.code ? adapter.errorMessages[error.code] : undefined;
     if (mapped) return mapped;
     if (error.code === "RATE_LIMITED") return "二维码请求过于频繁，请一分钟后再试。";
@@ -429,7 +429,7 @@ function toProviderErrorMessage(adapter: { errorMessages: Record<string, string>
 }
 
 function shouldStopQrPolling(adapter: { stopQrPollingCodes: string[] }, error: unknown) {
-  if (!(error instanceof MusicRoomApiError)) {
+  if (!(error instanceof SoqaroApiError)) {
     return false;
   }
 

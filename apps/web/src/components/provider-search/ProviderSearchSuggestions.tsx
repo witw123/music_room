@@ -1,6 +1,6 @@
-"use client";
+﻿"use client";
 
-import type { ProviderSearchSuggestion } from "@music-room/shared";
+import type { ProviderSearchSuggestion } from "@soqaro/shared";
 
 export type SearchSuggestionItem = {
   label: string;

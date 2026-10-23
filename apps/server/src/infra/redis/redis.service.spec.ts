@@ -1,4 +1,4 @@
-import { EventEmitter } from "node:events";
+﻿import { EventEmitter } from "node:events";
 
 const mockRedisInstances: Array<{
   status: string;
@@ -68,7 +68,7 @@ describe("RedisService", () => {
 
     await expect(
       service.setJsonIfRevisionMatches(
-        "music-room:room:room_1",
+        "soqaro:room:room_1",
         { room: { roomRevision: 2 } },
         1,
         60
@@ -78,7 +78,7 @@ describe("RedisService", () => {
     expect(publisher.eval).toHaveBeenCalledWith(
       expect.stringContaining("currentRevision"),
       1,
-      "music-room:room:room_1",
+      "soqaro:room:room_1",
       JSON.stringify({ room: { roomRevision: 2 } }),
       "1",
       "60"
@@ -111,7 +111,7 @@ describe("RedisService", () => {
 
     await expect(
       service.renewJsonLeaseIfValue(
-        "music-room:realtime-session:room_1:user_1",
+        "soqaro:realtime-session:room_1:user_1",
         { socketId: "socket_1", fenceToken: "fence_1" },
         90_000
       )
@@ -120,7 +120,7 @@ describe("RedisService", () => {
     expect(publisher.eval).toHaveBeenCalledWith(
       expect.stringContaining('redis.call("SET", KEYS[1], ARGV[1], "PX", ARGV[2])'),
       1,
-      "music-room:realtime-session:room_1:user_1",
+      "soqaro:realtime-session:room_1:user_1",
       JSON.stringify({ socketId: "socket_1", fenceToken: "fence_1" }),
       "90000"
     );
@@ -131,11 +131,11 @@ describe("RedisService", () => {
     const publisher = mockRedisInstances[0];
     publisher.status = "ready";
 
-    const token = await service.acquireLock("music-room:lock:room_1", 5_000);
+    const token = await service.acquireLock("soqaro:lock:room_1", 5_000);
 
     expect(token).toEqual(expect.any(String));
     expect(publisher.set).toHaveBeenCalledWith(
-      "music-room:lock:room_1",
+      "soqaro:lock:room_1",
       token,
       "PX",
       "5000",
@@ -149,12 +149,12 @@ describe("RedisService", () => {
     publisher.status = "ready";
     publisher.eval.mockResolvedValueOnce(0).mockResolvedValueOnce(1);
 
-    await expect(service.releaseLock("music-room:lock:room_1", "old-token")).resolves.toBe(false);
-    await expect(service.releaseLock("music-room:lock:room_1", "current-token")).resolves.toBe(true);
+    await expect(service.releaseLock("soqaro:lock:room_1", "old-token")).resolves.toBe(false);
+    await expect(service.releaseLock("soqaro:lock:room_1", "current-token")).resolves.toBe(true);
     expect(publisher.eval).toHaveBeenLastCalledWith(
       expect.stringContaining('redis.call("GET", KEYS[1]) == ARGV[1]'),
       1,
-      "music-room:lock:room_1",
+      "soqaro:lock:room_1",
       "current-token"
     );
   });

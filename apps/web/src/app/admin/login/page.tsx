@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import Script from "next/script";
 import { adminApi } from "@/lib/network/admin-api";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 
 export default function AdminLoginPage() {
   const [username, setUsername] = useState("");
@@ -16,7 +16,7 @@ export default function AdminLoginPage() {
   const [turnstileResetKey, setTurnstileResetKey] = useState(0);
 
   useEffect(() => {
-    void musicRoomApi.getAuthConfig().then((config) => {
+    void soqaroApi.getAuthConfig().then((config) => {
       setTurnstileEnabled(config.enabled && !!config.siteKey);
       setTurnstileSiteKey(config.siteKey);
     }).catch(() => undefined);

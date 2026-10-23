@@ -1,16 +1,16 @@
-import type { Dispatch, MutableRefObject, SetStateAction } from "react";
+﻿import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import type {
   GuestSession,
   ProviderTrackCandidate,
   RoomSnapshot,
   TrackMeta,
   TrackSourceType
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import {
   getCachedLibraryTrackByProviderTrack,
   linkTrackAssets
 } from "@/features/library/indexeddb";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 import { buildTrackMeta, type UploadedTrack } from "@/features/library/audio-utils";
 import {
   getReusableAudioAssets,
@@ -112,10 +112,10 @@ export async function prefetchProviderAudio(
   };
 
   const source = sourceType === "netease"
-    ? await musicRoomApi.downloadNeteaseTrack(candidate.providerTrackId, "exhigh", undefined, handleDownloadProgress)
+    ? await soqaroApi.downloadNeteaseTrack(candidate.providerTrackId, "exhigh", undefined, handleDownloadProgress)
     : sourceType === "bilibili"
-      ? await musicRoomApi.downloadBilibiliTrack(candidate.providerTrackId, undefined, handleDownloadProgress)
-      : await musicRoomApi.downloadQqMusicTrack(candidate.providerTrackId, "exhigh", undefined, handleDownloadProgress);
+      ? await soqaroApi.downloadBilibiliTrack(candidate.providerTrackId, undefined, handleDownloadProgress)
+      : await soqaroApi.downloadQqMusicTrack(candidate.providerTrackId, "exhigh", undefined, handleDownloadProgress);
   const extension = extensionForImportedMimeType(source.contentType);
   onProgress?.({ loaded: source.blob.size, total: source.blob.size, percent: 100 });
   return {
@@ -218,7 +218,7 @@ export async function importProviderTracks(input: {
     });
 
     try {
-      const batchRegistered = await musicRoomApi.registerTracks(roomSnapshot.room.id, {
+      const batchRegistered = await soqaroApi.registerTracks(roomSnapshot.room.id, {
         tracks: batch.map((item) => buildRegisterTrackPayload(item.draft))
       });
       batchRegistered.forEach((track, idx) => {
@@ -228,7 +228,7 @@ export async function importProviderTracks(input: {
     } catch {
       for (const item of batch) {
         try {
-          const [singleRegistered] = await musicRoomApi.registerTracks(roomSnapshot.room.id, {
+          const [singleRegistered] = await soqaroApi.registerTracks(roomSnapshot.room.id, {
             tracks: [buildRegisterTrackPayload(item.draft)]
           });
           if (singleRegistered) {
@@ -456,7 +456,7 @@ export async function importProviderTracks(input: {
         const sourceRef = buildProviderSourceRef(sourceType, candidate.providerTrackId);
         const lyricsPayloadPromise = requestProviderLyricsPayload(sourceType, candidate.providerTrackId);
         const artworkPromise = sourceType === "qqmusic" && candidate.artworkUrl && /^https?:\/\//i.test(candidate.artworkUrl)
-          ? musicRoomApi.downloadQqMusicArtwork(candidate.artworkUrl).then((response) => response.blob).catch(() => undefined)
+          ? soqaroApi.downloadQqMusicArtwork(candidate.artworkUrl).then((response) => response.blob).catch(() => undefined)
           : Promise.resolve(undefined);
         const createdObjectUrl = URL.createObjectURL(prefetched.file);
         objectUrl = createdObjectUrl;

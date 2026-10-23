@@ -1,6 +1,6 @@
-"use client";
+﻿"use client";
 
-import type { Playlist } from "@music-room/shared";
+import type { Playlist } from "@soqaro/shared";
 import { AnchoredDialog, type AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
 import {
   Dialog,

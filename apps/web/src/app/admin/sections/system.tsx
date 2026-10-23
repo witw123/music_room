@@ -1,12 +1,12 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type { AdminOverview } from "@music-room/shared";
+import type { AdminOverview } from "@soqaro/shared";
 import { adminApi } from "@/lib/network/admin-api";
 import { HealthRow, HealthText, Icon, PanelHeader, SystemHealth, translateRedisMode } from "../ui";
 
 export function System({ overview }: { overview: AdminOverview | null }) {
-  const [providers, setProviders] = useState<import("@music-room/shared").AdminProviderHealth[]>([]);
+  const [providers, setProviders] = useState<import("@soqaro/shared").AdminProviderHealth[]>([]);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState("");
 

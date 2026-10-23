@@ -1,9 +1,9 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+﻿import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { createHash, randomBytes, randomUUID, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
-import type { AuthSession, UserProfile } from "@music-room/shared";
+import type { AuthSession, UserProfile } from "@soqaro/shared";
 import { PrismaService } from "../../infra/prisma/prisma.service";
 import { RedisService } from "../../infra/redis/redis.service";
 
@@ -42,7 +42,7 @@ type FallbackAuthStore = {
 
 const sessionTtlMs = 1000 * 60 * 60 * 24 * 14;
 const sessionCleanupIntervalMs = 60 * 60 * 1000;
-const userInvalidatedChannel = "music-room:auth:user-invalidated";
+const userInvalidatedChannel = "soqaro:auth:user-invalidated";
 const MAX_CACHED_USERS = 20_000;
 const MAX_CACHED_SESSIONS = 50_000;
 // libuv 线程池执行的异步 scrypt;同步版会在登录突发时阻塞事件循环并卡住

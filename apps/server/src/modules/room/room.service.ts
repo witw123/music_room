@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
+﻿import { BadRequestException, Injectable } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import type {
   PlaybackSnapshot,
@@ -8,7 +8,7 @@ import type {
   RoomSnapshot,
   RoomSyncResponse
   ,RoomRequest
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import { PrismaService } from "../../infra/prisma/prisma.service";
 import { RedisService } from "../../infra/redis/redis.service";
 import { AuthService } from "../auth/auth.service";
@@ -479,7 +479,7 @@ export class RoomService {
       actorSessionId?: string;
       actorPeerId?: string;
       expectedVersion?: number;
-      playbackMode?: import("@music-room/shared").PlaybackMode;
+      playbackMode?: import("@soqaro/shared").PlaybackMode;
     }
   ): Promise<PlaybackSnapshot & { roomRevision?: number }> {
     if (!this.isRealtimeAvailable()) {
@@ -519,7 +519,7 @@ export class RoomService {
   async advanceEndedPlaybacks(): Promise<
     Array<{
       roomId: string;
-      playback: import("@music-room/shared").PlaybackSnapshot;
+      playback: import("@soqaro/shared").PlaybackSnapshot;
       roomRevision: number;
     }>
   > {
@@ -534,7 +534,7 @@ export class RoomService {
     const records = await this.roomRecordRepository.listPlayingRoomRecords();
     const advanced: Array<{
       roomId: string;
-      playback: import("@music-room/shared").PlaybackSnapshot;
+      playback: import("@soqaro/shared").PlaybackSnapshot;
       roomRevision: number;
     }> = [];
 
@@ -571,13 +571,13 @@ export class RoomService {
 
   createRoom(
     hostSessionId: string,
-    visibility: import("@music-room/shared").Room["visibility"],
+    visibility: import("@soqaro/shared").Room["visibility"],
     metadata: {
       name?: string;
       description?: string | null;
       password?: string;
-      newMemberPermissions?: import("@music-room/shared").RoomMemberPermissions;
-      roomType: import("@music-room/shared").RoomType;
+      newMemberPermissions?: import("@soqaro/shared").RoomMemberPermissions;
+      roomType: import("@soqaro/shared").RoomType;
     }
   ) {
     return this.lifecycleService.createRoom(hostSessionId, visibility, metadata);
@@ -591,11 +591,11 @@ export class RoomService {
     roomId: string,
     sessionId: string,
     input: {
-      visibility: import("@music-room/shared").Room["visibility"];
+      visibility: import("@soqaro/shared").Room["visibility"];
       name: string;
       description?: string | null;
       password?: string;
-      newMemberPermissions?: import("@music-room/shared").RoomMemberPermissions;
+      newMemberPermissions?: import("@soqaro/shared").RoomMemberPermissions;
     }
   ) {
     return this.lifecycleService.updateRoom(roomId, sessionId, input);
@@ -605,7 +605,7 @@ export class RoomService {
     roomId: string,
     actorSessionId: string,
     memberId: string,
-    permissions: import("@music-room/shared").RoomMemberPermissions
+    permissions: import("@soqaro/shared").RoomMemberPermissions
   ) {
     return this.lifecycleService.updateMemberPermissions(roomId, actorSessionId, memberId, permissions);
   }
@@ -651,7 +651,7 @@ export class RoomService {
   registerTrack(
     roomId: string,
     sessionId: string,
-    input: Omit<import("@music-room/shared").TrackMeta, "id"> & { id?: string }
+    input: Omit<import("@soqaro/shared").TrackMeta, "id"> & { id?: string }
   ) {
     return this.contentService.registerTrack(roomId, sessionId, input);
   }
@@ -659,7 +659,7 @@ export class RoomService {
   registerTracks(
     roomId: string,
     sessionId: string,
-    inputs: Array<Omit<import("@music-room/shared").TrackMeta, "id"> & { id?: string }>
+    inputs: Array<Omit<import("@soqaro/shared").TrackMeta, "id"> & { id?: string }>
   ) {
     return this.contentService.registerTracks(roomId, sessionId, inputs);
   }
@@ -667,7 +667,7 @@ export class RoomService {
   prepareTrackAsset(
     roomId: string,
     sessionId: string,
-    input: import("@music-room/shared").PrepareTrackAssetRequest
+    input: import("@soqaro/shared").PrepareTrackAssetRequest
   ) {
     return this.contentService.prepareTrackAsset(roomId, sessionId, input);
   }
@@ -675,7 +675,7 @@ export class RoomService {
   reportTrackAssetUnavailable(
     roomId: string,
     sessionId: string,
-    input: import("@music-room/shared").ReportTrackAssetUnavailableRequest
+    input: import("@soqaro/shared").ReportTrackAssetUnavailableRequest
   ) {
     return this.contentService.reportTrackAssetUnavailable(roomId, sessionId, input);
   }

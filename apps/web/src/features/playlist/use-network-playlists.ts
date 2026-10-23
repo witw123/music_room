@@ -1,9 +1,9 @@
-"use client";
+﻿"use client";
 
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { Playlist } from "@music-room/shared";
-import { musicRoomApi, playlistsChangedEventName } from "@/lib/network/music-room-api";
+import type { Playlist } from "@soqaro/shared";
+import { soqaroApi, playlistsChangedEventName } from "@/lib/network/soqaro-api";
 import { isLocalPlaylistMirror } from "./local-playlist-database";
 
 export function useNetworkPlaylists(userId: string | null | undefined, enabled = true) {
@@ -13,7 +13,7 @@ export function useNetworkPlaylists(userId: string | null | undefined, enabled =
   const query = useQuery<Playlist[]>({
     queryKey: ["network-playlists", userKey],
     queryFn: async ({ signal }) => {
-      const all = await musicRoomApi.listMyPlaylists(signal);
+      const all = await soqaroApi.listMyPlaylists(signal);
       return all.filter((playlist) => !isLocalPlaylistMirror(playlist));
     },
     enabled: Boolean(userId) && enabled,

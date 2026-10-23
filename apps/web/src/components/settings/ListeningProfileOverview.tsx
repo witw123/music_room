@@ -1,8 +1,8 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
-import type { AuthSession, ProviderTrackCandidate } from "@music-room/shared";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import type { AuthSession, ProviderTrackCandidate } from "@soqaro/shared";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 import { usePersonalizationProfile } from "@/features/personalization/use-personalization-profile";
 import { useLocalPlayer } from "@/features/playback/local-player-context";
 import { useFavoriteTracks } from "@/features/favorites/use-favorite-tracks";
@@ -58,7 +58,7 @@ export function ListeningProfileOverview({
     const key = `${candidate.provider}:${candidate.providerTrackId}`;
     setActiveRadioTrackKey(key);
     try {
-      const radioTracks = await musicRoomApi.getTrackRadio({ seedTrack: candidate, limit: 15 });
+      const radioTracks = await soqaroApi.getTrackRadio({ seedTrack: candidate, limit: 15 });
       const prepared = await prepareTrackForImmediatePlayback(candidate);
       await player.playTrack(prepared.record);
       const queuedTracks = radioTracks.slice(0, 10);

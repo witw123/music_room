@@ -1,6 +1,6 @@
-import { Injectable, Logger } from "@nestjs/common";
+﻿import { Injectable, Logger } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
-import type { Room } from "@music-room/shared";
+import type { Room } from "@soqaro/shared";
 import { PrismaService } from "../../../infra/prisma/prisma.service";
 
 const presenceStaleAfterMs = 45_000;

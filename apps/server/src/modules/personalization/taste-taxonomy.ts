@@ -1,4 +1,4 @@
-import type { PersonalizationTasteGroup, PersonalizationTasteGroupId, PersonalizationTasteTagSource, TasteEntityKind } from "@music-room/shared";
+﻿import type { PersonalizationTasteGroup, PersonalizationTasteGroupId, PersonalizationTasteTagSource, TasteEntityKind } from "@soqaro/shared";
 
 export type TasteEvidence = {
   dimension: Extract<TasteEntityKind, "genre" | "language" | "region" | "scene" | "era">;

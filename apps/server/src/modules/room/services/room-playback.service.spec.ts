@@ -1,4 +1,4 @@
-import type { PlaybackSnapshot, TrackMeta } from "@music-room/shared";
+﻿import type { PlaybackSnapshot, TrackMeta } from "@soqaro/shared";
 import type { RoomRecord } from "../room.types";
 import { RoomPlaybackService } from "./room-playback.service";
 

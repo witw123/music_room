@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const headers: Record<string, string> = {
     Accept: "application/vnd.github+json",
-    "User-Agent": "MusicRoom-App"
+    "User-Agent": "Soqaro-App"
   };
 
   if (process.env.GITHUB_TOKEN) {
@@ -13,7 +13,7 @@ export async function GET() {
   }
 
   try {
-    const response = await fetch("https://api.github.com/repos/witw123/music_room/releases/latest", {
+    const response = await fetch("https://api.github.com/repos/witw123/soqaro/releases/latest", {
       headers,
       next: { revalidate: 600 }
     });
@@ -24,8 +24,8 @@ export async function GET() {
     }
 
     // Fallback if GitHub API rate limit is exceeded or API fails:
-    // Query github.com/witw123/music_room/releases/latest which 302-redirects to the tag URL without API rate limits.
-    const redirectRes = await fetch("https://github.com/witw123/music_room/releases/latest", {
+    // Query github.com/witw123/soqaro/releases/latest which 302-redirects to the tag URL without API rate limits.
+    const redirectRes = await fetch("https://github.com/witw123/soqaro/releases/latest", {
       method: "HEAD",
       redirect: "manual"
     });
@@ -46,23 +46,23 @@ export async function GET() {
           body: "通过 GitHub Releases 发布最新版本。",
           assets: [
             {
-              name: `Music.Room_${version}_x64-setup.exe`,
-              browser_download_url: `https://github.com/witw123/music_room/releases/download/${tagName}/Music.Room_${version}_x64-setup.exe`,
+              name: `Soqaro_${version}_x64-setup.exe`,
+              browser_download_url: `https://github.com/witw123/soqaro/releases/download/${tagName}/Soqaro_${version}_x64-setup.exe`,
               size: 0
             },
             {
-              name: `Music.Room_${version}_universal.dmg`,
-              browser_download_url: `https://github.com/witw123/music_room/releases/download/${tagName}/Music.Room_${version}_universal.dmg`,
+              name: `Soqaro_${version}_universal.dmg`,
+              browser_download_url: `https://github.com/witw123/soqaro/releases/download/${tagName}/Soqaro_${version}_universal.dmg`,
               size: 0
             },
             {
-              name: `Music.Room_${version}_amd64.AppImage`,
-              browser_download_url: `https://github.com/witw123/music_room/releases/download/${tagName}/Music.Room_${version}_amd64.AppImage`,
+              name: `Soqaro_${version}_amd64.AppImage`,
+              browser_download_url: `https://github.com/witw123/soqaro/releases/download/${tagName}/Soqaro_${version}_amd64.AppImage`,
               size: 0
             },
             {
-              name: `MusicRoom-Android-${tagName}.apk`,
-              browser_download_url: `https://github.com/witw123/music_room/releases/download/${tagName}/MusicRoom-Android-${tagName}.apk`,
+              name: `Soqaro-Android-${tagName}.apk`,
+              browser_download_url: `https://github.com/witw123/soqaro/releases/download/${tagName}/Soqaro-Android-${tagName}.apk`,
               size: 0
             }
           ]

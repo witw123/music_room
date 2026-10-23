@@ -1,5 +1,5 @@
-import { Injectable } from "@nestjs/common";
-import type { PlaybackSnapshot, Playlist, RoomTrackAssetReadyPayload, RoomTrackAssetUnavailablePayload, RoomTrackDeletedPayload } from "@music-room/shared";
+﻿import { Injectable } from "@nestjs/common";
+import type { PlaybackSnapshot, Playlist, RoomTrackAssetReadyPayload, RoomTrackAssetUnavailablePayload, RoomTrackDeletedPayload } from "@soqaro/shared";
 import { RoomService } from "../room.service";
 import { RoomRealtimeBroadcaster } from "../../realtime/room-realtime.broadcaster";
 

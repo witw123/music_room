@@ -1,4 +1,4 @@
-import { RoomPresenceOrchestratorService } from "./room-presence-orchestrator.service";
+﻿import { RoomPresenceOrchestratorService } from "./room-presence-orchestrator.service";
 
 function createService(redis: Record<string, unknown>) {
   return new RoomPresenceOrchestratorService(
@@ -23,8 +23,8 @@ describe("RoomPresenceOrchestratorService", () => {
 
     await expect(service.enqueuePresenceUpdate("room-1", "member-1", operation)).resolves.toBe("done");
 
-    expect(acquireLock).toHaveBeenCalledWith("music-room:lock:room:room-1", 30_000);
-    expect(releaseLock).toHaveBeenCalledWith("music-room:lock:room:room-1", "lock-token");
+    expect(acquireLock).toHaveBeenCalledWith("soqaro:lock:room:room-1", 30_000);
+    expect(releaseLock).toHaveBeenCalledWith("soqaro:lock:room:room-1", "lock-token");
     expect(operation).toHaveBeenCalledTimes(1);
   });
 

@@ -1,4 +1,4 @@
-type DataChannelLifecycleEntry = {
+﻿type DataChannelLifecycleEntry = {
   channel?: RTCDataChannel | null;
   dataChannelState: RTCDataChannelState | null;
   lastSignalProgressAtMs: number;
@@ -46,7 +46,7 @@ export class DataChannelManager {
     onMessage: (event: MessageEvent) => void | Promise<void>;
   }) {
     const { channel, entry, peerId } = input;
-    if (channel.label !== "music-room-control") {
+    if (channel.label !== "soqaro-control") {
       channel.close();
       return;
     }

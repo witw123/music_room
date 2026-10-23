@@ -1,4 +1,4 @@
-import type { TrackLoudness } from "@music-room/shared";
+﻿import type { TrackLoudness } from "@soqaro/shared";
 
 export const loudnessTargetLufs = -14 as const;
 export const loudnessVersion = 1 as const;

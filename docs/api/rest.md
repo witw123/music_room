@@ -1,7 +1,7 @@
 # REST API
 
 最后更新：`2026-09-13`
-当前版本：`0.3.2`
+当前版本：`1.0.0`
 
 ## 使用约定
 
@@ -52,7 +52,7 @@
 
 ### 网易云发现接口
 
-以下接口返回统一的歌单、专辑、分类或歌曲结构，均只要求 Music Room 应用登录，不要求绑定网易云账号：
+以下接口返回统一的歌单、专辑、分类或歌曲结构，均只要求 Soqaro 应用登录，不要求绑定网易云账号：
 
 - `GET /v1/providers/netease/discover/playlists/recommended?limit=30`：个性化推荐歌单（公共推荐接口）
 - `GET /v1/providers/netease/discover/playlists?category=全部&order=hot&limit=30&offset=0`：分类歌单，`order` 为 `hot|new`
@@ -91,7 +91,7 @@ QQ 音乐默认关闭。启用后，用户在服务端绑定 QQ 音乐账号，C
 
 ### QQ 音乐发现接口
 
-以下接口只要求 Music Room 应用登录，不要求绑定 QQ 音乐账号：
+以下接口只要求 Soqaro 应用登录，不要求绑定 QQ 音乐账号：
 
 - `GET /v1/providers/qqmusic/discover/playlist-categories`：歌单分类及平台提供的排序选项
 - `GET /v1/providers/qqmusic/discover/playlists?categoryId=10000000&sortId=5&limit=30&offset=0`：分类歌单
@@ -259,7 +259,7 @@ QQ 发现数据同样有短时缓存和旧值容错。QQ 当前 SDK 未稳定暴
 ```json
 {
   "status": "ok",
-  "service": "music-room-server"
+  "service": "soqaro-server"
 }
 ```
 
@@ -276,7 +276,7 @@ QQ 发现数据同样有短时缓存和旧值容错。QQ 当前 SDK 未稳定暴
 ```json
 {
   "status": "ready",
-  "service": "music-room-server",
+  "service": "soqaro-server",
   "checks": {
     "prisma": "up",
     "redis": "up"

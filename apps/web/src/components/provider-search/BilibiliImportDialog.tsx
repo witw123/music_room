@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { BilibiliTrackCandidate } from "@music-room/shared";
+import type { BilibiliTrackCandidate } from "@soqaro/shared";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -10,7 +10,7 @@ import {
   DialogTitle
 } from "@/components/ui/dialog";
 import { useBackHandler } from "@/lib/desktop/use-back-handler";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 
 type BilibiliImportDialogProps = {
   open: boolean;
@@ -57,7 +57,7 @@ export function BilibiliImportDialog({
     setError(null);
 
     try {
-      const res = await musicRoomApi.importBilibiliFavorite({
+      const res = await soqaroApi.importBilibiliFavorite({
         url: trimmed,
         page: 1,
         pageSize: 50

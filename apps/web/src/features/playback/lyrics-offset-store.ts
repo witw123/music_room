@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 
-export const lyricsOffsetStorageKey = "music-room-lyrics-offsets-v1";
-export const lyricsOffsetChangeEvent = "music-room-lyrics-offset-change";
+export const lyricsOffsetStorageKey = "soqaro-lyrics-offsets-v1";
+export const lyricsOffsetChangeEvent = "soqaro-lyrics-offset-change";
 
 export const MAX_LYRICS_OFFSET_MS = 10000;
 export const MIN_LYRICS_OFFSET_MS = -10000;

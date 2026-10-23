@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
 import { useRef } from "react";
-import type { RoomSnapshot } from "@music-room/shared";
+import type { RoomSnapshot } from "@soqaro/shared";
 import type { RoomSocket } from "@/lib/network/ws-client";
 import type { P2PMesh } from "@/features/p2p";
 import type { useSessionIdentity } from "@/features/session/use-session-identity";

@@ -1,7 +1,7 @@
-import type {
+﻿import type {
   RemoteTrackSourceRef,
   TrackSourceType
-} from "@music-room/shared";
+} from "@soqaro/shared";
 
 export type ProviderTrackSourceInput = {
   sourceType?: TrackSourceType | null;

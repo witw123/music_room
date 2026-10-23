@@ -1,6 +1,6 @@
-import { Controller, Delete, Get, Header, Headers, HttpException, HttpStatus, Param, Post, Query, Req, Res, UnauthorizedException } from "@nestjs/common";
+﻿import { Controller, Delete, Get, Header, Headers, HttpException, HttpStatus, Param, Post, Query, Req, Res, UnauthorizedException } from "@nestjs/common";
 import type { Request, Response } from "express";
-import { createApiErrorResponse, errorCodes } from "@music-room/shared";
+import { createApiErrorResponse, errorCodes } from "@soqaro/shared";
 import { AuthService } from "../../auth/auth.service";
 import { AbuseProtectionService } from "../../../common/security/abuse-protection.service";
 import { parseRequestBody } from "../../../common/validation/zod-validation";

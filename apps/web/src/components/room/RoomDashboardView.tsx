@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { memo, useCallback, useEffect, useState, type KeyboardEvent } from "react";
 import dynamic from "next/dynamic";
@@ -16,7 +16,7 @@ import type {
   QqMusicTrackCandidate,
   TrackMeta,
   UpdateRoomRequest
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import { RoomControlHeader } from "./RoomControlHeader";
 import { RoomImportProgressBar } from "./RoomImportProgressBar";
 import { RoomStage } from "./RoomStage";

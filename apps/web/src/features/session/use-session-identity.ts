@@ -1,9 +1,9 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useSyncExternalStore, useState } from "react";
-import type { AuthSession } from "@music-room/shared";
-import { errorCodes } from "@music-room/shared";
-import { MusicRoomApiError, musicRoomApi } from "@/lib/network/music-room-api";
+import type { AuthSession } from "@soqaro/shared";
+import { errorCodes } from "@soqaro/shared";
+import { SoqaroApiError, soqaroApi } from "@/lib/network/soqaro-api";
 
 type SessionSnapshot = {
   activeSession: AuthSession | null;
@@ -59,14 +59,14 @@ function setSharedSession(session: AuthSession | null) {
  * valid) session instead of logging the user out.
  */
 function isUnauthorizedError(error: unknown) {
-  return error instanceof MusicRoomApiError && error.code === errorCodes.unauthorized;
+  return error instanceof SoqaroApiError && error.code === errorCodes.unauthorized;
 }
 
 function ensureSessionProbe() {
   if (sessionProbe || sessionSnapshot.hydrated) return;
 
   const generation = sessionGeneration;
-  sessionProbe = musicRoomApi.me()
+  sessionProbe = soqaroApi.me()
     .then((session) => {
       if (generation !== sessionGeneration) return;
       updateSessionSnapshot({
@@ -184,12 +184,12 @@ export function useSessionIdentity(options: {
 
   const refreshSession = useCallback(async () => {
     try {
-      const session = await musicRoomApi.me();
+      const session = await soqaroApi.me();
       setActiveSession(session);
       return session;
     } catch (error) {
       // A network failure or server hiccup must not sign the user out; only a
-      // real 401 (which also fires music-room-auth-expired) clears the session.
+      // real 401 (which also fires soqaro-auth-expired) clears the session.
       if (isUnauthorizedError(error)) {
         setActiveSession(null);
       }
@@ -207,9 +207,9 @@ export function useSessionIdentity(options: {
       setStatusMessage("登录已失效，请重新登录。");
     };
 
-    window.addEventListener("music-room-auth-expired", handleExpired);
+    window.addEventListener("soqaro-auth-expired", handleExpired);
     return () => {
-      window.removeEventListener("music-room-auth-expired", handleExpired);
+      window.removeEventListener("soqaro-auth-expired", handleExpired);
     };
   }, [clearIdentity]);
 

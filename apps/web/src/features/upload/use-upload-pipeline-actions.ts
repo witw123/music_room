@@ -1,4 +1,4 @@
-import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+﻿import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import type {
   BilibiliTrackCandidate,
   GuestSession,
@@ -8,7 +8,7 @@ import type {
   RoomSnapshot,
   TrackMeta,
   TrackSourceType
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import {
   deleteCachedLibraryTrack,
@@ -17,8 +17,8 @@ import {
   upsertCachedLibraryTrack
 } from "@/features/library/indexeddb";
 import {
-  musicRoomApi
-} from "@/lib/network/music-room-api";
+  soqaroApi
+} from "@/lib/network/soqaro-api";
 import { buildTrackMeta, type CachedLibraryTrack, type UploadedTrack } from "@/features/library/audio-utils";
 import {
   getReusableAudioAssets,
@@ -70,7 +70,7 @@ export function useUploadPipelineActions({
   const syncRoomSnapshot = useCallback(
     async (roomId: string) => {
       try {
-        const latestSnapshot = await musicRoomApi.getRoom(roomId);
+        const latestSnapshot = await soqaroApi.getRoom(roomId);
         dispatchRoomStateEvent({
           type: "recover-snapshot",
           snapshot: latestSnapshot
@@ -85,7 +85,7 @@ export function useUploadPipelineActions({
   const persistTrackIntoLibrary = useCallback(
     async (input: {
       track: Pick<
-        import("@music-room/shared").TrackMeta,
+        import("@soqaro/shared").TrackMeta,
         | "id"
         | "title"
         | "artist"
@@ -289,12 +289,12 @@ export function useUploadPipelineActions({
           },
           buildRegisterTrackPayload,
           registerTrack: (registerRoomId, payload) =>
-            musicRoomApi.registerTrack(
+            soqaroApi.registerTrack(
               registerRoomId,
-              payload as Parameters<typeof musicRoomApi.registerTrack>[1]
+              payload as Parameters<typeof soqaroApi.registerTrack>[1]
             ),
           deleteTrack: (registerRoomId, trackId) =>
-            musicRoomApi.deleteTrack(registerRoomId, trackId),
+            soqaroApi.deleteTrack(registerRoomId, trackId),
           deleteLocalTrackData: deleteLocalTrackDataForTracks,
           persistTrackIntoLibrary,
           onTrackReady: (trackId, upload, registeredTrack) => {
@@ -353,7 +353,7 @@ export function useUploadPipelineActions({
     (candidate: NeteaseTrackCandidate) => importProviderTracks({
       activeSession, candidates: [candidate], inFlightUploadHashesRef,
       origin: "netease-import", persistTrackIntoLibrary, roomSnapshot,
-      deleteTrack: (roomId, trackId) => musicRoomApi.deleteTrack(roomId, trackId),
+      deleteTrack: (roomId, trackId) => soqaroApi.deleteTrack(roomId, trackId),
       deleteLocalTrackData: deleteLocalTrackDataForTracks,
       setStatusMessage, setUploadedTracks, sourceType: "netease",
       syncRoomSnapshot, refreshCacheLibrary
@@ -374,7 +374,7 @@ export function useUploadPipelineActions({
     (candidate: QqMusicTrackCandidate) => importProviderTracks({
       activeSession, candidates: [candidate], inFlightUploadHashesRef,
       origin: "qqmusic-import", persistTrackIntoLibrary, roomSnapshot,
-      deleteTrack: (roomId, trackId) => musicRoomApi.deleteTrack(roomId, trackId),
+      deleteTrack: (roomId, trackId) => soqaroApi.deleteTrack(roomId, trackId),
       deleteLocalTrackData: deleteLocalTrackDataForTracks,
       setStatusMessage, setUploadedTracks, sourceType: "qqmusic",
       syncRoomSnapshot, refreshCacheLibrary
@@ -395,7 +395,7 @@ export function useUploadPipelineActions({
     (candidate: BilibiliTrackCandidate) => importProviderTracks({
       activeSession, candidates: [candidate], inFlightUploadHashesRef,
       origin: "bilibili-import", persistTrackIntoLibrary, roomSnapshot,
-      deleteTrack: (roomId, trackId) => musicRoomApi.deleteTrack(roomId, trackId),
+      deleteTrack: (roomId, trackId) => soqaroApi.deleteTrack(roomId, trackId),
       deleteLocalTrackData: deleteLocalTrackDataForTracks,
       setStatusMessage, setUploadedTracks, sourceType: "bilibili",
       syncRoomSnapshot, refreshCacheLibrary
@@ -422,21 +422,21 @@ export function useUploadPipelineActions({
     handleNeteaseTrackImports: (candidates: NeteaseTrackCandidate[]) => importProviderTracks({
       activeSession, candidates, inFlightUploadHashesRef, origin: "netease-import",
       persistTrackIntoLibrary, roomSnapshot, setStatusMessage, setUploadedTracks,
-      deleteTrack: (roomId, trackId) => musicRoomApi.deleteTrack(roomId, trackId),
+      deleteTrack: (roomId, trackId) => soqaroApi.deleteTrack(roomId, trackId),
       deleteLocalTrackData: deleteLocalTrackDataForTracks,
       sourceType: "netease", syncRoomSnapshot, refreshCacheLibrary
     }),
     handleQqMusicTrackImports: (candidates: QqMusicTrackCandidate[]) => importProviderTracks({
       activeSession, candidates, inFlightUploadHashesRef, origin: "qqmusic-import",
       persistTrackIntoLibrary, roomSnapshot, setStatusMessage, setUploadedTracks,
-      deleteTrack: (roomId, trackId) => musicRoomApi.deleteTrack(roomId, trackId),
+      deleteTrack: (roomId, trackId) => soqaroApi.deleteTrack(roomId, trackId),
       deleteLocalTrackData: deleteLocalTrackDataForTracks,
       sourceType: "qqmusic", syncRoomSnapshot, refreshCacheLibrary
     }),
     handleBilibiliTrackImports: (candidates: BilibiliTrackCandidate[]) => importProviderTracks({
       activeSession, candidates, inFlightUploadHashesRef, origin: "bilibili-import",
       persistTrackIntoLibrary, roomSnapshot, setStatusMessage, setUploadedTracks,
-      deleteTrack: (roomId, trackId) => musicRoomApi.deleteTrack(roomId, trackId),
+      deleteTrack: (roomId, trackId) => soqaroApi.deleteTrack(roomId, trackId),
       deleteLocalTrackData: deleteLocalTrackDataForTracks,
       sourceType: "bilibili", syncRoomSnapshot, refreshCacheLibrary
     })

@@ -1,6 +1,6 @@
 {
-  "name": "@music-room/config-typescript",
-  "version": "0.3.6",
+  "name": "@soqaro/config-typescript",
+  "version": "1.0.0",
   "private": true,
   "exports": {
     "./base.json": "./base.json",

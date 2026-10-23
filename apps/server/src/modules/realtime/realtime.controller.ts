@@ -1,11 +1,11 @@
-import {
+﻿import {
   Controller,
   Get,
   Headers,
   InternalServerErrorException,
   UnauthorizedException
 } from "@nestjs/common";
-import { createApiErrorResponse, errorCodes } from "@music-room/shared";
+import { createApiErrorResponse, errorCodes } from "@soqaro/shared";
 import { MetricsService } from "../../common/metrics/metrics.service";
 import { AuthService } from "../auth/auth.service";
 import { RealtimeService } from "./realtime.service";

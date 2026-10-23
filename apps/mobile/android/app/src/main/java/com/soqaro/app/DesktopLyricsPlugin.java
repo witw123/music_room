@@ -1,4 +1,4 @@
-package com.musicroom.app;
+package com.soqaro.app;
 
 import android.annotation.SuppressLint;
 import android.content.Context;

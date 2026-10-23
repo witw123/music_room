@@ -1,8 +1,8 @@
-import { ConflictException, HttpException, HttpStatus, Injectable, NotFoundException, UnauthorizedException, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+﻿import { ConflictException, HttpException, HttpStatus, Injectable, NotFoundException, UnauthorizedException, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import type { Request } from "express";
-import { adminLoginRequestSchema, adminReasonSchema, adminUserStatusSchema, createAnnouncementRequestSchema, updateAnnouncementRequestSchema } from "@music-room/shared";
-import type { RoomMember } from "@music-room/shared";
+import { adminLoginRequestSchema, adminReasonSchema, adminUserStatusSchema, createAnnouncementRequestSchema, updateAnnouncementRequestSchema } from "@soqaro/shared";
+import type { RoomMember } from "@soqaro/shared";
 import { PrismaService } from "../../infra/prisma/prisma.service";
 import { RedisService } from "../../infra/redis/redis.service";
 import { AuthService } from "../auth/auth.service";
@@ -14,8 +14,8 @@ import { PlaylistService } from "../playlist/playlist.service";
 import { RoomRealtimePublisher } from "../room/services/room-realtime.publisher";
 import { getCorsOrigins, getRequestOrigin, isAllowedOrigin } from "../../common/cors/get-cors-origins";
 
-export const adminSessionCookie = "music_room_admin_session";
-export const adminCsrfCookie = "music_room_admin_csrf";
+export const adminSessionCookie = "soqaro_admin_session";
+export const adminCsrfCookie = "soqaro_admin_csrf";
 const adminAbsoluteTtlMs = 8 * 60 * 60 * 1000;
 const adminIdleTtlMs = 30 * 60 * 1000;
 
@@ -68,8 +68,8 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   private async writeInstanceHeartbeat() {
     if (!this.redis.isAvailable()) return;
     const instanceId = process.env.INSTANCE_ID?.trim() || process.env.HOSTNAME || `instance-${process.pid}`;
-    await this.redis.setJson(`music-room:admin:instance:${instanceId}`, { instanceId, version: process.env.RELEASE_TAG || "dev", startedAt: process.uptime() }, 30).catch(() => undefined);
-    await this.redis.addSortedSetScore("music-room:admin:instances", Date.now(), instanceId).catch(() => undefined);
+    await this.redis.setJson(`soqaro:admin:instance:${instanceId}`, { instanceId, version: process.env.RELEASE_TAG || "dev", startedAt: process.uptime() }, 30).catch(() => undefined);
+    await this.redis.addSortedSetScore("soqaro:admin:instances", Date.now(), instanceId).catch(() => undefined);
   }
 
   private async retryPendingTombstones() {
@@ -133,8 +133,8 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     const normalized = username.trim().toLowerCase();
     const windowMs = 15 * 60 * 1000;
     const [ipCount, userCount] = await Promise.all([
-      this.redis.incrementWithTtlMs(`music-room:admin:login:ip:${createHash("sha256").update(ip).digest("hex")}`, windowMs),
-      this.redis.incrementWithTtlMs(`music-room:admin:login:user:${createHash("sha256").update(normalized).digest("hex")}`, windowMs)
+      this.redis.incrementWithTtlMs(`soqaro:admin:login:ip:${createHash("sha256").update(ip).digest("hex")}`, windowMs),
+      this.redis.incrementWithTtlMs(`soqaro:admin:login:user:${createHash("sha256").update(normalized).digest("hex")}`, windowMs)
     ]);
     if (ipCount > 5 || userCount > 5) throw new HttpException("登录尝试过于频繁，请稍后再试。", HttpStatus.TOO_MANY_REQUESTS);
   }
@@ -173,7 +173,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     const playbackActive = summaries.filter((room) => room.playbackStatus === "playing").length;
     let instances = 1;
     if (this.redis.isAvailable()) {
-      const active = await this.redis.getSortedSetMembersByScore("music-room:admin:instances", Date.now() - 30_000, "+inf").catch(() => []);
+      const active = await this.redis.getSortedSetMembersByScore("soqaro:admin:instances", Date.now() - 30_000, "+inf").catch(() => []);
       instances = Math.max(1, active.length);
     }
     const healthy = summaries.filter((room) => room.health === "healthy").length;
@@ -495,7 +495,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
 
   // ── Provider Health Diagnostics ─────────────────────────────────────────────
 
-  async checkProvidersHealth(): Promise<{ data: import("@music-room/shared").AdminProviderHealth[] }> {
+  async checkProvidersHealth(): Promise<{ data: import("@soqaro/shared").AdminProviderHealth[] }> {
     const now = new Date().toISOString();
 
     const probe = async (
@@ -504,7 +504,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       url: string,
       hasCredentials: boolean,
       headers: Record<string, string> = {}
-    ): Promise<import("@music-room/shared").AdminProviderHealth> => {
+    ): Promise<import("@soqaro/shared").AdminProviderHealth> => {
       const start = Date.now();
       try {
         const controller = new AbortController();
@@ -678,7 +678,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     if (peerIds.length < onlineMembers.length) return "degraded" as const;
     let rawReports: Array<string | null>;
     try {
-      rawReports = await this.redis.getStrings(peerIds.map((peerId) => "music-room:admin:telemetry:peer:" + roomId + ":" + peerId));
+      rawReports = await this.redis.getStrings(peerIds.map((peerId) => "soqaro:admin:telemetry:peer:" + roomId + ":" + peerId));
     } catch {
       return "unknown" as const;
     }
@@ -699,12 +699,12 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
 
   private async readReportedPeerIds(roomId: string) {
     if (!this.redis.isAvailable()) return new Set<string>();
-    const members = await this.redis.getSortedSetMembersByScore(`music-room:admin:telemetry:room-peers:${roomId}`, Date.now() - 45_000, "+inf").catch(() => []);
+    const members = await this.redis.getSortedSetMembersByScore(`soqaro:admin:telemetry:room-peers:${roomId}`, Date.now() - 45_000, "+inf").catch(() => []);
     return new Set(members);
   }
 
   private async publishUserInvalidated(userId: string) {
-    if (this.redis.isPubSubAvailable()) await this.redis.publish("music-room:auth:user-invalidated", { userId, at: new Date().toISOString() });
+    if (this.redis.isPubSubAvailable()) await this.redis.publish("soqaro:auth:user-invalidated", { userId, at: new Date().toISOString() });
   }
 
   private async writeAudit(actorUserId: string, action: string, targetType: string, targetId: string | null, reason: string | null, result: string, request: Request) {

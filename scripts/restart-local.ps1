@@ -56,7 +56,7 @@ function Invoke-Pnpm {
   }
 }
 
-function Stop-LocalMusicRoomProcesses {
+function Stop-LocalSoqaroProcesses {
   $listeners = Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
     Where-Object { $_.LocalPort -in 3000, 3001 }
 
@@ -122,15 +122,15 @@ if ([string]::IsNullOrWhiteSpace($plainPassword)) {
 }
 
 Import-LocalEnvFile -Path $envFile -ExcludedKeys @("DATABASE_URL")
-$env:DATABASE_URL = "postgresql://postgres:$([uri]::EscapeDataString($plainPassword))@127.0.0.1:5432/music_room"
+$env:DATABASE_URL = "postgresql://postgres:$([uri]::EscapeDataString($plainPassword))@127.0.0.1:5432/soqaro"
 
-Stop-LocalMusicRoomProcesses
+Stop-LocalSoqaroProcesses
 New-Item -ItemType Directory -Force -Path $logDirectory | Out-Null
 
 Push-Location $repoRoot
 try {
   if (-not $SkipBuild) {
-    Invoke-Pnpm -Arguments @("--filter", "@music-room/server", "build")
+    Invoke-Pnpm -Arguments @("--filter", "@soqaro/server", "build")
   }
 
   if ($SyncDatabase) {
@@ -176,7 +176,7 @@ Remove-Variable credential, plainPassword -ErrorAction SilentlyContinue
 Wait-ForHttp -Url "http://localhost:3001/health" -TimeoutSeconds 45
 Wait-ForHttp -Url "http://localhost:3000/auth" -TimeoutSeconds 60
 
-Write-Host "Music Room is ready."
+Write-Host "Soqaro is ready."
 Write-Host "Web: http://localhost:3000"
 Write-Host "API: http://localhost:3001/health"
 Write-Host "Server process: $($serverProcess.Id)"

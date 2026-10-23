@@ -1,4 +1,4 @@
-import type { RoomSnapshot } from "@music-room/shared";
+﻿import type { RoomSnapshot } from "@soqaro/shared";
 
 export type RoomSnapshotResyncReason =
   | "socket-connect"

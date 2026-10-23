@@ -220,7 +220,7 @@ export function LocalStorageManagementCard() {
         />
         <StorageSection
           dataTestId="local-storage-saved"
-          description="已保存到 Music Room 目录的本地歌曲"
+          description="已保存到 Soqaro 目录的本地歌曲"
           disabled={pending || !loaded || state?.permission !== "granted" || savedTrackCount === 0}
           label="本地歌曲"
           onClean={() => void cleanSaved()}

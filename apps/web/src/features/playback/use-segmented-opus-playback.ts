@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -6,7 +6,7 @@ import {
   playbackProfileId,
   type RoomSnapshot,
   type TrackMeta
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import {
   getAssetUnit,
   putAssetManifest

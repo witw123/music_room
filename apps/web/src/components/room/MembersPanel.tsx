@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { memo, useState } from "react";
-import { getRoomMemberPermissions, type PeerDiagnosticsSnapshot, type RoomMember, type RoomMemberPermissions } from "@music-room/shared";
+import { getRoomMemberPermissions, type PeerDiagnosticsSnapshot, type RoomMember, type RoomMemberPermissions } from "@soqaro/shared";
 import type { PlaybackAudioPath } from "@/features/playback/use-segmented-opus-playback";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";

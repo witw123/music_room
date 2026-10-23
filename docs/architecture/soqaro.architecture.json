@@ -2,12 +2,12 @@
   "schema_version": 1,
   "diagram_type": "architecture",
   "meta": {
-    "title": "Music Room 运行时架构",
+    "title": "Soqaro 运行时架构",
     "locale": "zh-CN",
-    "output": "outputs/music-room-architecture.html",
+    "output": "outputs/soqaro-architecture.html",
     "quality_profile": "showcase",
     "repository": {
-      "url": "https://github.com/witw123/music_room.git",
+      "url": "https://github.com/witw123/soqaro.git",
       "revision": "14c4d87b99b767069ca9d31f043e7b1a55479646"
     },
     "views": [
@@ -35,7 +35,7 @@
     {
       "id": "clients",
       "type": "frontend",
-      "label": "Music Room 客户端",
+      "label": "Soqaro 客户端",
       "sublabel": "Web / Mobile / Desktop",
       "tag": "Host + Listener",
       "sources": [
@@ -54,7 +54,7 @@
       "tag": "Public edge",
       "sources": [
         { "path": "docs/architecture/overview.md", "line": 44, "label": "runtime role" },
-        { "path": "deploy/linux/nginx/music-room.conf", "label": "proxy config" }
+        { "path": "deploy/linux/nginx/soqaro.conf", "label": "proxy config" }
       ],
       "pos": [290, 340],
       "size": [180, 76]
@@ -127,7 +127,7 @@
     {
       "id": "local-repository",
       "type": "external",
-      "label": "本地 .music-room",
+      "label": "本地 .soqaro",
       "sublabel": "原始音频 + Opus 分片",
       "tag": "Browser-owned",
       "sources": [

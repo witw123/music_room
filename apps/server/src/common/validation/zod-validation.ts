@@ -1,5 +1,5 @@
-import { BadRequestException } from "@nestjs/common";
-import { createApiErrorResponse, errorCodes } from "@music-room/shared";
+﻿import { BadRequestException } from "@nestjs/common";
+import { createApiErrorResponse, errorCodes } from "@soqaro/shared";
 
 type ParseResult<T> =
   | { success: true; data: T }

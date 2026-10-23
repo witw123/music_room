@@ -1,5 +1,5 @@
-import { HttpStatus } from "@nestjs/common";
-import { errorCodes } from "@music-room/shared";
+﻿import { HttpStatus } from "@nestjs/common";
+import { errorCodes } from "@soqaro/shared";
 import { toHttpApiError } from "./api-exception.filter";
 
 describe("toHttpApiError", () => {

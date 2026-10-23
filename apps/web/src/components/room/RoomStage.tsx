@@ -1,12 +1,12 @@
-import { memo, useEffect, useState, type ComponentProps, type CSSProperties, type MutableRefObject } from "react";
+﻿import { memo, useEffect, useState, type ComponentProps, type CSSProperties, type MutableRefObject } from "react";
 import type {
   RoomMediaConnectionState,
   RoomMember,
   RoomSnapshot,
   TrackMeta,
   UpdateRoomRequest
-} from "@music-room/shared";
-import { formatDuration } from "@/lib/domain/music-room-ui";
+} from "@soqaro/shared";
+import { formatDuration } from "@/lib/domain/soqaro-ui";
 import { findRoomPlaylistTrackRecord } from "@/features/playlist/local-playlist";
 import { RoomLyricsPositionProvider, useRoomLyricsPositionMs } from "./room-lyrics-position";
 

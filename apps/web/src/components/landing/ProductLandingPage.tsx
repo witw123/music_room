@@ -10,7 +10,7 @@ import {
   FolderIcon
 } from "@/components/icons/DiscoverIcons";
 
-const githubRepositoryUrl = "https://github.com/witw123/music_room";
+const githubRepositoryUrl = "https://github.com/witw123/soqaro";
 
 /**
  * Three distinct room collaboration modes
@@ -143,7 +143,7 @@ export function ProductLandingPage() {
 
         {/* Subtitle */}
         <p className="mt-6 max-w-2xl text-sm sm:text-base leading-relaxed text-white/65">
-          Music Room 是一款开源的多端协作听歌平台。采用 WebRTC RTP Opus 媒体流传输与房间状态机对齐，实现毫秒级同频收听。无需将私有音频文件上传至云端服务器，保护个人曲库隐私。
+          Soqaro 是一款开源的多端协作听歌平台。采用 WebRTC RTP Opus 媒体流传输与房间状态机对齐，实现毫秒级同频收听。无需将私有音频文件上传至云端服务器，保护个人曲库隐私。
         </p>
 
         {/* Action CTAs */}
@@ -260,7 +260,7 @@ export function ProductLandingPage() {
             为真实音乐社交场景定制的房间形态
           </h2>
           <p className="mt-2 text-sm text-white/60 max-w-2xl leading-relaxed">
-            不同的听歌场景需要截然不同的权限与交互逻辑。Music Room 提供了三种经过严谨打磨的房间类型。
+            不同的听歌场景需要截然不同的权限与交互逻辑。Soqaro 提供了三种经过严谨打磨的房间类型。
           </p>
         </div>
 
@@ -367,8 +367,8 @@ export function ProductLandingPage() {
 
           <div className="mt-6 rounded-xl border border-white/[0.08] bg-black/40 p-4 font-mono text-xs text-white/80 overflow-x-auto hide-scrollbar">
             <div className="text-white/40 select-none mb-1"># 快速本地启动 Monorepo 全栈工作区</div>
-            <div className="text-emerald-400">git clone https://github.com/witw123/music_room.git</div>
-            <div>cd music_room && pnpm install</div>
+            <div className="text-emerald-400">git clone https://github.com/witw123/soqaro.git</div>
+            <div>cd soqaro && pnpm install</div>
             <div className="text-accent">pnpm dev</div>
           </div>
         </div>
@@ -381,12 +381,12 @@ export function ProductLandingPage() {
             <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent text-white shadow-xs">
               <MusicIcon className="w-3.5 h-3.5" />
             </div>
-            <span className="font-bold text-sm text-white tracking-tight">Music Room</span>
+            <span className="font-bold text-sm text-white tracking-tight">Soqaro</span>
             <span className="text-xs text-white/40">· 开源多人协作同步听歌平台</span>
           </div>
 
           <p className="text-xs text-white/40">
-            &copy; {new Date().getFullYear()} Music Room Contributors. Open source under MIT License.
+            &copy; {new Date().getFullYear()} Soqaro Contributors. Open source under MIT License.
           </p>
 
           <div className="flex items-center gap-5 text-xs text-white/60">

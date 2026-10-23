@@ -1,4 +1,4 @@
-import {
+﻿import {
   Body,
   Controller,
   Delete,
@@ -9,7 +9,7 @@ import {
   UnauthorizedException
 } from "@nestjs/common";
 import { z } from "zod";
-import { providerAlbumSummarySchema, providerArtistSummarySchema, providerSchema, providerTrackCandidateSchema } from "@music-room/shared";
+import { providerAlbumSummarySchema, providerArtistSummarySchema, providerSchema, providerTrackCandidateSchema } from "@soqaro/shared";
 import { parseRequestBody } from "../../common/validation/zod-validation";
 import { AuthService } from "../auth/auth.service";
 import { FavoritesService } from "./favorites.service";

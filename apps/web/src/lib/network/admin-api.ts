@@ -1,4 +1,4 @@
-import { apiBaseUrl } from "./api-client";
+﻿import { apiBaseUrl } from "./api-client";
 import type {
   AdminIncident,
   AdminOverview,
@@ -8,9 +8,9 @@ import type {
   AdminUserSummary,
   RoomChatMessage,
   SystemAnnouncement
-} from "@music-room/shared";
+} from "@soqaro/shared";
 
-const csrfStorageKey = "music-room-admin-csrf";
+const csrfStorageKey = "soqaro-admin-csrf";
 export const ADMIN_CONFIRM_REASON = "管理员面板确认操作";
 
 export class AdminApiError extends Error {

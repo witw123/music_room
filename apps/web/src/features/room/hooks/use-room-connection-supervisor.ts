@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useRef, type MutableRefObject } from "react";
-import type { PeerDiagnosticsSnapshot } from "@music-room/shared";
+import type { PeerDiagnosticsSnapshot } from "@soqaro/shared";
 import type { PeerConnectionStatsSample } from "@/features/p2p/connection-stats";
 import {
   createPeerConnectionSupervisorState,

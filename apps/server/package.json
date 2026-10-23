@@ -1,11 +1,11 @@
 {
-  "name": "@music-room/server",
-  "version": "0.3.6",
+  "name": "@soqaro/server",
+  "version": "1.0.0",
   "private": true,
   "scripts": {
     "postinstall": "prisma generate",
     "db:push": "prisma db push",
-    "dev": "pnpm --filter @music-room/shared build && nest start --watch",
+    "dev": "pnpm --filter @soqaro/shared build && nest start --watch",
     "build": "prisma generate && tsc -p tsconfig.json && node -e \"require('node:fs').cpSync('src/generated/prisma','dist/generated/prisma',{ recursive: true })\"",
     "start": "node dist/main.js",
     "start:deploy": "prisma db push --skip-generate && node dist/main.js",
@@ -16,7 +16,7 @@
     "admin:role": "ts-node --transpile-only src/scripts/admin-role.ts"
   },
   "dependencies": {
-    "@music-room/shared": "workspace:*",
+    "@soqaro/shared": "workspace:*",
     "@nestjs/common": "^11.1.28",
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.1.28",
@@ -34,8 +34,8 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
-    "@music-room/config-eslint": "workspace:*",
-    "@music-room/config-typescript": "workspace:*",
+    "@soqaro/config-eslint": "workspace:*",
+    "@soqaro/config-typescript": "workspace:*",
     "@nestjs/cli": "^11.0.5",
     "@nestjs/schematics": "^11.0.1",
     "@nestjs/testing": "^11.1.28",

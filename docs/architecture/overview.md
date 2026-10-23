@@ -1,4 +1,4 @@
-# 整体架构
+﻿# 整体架构
 
 最后更新：`2026-09-26`
 
@@ -46,7 +46,7 @@ IndexedDB 分段 Opus
 
 房间普通快照、presence、成员变化、队列刷新和音量变化不会重建媒体会话。只有切换 source peer、离开房间或媒体会话彻底重建时才释放输出 Track。
 
-WebRTC 的 `music-room-control` DataChannel 只用于控制和连接健康协调，音频不经过 DataChannel，也不在成员之间传输原始或播放资产。多人听歌只认一种条件：房间曲目必须拥有可被源成员分发的本地歌曲资产。第三方源缓存不能直接作为多人播放依据；源成员离线或资产缺失时房间统一暂停播放。源成员在线时，引擎自动按优先级（本地文件 -> 本地缓存 -> IndexedDB -> 第三方下载）准备分段 Opus 资产并登记至房间，激活统一房间时钟。不会从其他成员或服务端寻找替代音频源。
+WebRTC 的 `soqaro-control` DataChannel 只用于控制和连接健康协调，音频不经过 DataChannel，也不在成员之间传输原始或播放资产。多人听歌只认一种条件：房间曲目必须拥有可被源成员分发的本地歌曲资产。第三方源缓存不能直接作为多人播放依据；源成员离线或资产缺失时房间统一暂停播放。源成员在线时，引擎自动按优先级（本地文件 -> 本地缓存 -> IndexedDB -> 第三方下载）准备分段 Opus 资产并登记至房间，激活统一房间时钟。不会从其他成员或服务端寻找替代音频源。
 
 ## 基础设施
 
@@ -78,13 +78,13 @@ src/
 │   ├── p2p/             # WebRTC 连接生命周期
 │   └── ...
 └── lib/                 # 与业务无关的通用层:网络客户端、平台探测、通用 UI 工具
-    └── network/         # music-room-api(唯一 fetch 出口;components 禁止直连 fetch)
+    └── network/         # soqaro-api(唯一 fetch 出口;components 禁止直连 fetch)
 ```
 
 依赖规则:
 
 1. `components → features → lib`,禁止反向;`features` 之间引用走对方 barrel(如 `features/p2p/index.ts`),禁止深路径穿透内部文件。
-2. 网络请求只经 `lib/network/music-room-api*`;IndexedDB 只经 `features/library`;运行时平台探测只经 `lib/desktop/tauri.ts`。
+2. 网络请求只经 `lib/network/soqaro-api*`;IndexedDB 只经 `features/library`;运行时平台探测只经 `lib/desktop/tauri.ts`。
 3. 高频(≥10Hz)更新状态不得放在布局级组件 state——用独立 Provider/context 隔离,只让叶子组件消费(先例:`components/room/room-lyrics-position.tsx`)。
 4. 大列表渲染一律走渐进渲染模式(先例:`ProviderAlbumTrackTable`,50 行起步每 40ms 追加)。
 5. 单文件软上限约 600 行;超过时按职责块拆分(先例:`bilibili.service` → service/lyric-matcher/mappers)。

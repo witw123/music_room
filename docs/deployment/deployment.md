@@ -10,7 +10,7 @@
 
 - [deploy/linux/docker-compose.prod.yml](../../deploy/linux/docker-compose.prod.yml)
 - [deploy/linux/.env.production.example](../../deploy/linux/.env.production.example)
-- [deploy/linux/nginx/music-room.conf](../../deploy/linux/nginx/music-room.conf)
+- [deploy/linux/nginx/soqaro.conf](../../deploy/linux/nginx/soqaro.conf)
 
 这套模板默认包含：
 
@@ -162,11 +162,11 @@ QQ 音乐二维码登录后，Cookie 仅在服务端加密保存。平台接口�
 模板里的 upstream 是：
 
 ```nginx
-upstream music_room_web {
+upstream soqaro_web {
   server web:3000;
 }
 
-upstream music_room_server {
+upstream soqaro_server {
   server server:3001;
 }
 ```
@@ -176,11 +176,11 @@ upstream music_room_server {
 宿主机直部署时应改成：
 
 ```nginx
-upstream music_room_web {
+upstream soqaro_web {
   server 127.0.0.1:3000;
 }
 
-upstream music_room_server {
+upstream soqaro_server {
   server 127.0.0.1:3001;
 }
 ```
@@ -193,8 +193,8 @@ upstream music_room_server {
 
 如果你直接跑：
 
-- `pnpm --filter @music-room/web start`
-- `pnpm --filter @music-room/server start`
+- `pnpm --filter @soqaro/web start`
+- `pnpm --filter @soqaro/server start`
 
 而没有 `systemd`、`pm2` 或等价守护，进程掉了以后 Nginx 只会继续返回 `502`。
 

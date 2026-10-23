@@ -1,4 +1,4 @@
-import { OnModuleDestroy } from "@nestjs/common";
+﻿import { OnModuleDestroy } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import {
   ConnectedSocket,
@@ -24,7 +24,7 @@ import type {
   RoomSnapshot,
   RoomUnsubscribePayload,
   RoomReactionInputPayload
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import {
   errorCodes,
   diagnosticsReportPayloadSchema,
@@ -36,7 +36,7 @@ import {
   roomSubscribePayloadSchema,
   roomUnsubscribePayloadSchema,
   roomReactionInputPayloadSchema
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import { createWsApiException } from "../../common/errors/ws-error";
 import { MetricsService } from "../../common/metrics/metrics.service";
 import { AbuseProtectionService } from "../../common/security/abuse-protection.service";
@@ -235,9 +235,9 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayConnection, OnG
     }
     this.telemetryLastReportAt.set(rateKey, now);
     if (this.redisService.isAvailable()) {
-      await this.redisService.setJson(`music-room:admin:telemetry:peer:${report.roomId}:${report.peerId}`, report, 45);
-      await this.redisService.addSortedSetScore(`music-room:admin:telemetry:room-peers:${report.roomId}`, now, report.peerId);
-      await this.redisService.addSortedSetScore("music-room:admin:telemetry:active-rooms", now, report.roomId);
+      await this.redisService.setJson(`soqaro:admin:telemetry:peer:${report.roomId}:${report.peerId}`, report, 45);
+      await this.redisService.addSortedSetScore(`soqaro:admin:telemetry:room-peers:${report.roomId}`, now, report.peerId);
+      await this.redisService.addSortedSetScore("soqaro:admin:telemetry:active-rooms", now, report.roomId);
     }
     this.metrics.incrementDiagnosticsReport();
     return { ok: true };

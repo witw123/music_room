@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
 import type { CSSProperties } from "react";
-import type { ProviderTrackCandidate } from "@music-room/shared";
+import type { ProviderTrackCandidate } from "@soqaro/shared";
 
 type FavoriteTrackButtonProps = {
   track: ProviderTrackCandidate | null;

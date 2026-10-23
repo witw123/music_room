@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+﻿import { afterEach, describe, expect, it, vi } from "vitest";
 import { getNativeStorageDirectory } from "./native-storage";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -10,7 +10,7 @@ describe("native repository transport", () => {
       request: { op: string; path: string; offset?: number; length?: number; data?: string; target?: string };
     }) => {
       const { op, path } = request;
-      if (op === "root") return { path: "C:\\MusicRoom" };
+      if (op === "root") return { path: "C:\\Soqaro" };
       if (op === "file" && !files.has(path)) files.set(path, new Uint8Array());
       if (op === "write") {
         const bytes = Uint8Array.from(atob(request.data!), (value) => value.charCodeAt(0));
@@ -33,7 +33,7 @@ describe("native repository transport", () => {
     });
     vi.stubGlobal("window", { __TAURI_INTERNALS__: {}, __TAURI__: { core: { invoke } } });
     const { handle } = await getNativeStorageDirectory();
-    const repository = await handle.getDirectoryHandle(".music-room", { create: true });
+    const repository = await handle.getDirectoryHandle(".soqaro", { create: true });
     const file = await repository.getFileHandle("audio.mp3", { create: true });
     const content = new Uint8Array(600_000).map((_, index) => index % 251);
     const writer = await file.createWritable();
@@ -46,21 +46,21 @@ describe("native repository transport", () => {
     const writes = invoke.mock.calls.filter(([, args]) => args.request.op === "write");
     expect(writes).toHaveLength(3);
     expect(writes.every(([, args]) => atob(args.request.data!).length <= 262144)).toBe(true);
-    expect([...files.keys()]).toEqual([".music-room/audio.mp3"]);
+    expect([...files.keys()]).toEqual([".soqaro/audio.mp3"]);
   });
 
   it("reports the storage root without the Windows verbatim prefix", async () => {
-    const invoke = vi.fn(async () => ({ path: String.raw`\\?\E:\game\Music Room` }));
+    const invoke = vi.fn(async () => ({ path: String.raw`\\?\E:\game\Soqaro` }));
     vi.stubGlobal("window", { __TAURI_INTERNALS__: {}, __TAURI__: { core: { invoke } } });
 
-    await expect(getNativeStorageDirectory()).resolves.toMatchObject({ name: String.raw`E:\game\Music Room` });
+    await expect(getNativeStorageDirectory()).resolves.toMatchObject({ name: String.raw`E:\game\Soqaro` });
   });
 
   it("keeps UNC storage roots addressable", async () => {
-    const invoke = vi.fn(async () => ({ path: String.raw`\\?\UNC\server\share\Music Room` }));
+    const invoke = vi.fn(async () => ({ path: String.raw`\\?\UNC\server\share\Soqaro` }));
     vi.stubGlobal("window", { __TAURI_INTERNALS__: {}, __TAURI__: { core: { invoke } } });
 
-    await expect(getNativeStorageDirectory()).resolves.toMatchObject({ name: String.raw`\\server\share\Music Room` });
+    await expect(getNativeStorageDirectory()).resolves.toMatchObject({ name: String.raw`\\server\share\Soqaro` });
   });
 
   it("surfaces native errors rather than changing storage roots", async () => {

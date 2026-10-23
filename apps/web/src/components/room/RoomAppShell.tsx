@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useRef, useState, type MutableRefObject, type RefObject } from "react";
-import type { AuthSession, RoomSnapshot, TrackMeta } from "@music-room/shared";
+import type { AuthSession, RoomSnapshot, TrackMeta } from "@soqaro/shared";
 import type { RoomSocket } from "@/lib/network/ws-client";
 import { isProviderTrack } from "@/features/room/playback/room-audio-path";
 import { appSettingsChangeEvent, getAppSettings } from "@/features/settings/settings-store";

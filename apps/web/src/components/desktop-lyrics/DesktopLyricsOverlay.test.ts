@@ -52,7 +52,7 @@ describe("desktop lyrics integration", () => {
     expect(windowAppSource).toContain("drag_desktop_lyrics_window");
     expect(pageSource).toContain("DesktopLyricsWindowApp");
     expect(contextSource).toContain("toggle_desktop_lyrics");
-    expect(contextSource).toContain("music-room-desktop-lyrics");
+    expect(contextSource).toContain("soqaro-desktop-lyrics");
     expect(libSource).toContain("toggle_desktop_lyrics");
     expect(libSource).toContain("always_on_top(true)");
   });
@@ -62,7 +62,7 @@ describe("desktop lyrics integration", () => {
     const contextSource = readFileSync(new URL("../../features/playback/desktop-lyrics-context.tsx", import.meta.url), "utf8");
     const tauriHelperSource = readFileSync(new URL("../../lib/desktop/tauri.ts", import.meta.url), "utf8");
     const pluginSource = readFileSync(
-      new URL("../../../../mobile/android/app/src/main/java/com/musicroom/app/DesktopLyricsPlugin.java", import.meta.url),
+      new URL("../../../../mobile/android/app/src/main/java/com/soqaro/app/DesktopLyricsPlugin.java", import.meta.url),
       "utf8"
     );
     const manifestSource = readFileSync(
@@ -70,7 +70,7 @@ describe("desktop lyrics integration", () => {
       "utf8"
     );
     const mainActivitySource = readFileSync(
-      new URL("../../../../mobile/android/app/src/main/java/com/musicroom/app/MainActivity.java", import.meta.url),
+      new URL("../../../../mobile/android/app/src/main/java/com/soqaro/app/MainActivity.java", import.meta.url),
       "utf8"
     );
 

@@ -1,11 +1,11 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { PersonalizationExclusion } from "@music-room/shared";
+import type { PersonalizationExclusion } from "@soqaro/shared";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { useWorkspacePageActive } from "@/features/workspace/page-activity";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 import { personalizationChangedEvent } from "@/features/personalization/use-personalization-reporter";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,14 +23,14 @@ export function TasteExclusionsManager({
 }) {
   const pageActive = useWorkspacePageActive();
   const { activeSession } = useSessionIdentity({
-    sessionStorageKey: "music-room-session",
+    sessionStorageKey: "soqaro-session",
     initialStatusMessage: ""
   });
   const queryClient = useQueryClient();
   const queryKey = ["personalization", activeSession?.userId ?? null, "exclusions"];
   const query = useQuery({
     queryKey,
-    queryFn: ({ signal }) => musicRoomApi.listPersonalizationExclusions(signal),
+    queryFn: ({ signal }) => soqaroApi.listPersonalizationExclusions(signal),
     enabled: pageActive && Boolean(activeSession)
   });
   const exclusions = query.data ?? [];
@@ -52,7 +52,7 @@ export function TasteExclusionsManager({
     setRemovingKey(itemKey);
     setErrorMessage(null);
     try {
-      await musicRoomApi.removePersonalizationExclusion(kind, key);
+      await soqaroApi.removePersonalizationExclusion(kind, key);
       await queryClient.cancelQueries({ queryKey });
       queryClient.setQueryData<PersonalizationExclusion[]>(queryKey,
         (prev) => prev?.filter((item) => !(item.kind === kind && item.key === key)));

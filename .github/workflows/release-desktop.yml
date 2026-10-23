@@ -1,4 +1,4 @@
-name: Release Apps
+﻿name: Release Apps
 
 on:
   push:
@@ -51,8 +51,8 @@ jobs:
 
       - name: Build Web
         run: |
-          pnpm --filter @music-room/shared build
-          pnpm --filter @music-room/web build
+          pnpm --filter @soqaro/shared build
+          pnpm --filter @soqaro/web build
 
       - name: Build Tauri Desktop App
         uses: tauri-apps/tauri-action@v0
@@ -63,8 +63,8 @@ jobs:
         with:
           projectPath: './apps/desktop/src-tauri'
           tagName: ${{ github.ref_name }}
-          releaseName: 'Music Room ${{ github.ref_name }}'
-          releaseBody: 'Music Room 多平台客户端构建版本。'
+          releaseName: 'Soqaro ${{ github.ref_name }}'
+          releaseBody: 'Soqaro 多平台客户端构建版本。'
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
@@ -120,8 +120,8 @@ jobs:
             echo "::error::缺少签名密钥。请在仓库 Secrets 添加 ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD，步骤见 docs/deploy/android-release.md。未配置时不再回退到 debug 包——debug APK 无法作为正式发布件。"
             exit 1
           fi
-          printf '%s' "$KEYSTORE_BASE64" | tr -d '\n\r' | base64 -d > "$RUNNER_TEMP/music-room-release.jks"
-          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/music-room-release.jks" >> "$GITHUB_ENV"
+          printf '%s' "$KEYSTORE_BASE64" | tr -d '\n\r' | base64 -d > "$RUNNER_TEMP/soqaro-release.jks"
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/soqaro-release.jks" >> "$GITHUB_ENV"
 
       - name: Resolve app version from tag
         if: startsWith(github.ref, 'refs/tags/v')
@@ -141,14 +141,14 @@ jobs:
         run: |
           mkdir -p release-apk
           APK_FILE=$(find apps/mobile/android/app/build/outputs/apk/release -name "*.apk" | head -n 1)
-          cp "$APK_FILE" release-apk/MusicRoom-Android-${{ github.ref_name }}.apk
+          cp "$APK_FILE" release-apk/Soqaro-Android-${{ github.ref_name }}.apk
 
       - name: Upload Android APK to Release
         if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload ${{ github.ref_name }} release-apk/MusicRoom-Android-${{ github.ref_name }}.apk --clobber || \
-          gh release create ${{ github.ref_name }} release-apk/MusicRoom-Android-${{ github.ref_name }}.apk --title "Music Room ${{ github.ref_name }}" --notes "Music Room 多平台客户端构建版本。"
+          gh release upload ${{ github.ref_name }} release-apk/Soqaro-Android-${{ github.ref_name }}.apk --clobber || \
+          gh release create ${{ github.ref_name }} release-apk/Soqaro-Android-${{ github.ref_name }}.apk --title "Soqaro ${{ github.ref_name }}" --notes "Soqaro 多平台客户端构建版本。"
 
 

@@ -1,4 +1,4 @@
-import { RoomPresenceService } from "./room-presence.service";
+﻿import { RoomPresenceService } from "./room-presence.service";
 
 describe("RoomPresenceService", () => {
   it("loads all member presence entries with one Redis batch read", async () => {
@@ -31,8 +31,8 @@ describe("RoomPresenceService", () => {
     ]);
 
     expect(redis.getStrings).toHaveBeenCalledWith([
-      "music-room:presence:room_1:host_1",
-      "music-room:presence:room_1:member_1"
+      "soqaro:presence:room_1:host_1",
+      "soqaro:presence:room_1:member_1"
     ]);
     expect(redis.getString).not.toHaveBeenCalled();
     expect(presence.get("host_1")).toEqual({

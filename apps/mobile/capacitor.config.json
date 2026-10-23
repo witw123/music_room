@@ -1,13 +1,13 @@
 {
-  "appId": "com.musicroom.app",
-  "appName": "Music Room",
+  "appId": "com.soqaro.app",
+  "appName": "Soqaro",
   "webDir": "www",
   "server": {
-    "url": "https://musicroom.witw.top/app",
+    "url": "https://soqaro.witw.top/app",
     "androidScheme": "https",
     "cleartext": true,
     "allowNavigation": [
-      "musicroom.witw.top",
+      "soqaro.witw.top",
       "*.witw.top"
     ]
   },

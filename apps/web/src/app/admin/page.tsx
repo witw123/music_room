@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { AdminIncident, AdminOverview, AdminRoomSummary, AdminSession, AdminUserSummary, SystemAnnouncement } from "@music-room/shared";
+import type { AdminIncident, AdminOverview, AdminRoomSummary, AdminSession, AdminUserSummary, SystemAnnouncement } from "@soqaro/shared";
 import { adminApi, AdminApiError } from "@/lib/network/admin-api";
 import { Icon, type IconName, type AuditRow } from "./ui";
 import { Overview } from "./sections/overview";
@@ -101,7 +101,7 @@ export default function AdminPage() {
 
   async function logout() {
     await adminApi.logout().catch(() => undefined);
-    window.sessionStorage.removeItem("music-room-admin-csrf");
+    window.sessionStorage.removeItem("soqaro-admin-csrf");
     window.location.assign("/admin/login");
   }
 

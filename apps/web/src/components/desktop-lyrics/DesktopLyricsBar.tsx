@@ -16,7 +16,7 @@ import {
   parseRoomLyrics
 } from "@/features/playback/lyrics";
 import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
-import { formatDuration } from "@/lib/domain/music-room-ui";
+import { formatDuration } from "@/lib/domain/soqaro-ui";
 import { appSettingsChangeEvent, getAppSettings } from "@/features/settings/settings-store";
 
 export type DesktopLyricsBarLyrics = {

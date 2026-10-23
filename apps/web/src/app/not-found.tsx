@@ -22,7 +22,7 @@
             textTransform: "uppercase"
           }}
         >
-          Music Room
+          Soqaro
         </p>
         <h1
           style={{

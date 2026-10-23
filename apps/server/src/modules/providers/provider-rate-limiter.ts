@@ -1,5 +1,5 @@
-import { HttpException, HttpStatus } from "@nestjs/common";
-import { createApiErrorResponse, errorCodes } from "@music-room/shared";
+﻿import { HttpException, HttpStatus } from "@nestjs/common";
+import { createApiErrorResponse, errorCodes } from "@soqaro/shared";
 
 /**
  * In-memory sliding-window rate limiter shared by the provider services

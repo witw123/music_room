@@ -1,4 +1,4 @@
-import { peerSignalMessageSchema } from "@music-room/shared";
+﻿import { peerSignalMessageSchema } from "@soqaro/shared";
 
 describe("room data signaling", () => {
   it("rejects media signaling on the control channel boundary", () => {

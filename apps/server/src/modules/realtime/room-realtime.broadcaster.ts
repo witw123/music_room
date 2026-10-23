@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+﻿import { Injectable } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import type {
   RoomLibraryPatchPayload,
@@ -12,7 +12,7 @@ import type {
   RoomTrackDeletedPayload,
   RoomTrackAssetReadyPayload,
   RoomTrackAssetUnavailablePayload
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import type { Server } from "socket.io";
 import { RedisService } from "../../infra/redis/redis.service";
 import {

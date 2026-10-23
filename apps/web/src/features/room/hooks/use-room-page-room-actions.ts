@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import {
   useCallback,
@@ -14,13 +14,13 @@ import type {
   RoomDirectoryItem,
   RoomMediaConnectionState,
   RoomSnapshot
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import type { Route } from "next";
 import {
-  musicRoomApi,
+  soqaroApi,
   playlistsChangedEventName,
   playlistsChangedStorageKey
-} from "@/lib/network/music-room-api";
+} from "@/lib/network/soqaro-api";
 import { isLocalPlaylistMirror } from "@/features/playlist/local-playlist-database";
 import { filterOpenPublicRooms } from "@/features/room/room-list-visibility";
 import { useRoomActions } from "@/features/room/hooks/use-room-actions";
@@ -110,7 +110,7 @@ export function useRoomPageRoomActions({
 
   const refreshAvailableRooms = useCallback(async () => {
     try {
-      const rooms = await musicRoomApi.listRooms();
+      const rooms = await soqaroApi.listRooms();
       setAvailableRooms(filterOpenPublicRooms(rooms));
     } catch {
       setAvailableRooms([]);
@@ -120,7 +120,7 @@ export function useRoomPageRoomActions({
   const refreshPlaylists = useCallback(async () => {
     const version = ++playlistRefreshVersionRef.current;
     try {
-      const nextPlaylists = await musicRoomApi.listMyPlaylists();
+      const nextPlaylists = await soqaroApi.listMyPlaylists();
       if (version === playlistRefreshVersionRef.current) {
         setPlaylists(nextPlaylists.filter((playlist) => !isLocalPlaylistMirror(playlist)));
       }
@@ -252,7 +252,7 @@ export function useRoomPageRoomActions({
     refreshPlaylists,
     resetPlayerSurface,
     resetRealtimePeer,
-    lastRoomStorageKey: "music-room-last-room",
+    lastRoomStorageKey: "soqaro-last-room",
     getCurrentPlaybackPositionMs: () => currentPlaybackPositionRef.current,
     getCurrentPeerId,
     onTrackDeleted: handleTrackDeleted,

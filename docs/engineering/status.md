@@ -1,7 +1,7 @@
-# 项目状态
+﻿# 项目状态
 
 最后更新：`2026-09-24`
-当前版本：`0.3.3`
+当前版本：`1.0.0`
 
 ## 当前主链路
 
@@ -11,7 +11,7 @@
 - `SegmentedOpusEngine` 使用固定的共享 AudioContext 输出总线
 - 源端通过 `SegmentedOpusEngine` + shared AudioContext + broadcastDestination 发布 RTP Opus（owner 是唯一媒体源）
 - 监听端只使用一个 `audio.srcObject`
-- `music-room-control` DataChannel 只用于控制和连接健康协调
+- `soqaro-control` DataChannel 只用于控制和连接健康协调
 - 诊断协议使用 `segmentedPlaybackStatus`
 
 ## 当前产品面

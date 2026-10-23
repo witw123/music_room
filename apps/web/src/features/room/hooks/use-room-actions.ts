@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
 import {
@@ -10,9 +10,9 @@ import {
   type RoomMemberPermissions,
   type RoomSnapshot,
   type UpdateRoomRequest
-} from "@music-room/shared";
-import { MusicRoomApiError, musicRoomApi } from "@/lib/network/music-room-api";
-import { toUserFacingError } from "@/lib/domain/music-room-ui";
+} from "@soqaro/shared";
+import { SoqaroApiError, soqaroApi } from "@/lib/network/soqaro-api";
+import { toUserFacingError } from "@/lib/domain/soqaro-ui";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import { hasRoomPermission } from "@/features/room/room-permissions";
@@ -92,7 +92,7 @@ export function useRoomActions({
 
   const syncRoomSnapshot = useCallback(
     async (roomId: string) => {
-      const snapshot = await musicRoomApi.getRoom(roomId);
+      const snapshot = await soqaroApi.getRoom(roomId);
       dispatchRoomStateEvent({
         type: "recover-snapshot",
         snapshot
@@ -114,7 +114,7 @@ export function useRoomActions({
       }
 
       try {
-        const snapshot = await musicRoomApi.updateRoom(roomSnapshot.room.id, input);
+        const snapshot = await soqaroApi.updateRoom(roomSnapshot.room.id, input);
         dispatchRoomStateEvent({
           type: "recover-snapshot",
           snapshot
@@ -136,7 +136,7 @@ export function useRoomActions({
       }
 
       try {
-        const snapshot = await musicRoomApi.updateRoomMemberPermissions(
+        const snapshot = await soqaroApi.updateRoomMemberPermissions(
           roomSnapshot.room.id,
           memberId,
           permissions
@@ -159,7 +159,7 @@ export function useRoomActions({
       }
 
       try {
-        const snapshot = await musicRoomApi.removeRoomMember(roomSnapshot.room.id, memberId);
+        const snapshot = await soqaroApi.removeRoomMember(roomSnapshot.room.id, memberId);
         dispatchRoomStateEvent({ type: "recover-snapshot", snapshot });
         setStatusMessage("成员已移出房间。");
         return true;
@@ -209,7 +209,7 @@ export function useRoomActions({
             return playback;
           } catch (error) {
             const isVersionConflict =
-              (error instanceof MusicRoomApiError &&
+              (error instanceof SoqaroApiError &&
                 error.code === errorCodes.playbackVersionConflict) ||
               (error instanceof Error && error.message.includes("Playback state version conflict"));
 
@@ -299,7 +299,7 @@ export function useRoomActions({
     try {
       const result = await runBestEffortRoomLeave({
         roomId: roomSnapshot.room.id,
-        leaveRemote: musicRoomApi.leaveRoom,
+        leaveRemote: soqaroApi.leaveRoom,
         remoteWaitMs: 150,
         completeLocalExit: async () => {
           setSuppressRoomRecovery(true);
@@ -343,7 +343,7 @@ export function useRoomActions({
 
     try {
       const trackIds = roomSnapshot.tracks.map((track) => track.id);
-      await musicRoomApi.deleteRoom(roomSnapshot.room.id);
+      await soqaroApi.deleteRoom(roomSnapshot.room.id);
       setSuppressRoomRecovery(true);
       dispatchRoomStateEvent({ type: "local-reset" });
       resetPlayerSurface();
@@ -384,7 +384,7 @@ export function useRoomActions({
       }
 
       try {
-        const result = await musicRoomApi.addQueueItem(roomSnapshot.room.id, { trackId });
+        const result = await soqaroApi.addQueueItem(roomSnapshot.room.id, { trackId });
         dispatchRoomStateEvent({
           type: "server-queue-patch",
           roomId: roomSnapshot.room.id,
@@ -422,7 +422,7 @@ export function useRoomActions({
           trackId,
           roomSnapshot.room.playback.currentTrackId
         );
-        await musicRoomApi.deleteTrack(roomSnapshot.room.id, trackId);
+        await soqaroApi.deleteTrack(roomSnapshot.room.id, trackId);
         if (shouldResetPlayer) {
           resetPlayerSurface();
         }
@@ -454,7 +454,7 @@ export function useRoomActions({
       try {
         const currentPlayingTrackId = roomSnapshot.room.playback.currentTrackId;
         const shouldResetPlayer = currentPlayingTrackId !== null && trackIds.includes(currentPlayingTrackId);
-        const result = await musicRoomApi.deleteTracks(roomSnapshot.room.id, { trackIds });
+        const result = await soqaroApi.deleteTracks(roomSnapshot.room.id, { trackIds });
         if (shouldResetPlayer) {
           resetPlayerSurface();
         }
@@ -488,7 +488,7 @@ export function useRoomActions({
       }
 
       try {
-        const result = await musicRoomApi.addQueueItems(roomSnapshot.room.id, { trackIds });
+        const result = await soqaroApi.addQueueItems(roomSnapshot.room.id, { trackIds });
         dispatchRoomStateEvent({
           type: "server-queue-patch",
           roomId: roomSnapshot.room.id,
@@ -526,7 +526,7 @@ export function useRoomActions({
           const playbackAssetId = roomSnapshot.tracks.find(
             (track) => track.id === selectedTrackId
           )?.playbackAsset?.assetId;
-          return musicRoomApi.updatePlayback(roomSnapshot.room.id, {
+          return soqaroApi.updatePlayback(roomSnapshot.room.id, {
             action: "play",
             trackId,
             ...(playbackAssetId ? { playbackAssetId } : {}),
@@ -553,7 +553,7 @@ export function useRoomActions({
           const playbackAssetId = roomSnapshot.tracks.find(
             (track) => track.id === queueTrackId
           )?.playbackAsset?.assetId;
-          return musicRoomApi.updatePlayback(roomSnapshot.room.id, {
+          return soqaroApi.updatePlayback(roomSnapshot.room.id, {
             action: "play",
             queueItemId,
             ...(playbackAssetId ? { playbackAssetId } : {}),
@@ -592,7 +592,7 @@ export function useRoomActions({
         currentPlayback.playbackRevision,
         (expectedVersion) => {
           const playbackAssetId = currentTrack?.playbackAsset?.assetId;
-          return musicRoomApi.updatePlayback(roomSnapshot.room.id, {
+          return soqaroApi.updatePlayback(roomSnapshot.room.id, {
             action: "pause",
             positionMs: optimisticPlayback.positionMs,
             ...(playbackAssetId ? { playbackAssetId } : {}),
@@ -622,7 +622,7 @@ export function useRoomActions({
       roomSnapshot.room.id,
       roomSnapshot.room.playback.playbackRevision,
       (expectedVersion) =>
-        musicRoomApi.updatePlayback(roomSnapshot.room.id, {
+        soqaroApi.updatePlayback(roomSnapshot.room.id, {
           action: "prev",
           actorPeerId: getCurrentPeerId?.() ?? undefined,
           expectedVersion
@@ -640,7 +640,7 @@ export function useRoomActions({
       roomSnapshot.room.id,
       roomSnapshot.room.playback.playbackRevision,
       (expectedVersion) =>
-        musicRoomApi.updatePlayback(roomSnapshot.room.id, {
+        soqaroApi.updatePlayback(roomSnapshot.room.id, {
           action: "next",
           actorPeerId: getCurrentPeerId?.() ?? undefined,
           expectedVersion
@@ -656,7 +656,7 @@ export function useRoomActions({
       }
 
       try {
-        await musicRoomApi.createPlaylistFromRoom({
+        await soqaroApi.createPlaylistFromRoom({
           roomId: roomSnapshot.room.id,
           title,
           description: "从当前房间队列保存"
@@ -677,7 +677,7 @@ export function useRoomActions({
       }
 
       try {
-        await musicRoomApi.updatePlaylist(playlistId, { title });
+        await soqaroApi.updatePlaylist(playlistId, { title });
         await refreshPlaylists();
         setStatusMessage("歌单名称已更新。");
       } catch (error) {
@@ -694,7 +694,7 @@ export function useRoomActions({
       }
 
       try {
-        await musicRoomApi.updatePlaylist(playlistId, { trackIds });
+        await soqaroApi.updatePlaylist(playlistId, { trackIds });
         await refreshPlaylists();
         setStatusMessage("歌单曲目已更新。");
       } catch (error) {
@@ -711,7 +711,7 @@ export function useRoomActions({
       }
 
       try {
-        await musicRoomApi.deletePlaylist(playlistId);
+        await soqaroApi.deletePlaylist(playlistId);
         await refreshPlaylists();
         setStatusMessage("歌单已删除。");
       } catch (error) {
@@ -750,7 +750,7 @@ export function useRoomActions({
       }, 250);
 
       try {
-        await musicRoomApi.importPlaylistToRoom(playlistId, {
+        await soqaroApi.importPlaylistToRoom(playlistId, {
           roomId: roomSnapshot.room.id
         });
         clearInterval(progressTimer);
@@ -778,7 +778,7 @@ export function useRoomActions({
       }
 
       try {
-        const result = await musicRoomApi.removeQueueItem(roomSnapshot.room.id, queueItemId);
+        const result = await soqaroApi.removeQueueItem(roomSnapshot.room.id, queueItemId);
         dispatchRoomStateEvent({
           type: "server-queue-patch",
           roomId: roomSnapshot.room.id,
@@ -811,7 +811,7 @@ export function useRoomActions({
       }
 
       try {
-        const result = await musicRoomApi.removeQueueItems(roomSnapshot.room.id, { queueItemIds });
+        const result = await soqaroApi.removeQueueItems(roomSnapshot.room.id, { queueItemIds });
         dispatchRoomStateEvent({
           type: "server-queue-patch",
           roomId: roomSnapshot.room.id,
@@ -844,7 +844,7 @@ export function useRoomActions({
       }
 
       try {
-        const result = await musicRoomApi.reorderQueue(roomSnapshot.room.id, {
+        const result = await soqaroApi.reorderQueue(roomSnapshot.room.id, {
           queueItemIds
         });
         dispatchRoomStateEvent({
@@ -869,7 +869,7 @@ export function useRoomActions({
       }
 
       try {
-        const nextTracks = await musicRoomApi.reorderTracks(roomSnapshot.room.id, {
+        const nextTracks = await soqaroApi.reorderTracks(roomSnapshot.room.id, {
           trackIds
         });
         dispatchRoomStateEvent({
@@ -895,7 +895,7 @@ export function useRoomActions({
       }
 
       try {
-        const result = await musicRoomApi.setNextQueueItem(roomSnapshot.room.id, {
+        const result = await soqaroApi.setNextQueueItem(roomSnapshot.room.id, {
           queueItemId
         });
         dispatchRoomStateEvent({
@@ -929,7 +929,7 @@ export function useRoomActions({
         roomSnapshot.room.id,
         roomSnapshot.room.playback.playbackRevision,
         (expectedVersion) =>
-          musicRoomApi.updatePlayback(roomSnapshot.room.id, {
+          soqaroApi.updatePlayback(roomSnapshot.room.id, {
             action: "set-mode",
             playbackMode,
             actorPeerId: getCurrentPeerId?.() ?? undefined,
@@ -977,7 +977,7 @@ export function useRoomActions({
           const playbackAssetId = roomSnapshot.tracks.find(
             (track) => track.id === currentPlayback.currentTrackId
           )?.playbackAsset?.assetId;
-          return musicRoomApi.updatePlayback(roomSnapshot.room.id, {
+          return soqaroApi.updatePlayback(roomSnapshot.room.id, {
             action: "seek",
             positionMs: optimisticPlayback.positionMs,
             ...(playbackAssetId ? { playbackAssetId } : {}),

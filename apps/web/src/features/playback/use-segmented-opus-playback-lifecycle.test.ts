@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { playbackEncoderVersion, playbackProfileId, type RoomSnapshot, type TrackMeta } from "@music-room/shared";
+﻿import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { playbackEncoderVersion, playbackProfileId, type RoomSnapshot, type TrackMeta } from "@soqaro/shared";
 
 // Run the hook's effects explicitly: these tests exercise async ownership, not DOM rendering.
 const hooks = vi.hoisted(() => ({

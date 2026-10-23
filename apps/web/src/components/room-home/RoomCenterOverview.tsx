@@ -1,11 +1,11 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import type { AuthSession, RoomSnapshot } from "@music-room/shared";
-import { musicRoomApi, type RoomActivitySummary } from "@/lib/network/music-room-api";
-import { getOnlineMemberCount } from "@/lib/domain/music-room-ui";
+import type { AuthSession, RoomSnapshot } from "@soqaro/shared";
+import { soqaroApi, type RoomActivitySummary } from "@/lib/network/soqaro-api";
+import { getOnlineMemberCount } from "@/lib/domain/soqaro-ui";
 import {
   UsersIcon,
   HeartIcon,
@@ -23,9 +23,9 @@ export function RoomCenterOverview({ activeSession }: { activeSession: AuthSessi
     queryKey: ["room-center-overview", activeSession.userId],
     queryFn: async () => {
       const [owned, recent, nextStats] = await Promise.all([
-        musicRoomApi.listOwnedRooms(),
-        musicRoomApi.getRoomActivity(),
-        musicRoomApi.getRoomInteractionStats()
+        soqaroApi.listOwnedRooms(),
+        soqaroApi.getRoomActivity(),
+        soqaroApi.getRoomInteractionStats()
       ]);
       return { owned, recent, stats: nextStats };
     },

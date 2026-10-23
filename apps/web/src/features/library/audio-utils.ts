@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import type {
   GuestSession,
@@ -7,7 +7,7 @@ import type {
   RemoteTrackSourceRef,
   TrackSourceType,
   TrackLoudness
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import { createSHA256 } from "hash-wasm";
 import type { PreparedAudioAssets } from "./audio-asset-builder";
 import { readEmbeddedAudioMetadata } from "./audio-metadata";

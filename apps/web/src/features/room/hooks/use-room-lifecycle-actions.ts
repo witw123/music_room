@@ -1,10 +1,10 @@
-"use client";
+﻿"use client";
 
 import { useCallback } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import type { Playlist } from "@music-room/shared";
+import type { Playlist } from "@soqaro/shared";
 import type { Route } from "next";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import { clearAwayRoomId } from "@/lib/domain/away-room";
@@ -56,7 +56,7 @@ export function useRoomLifecycleActions({
     clearAwayRoomId();
     dispatchRoomStateEvent({ type: "local-reset" });
     setPlaylists([]);
-    window.localStorage.removeItem("music-room-last-room");
+    window.localStorage.removeItem("soqaro-last-room");
   }, [
     clearIdentity,
     dispatchRoomStateEvent,
@@ -128,7 +128,7 @@ export function useRoomLifecycleActions({
 
   const handleLogout = useCallback(async () => {
     try {
-      await musicRoomApi.logout();
+      await soqaroApi.logout();
     } catch {
       // Keep local logout behavior even if the server session is already gone.
     }

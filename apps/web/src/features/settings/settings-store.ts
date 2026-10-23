@@ -1,10 +1,10 @@
-import type { PlaybackMode } from "@music-room/shared";
+﻿import type { PlaybackMode } from "@soqaro/shared";
 import { create } from "zustand";
 import { invokeTauri, isTauriRuntime } from "@/lib/desktop/tauri";
 import { EQUALIZER_PRESETS, type EqualizerPresetId } from "../playback/audio-equalizer";
 
-export const appSettingsStorageKey = "music-room-settings-v1";
-export const appSettingsChangeEvent = "music-room-settings-change";
+export const appSettingsStorageKey = "soqaro-settings-v1";
+export const appSettingsChangeEvent = "soqaro-settings-change";
 
 export type ThemePreference =
   | "system"

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 /* eslint-disable @next/next/no-img-element */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -9,11 +9,11 @@ import type {
   ProviderPlaylistSummary,
   QqMusicTrackCandidate,
   TrackMeta
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import { SearchSuggestions, type SearchSuggestionItem } from "@/components/provider-search";
 import { SearchBar } from "@/components/ui/search-bar";
-import { formatDuration } from "@/lib/domain/music-room-ui";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import { formatDuration } from "@/lib/domain/soqaro-ui";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 import { isBilibiliCollection, bilibiliTrackToPlaylistSummary } from "@/features/library/bilibili-collection";
 import { importTaskStore, useVisibleImportTasks } from "@/features/upload/import-task-store";
 import { useActiveSession } from "@/features/session/use-session-identity";
@@ -79,8 +79,8 @@ async function enrichProviderSearchResults(provider: Provider, items: ProviderTr
   await Promise.all(albumIds.map(async (albumId) => {
     try {
       const album = provider === "netease"
-        ? await musicRoomApi.getNeteaseAlbum(albumId)
-        : await musicRoomApi.getQqMusicAlbum(albumId);
+        ? await soqaroApi.getNeteaseAlbum(albumId)
+        : await soqaroApi.getQqMusicAlbum(albumId);
       if (album.artworkUrl) artworkByAlbumId.set(albumId, album.artworkUrl);
     } catch {
       // A missing artwork detail must not make the provider search unusable.
@@ -92,8 +92,8 @@ async function enrichProviderSearchResults(provider: Provider, items: ProviderTr
   await Promise.all(tracksWithoutAlbum.map(async (track) => {
     try {
       const detail = track.provider === "netease"
-        ? await musicRoomApi.getNeteaseTrack(track.providerTrackId)
-        : await musicRoomApi.getQqMusicTrack(track.providerTrackId);
+        ? await soqaroApi.getNeteaseTrack(track.providerTrackId)
+        : await soqaroApi.getQqMusicTrack(track.providerTrackId);
       if (detail.artworkUrl) artworkByTrackId.set(track.providerTrackId, detail.artworkUrl);
     } catch {
       // Keep the result available when a provider detail endpoint fails.
@@ -210,11 +210,11 @@ export function RoomProviderTrackSearch({
       try {
         const response = query
           ? provider === "netease"
-            ? await musicRoomApi.searchNeteaseSuggestions(query)
-            : await musicRoomApi.searchQqMusicSuggestions(query)
+            ? await soqaroApi.searchNeteaseSuggestions(query)
+            : await soqaroApi.searchQqMusicSuggestions(query)
           : provider === "netease"
-            ? await musicRoomApi.getNeteaseSearchHot()
-            : await musicRoomApi.getQqMusicSearchHot();
+            ? await soqaroApi.getNeteaseSearchHot()
+            : await soqaroApi.getQqMusicSearchHot();
         if (cancelled) return;
         const items = response.items.map((item) => ({
           label: item.label,
@@ -255,7 +255,7 @@ export function RoomProviderTrackSearch({
     setBilibiliPartDetail(null);
     try {
       if (provider === "bilibili") {
-        const response = await musicRoomApi.searchBilibiliTracks(query, { pageSize: 15 });
+        const response = await soqaroApi.searchBilibiliTracks(query, { pageSize: 15 });
         if (searchRequestRef.current !== requestId) return;
         const collections: ProviderPlaylistSummary[] = [];
         const singles: BilibiliTrackCandidate[] = [];
@@ -272,8 +272,8 @@ export function RoomProviderTrackSearch({
       } else {
         setBilibiliCollections([]);
         const response = provider === "netease"
-          ? await musicRoomApi.searchNeteaseTracks(query)
-          : await musicRoomApi.searchQqMusicTracks(query);
+          ? await soqaroApi.searchNeteaseTracks(query)
+          : await soqaroApi.searchQqMusicTracks(query);
         if (searchRequestRef.current !== requestId) return;
         setResults(response.items);
         void enrichProviderSearchResults(provider, response.items)
@@ -309,7 +309,7 @@ export function RoomProviderTrackSearch({
     setPending(actionKey);
     setErrorMessage(null);
     try {
-      const detail = await musicRoomApi.getBilibiliVideoParts(bvid);
+      const detail = await soqaroApi.getBilibiliVideoParts(bvid);
       setBilibiliPartDetail(detail);
     } catch (error) {
       setErrorMessage(toSearchErrorMessage(error));
@@ -361,7 +361,7 @@ export function RoomProviderTrackSearch({
     setPending(actionKey);
     setErrorMessage(null);
     try {
-      const detail = await musicRoomApi.getBilibiliVideoParts(collection.providerPlaylistId);
+      const detail = await soqaroApi.getBilibiliVideoParts(collection.providerPlaylistId);
       setBilibiliPartDetail(detail);
     } catch (error) {
       setErrorMessage(toSearchErrorMessage(error));
@@ -375,7 +375,7 @@ export function RoomProviderTrackSearch({
     setPending(actionKey);
     setErrorMessage(null);
     try {
-      const detail = await musicRoomApi.getBilibiliVideoParts(collection.providerPlaylistId);
+      const detail = await soqaroApi.getBilibiliVideoParts(collection.providerPlaylistId);
       await handleImportAllParts(detail.parts);
     } catch (error) {
       setErrorMessage(toSearchErrorMessage(error));

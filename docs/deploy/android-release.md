@@ -14,11 +14,11 @@ CI 的 `release-android` 任务用固定的上传密钥签名并产出正式 APK
 
 ```bash
 keytool -genkeypair -v \
-  -keystore music-room-release.jks \
-  -alias music-room \
+  -keystore soqaro-release.jks \
+  -alias soqaro \
   -keyalg RSA -keysize 4096 -validity 10000 \
   -storetype PKCS12 \
-  -dname "CN=Music Room, O=Music Room, C=CN"
+  -dname "CN=Soqaro, O=Soqaro, C=CN"
 ```
 
 - 提示输入口令时设一个强口令。PKCS12 不支持 store 与 key 两套口令，`keyPassword` 直接回车沿用同一个即可，两个 Secret 填同样的值。
@@ -32,24 +32,24 @@ keytool -genkeypair -v \
 | --- | --- |
 | `ANDROID_KEYSTORE_BASE64` | 密钥文件的 base64（见下） |
 | `ANDROID_KEYSTORE_PASSWORD` | store 口令 |
-| `ANDROID_KEY_ALIAS` | `music-room`（与 `-alias` 一致） |
+| `ANDROID_KEY_ALIAS` | `soqaro`（与 `-alias` 一致） |
 | `ANDROID_KEY_PASSWORD` | key 口令（PKCS12 下同 store 口令） |
 
 生成 base64 文本：
 
 ```bash
 # Linux / Git Bash
-base64 -w0 music-room-release.jks > keystore.b64
+base64 -w0 soqaro-release.jks > keystore.b64
 
 # macOS
-base64 -i music-room-release.jks -o keystore.b64
+base64 -i soqaro-release.jks -o keystore.b64
 ```
 
 把 `keystore.b64` 的内容整段粘进 `ANDROID_KEYSTORE_BASE64`（CI 会自行去掉换行）。
 
 ## 三、发布
 
-打 tag 后由 `Release Apps` 工作流构建，产物为 `MusicRoom-Android-<tag>.apk`：
+打 tag 后由 `Release Apps` 工作流构建，产物为 `Soqaro-Android-<tag>.apk`：
 
 ```bash
 git tag v0.3.4 && git push origin v0.3.4
@@ -62,9 +62,9 @@ git tag v0.3.4 && git push origin v0.3.4
 `keystore.properties`（已在 `.gitignore` 中）放在 `apps/mobile/android/` 下：
 
 ```properties
-storeFile=/绝对路径/music-room-release.jks
+storeFile=/绝对路径/soqaro-release.jks
 storePassword=……
-keyAlias=music-room
+keyAlias=soqaro
 keyPassword=……
 ```
 
@@ -75,6 +75,6 @@ keyPassword=……
 Android 只允许签名相同的包覆盖安装。从 debug 包（历次 CI 构建各自生成调试密钥）切到正式密钥，或将来更换密钥时：
 
 - 用户必须**先卸载旧包**才能安装新包；
-- 卸载会删除应用私有目录，即 `filesDir` 下的本地曲库与 `.music-room` 仓库——**本地已下载的音乐会一起消失**。
+- 卸载会删除应用私有目录，即 `filesDir` 下的本地曲库与 `.soqaro` 仓库——**本地已下载的音乐会一起消失**。
 
 因此更换密钥前应提示用户先备份（设置页「本地存储」可查看根目录位置），或等一次大版本一起做。

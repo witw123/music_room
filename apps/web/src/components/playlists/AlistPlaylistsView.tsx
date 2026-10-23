@@ -1,9 +1,9 @@
-"use client";
+﻿"use client";
 
 import React, { useCallback, useEffect, useState } from "react";
-import type { AlistAudioItem, AlistConfig } from "@music-room/shared";
+import type { AlistAudioItem, AlistConfig } from "@soqaro/shared";
 import { useAlistStorage } from "@/features/settings/use-alist-storage";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 import { useLocalPlayer } from "@/features/playback/local-player-context";
 import type { LocalPlaylistTrackRecord } from "@/features/playlist/local-playlist";
 import {
@@ -63,7 +63,7 @@ export function AlistPlaylistsView() {
     setLoading(true);
     setError(null);
     try {
-      const res = await musicRoomApi.listAlistDirectory({
+      const res = await soqaroApi.listAlistDirectory({
         url: config.url,
         path: dirPath,
         refresh: false,
@@ -106,24 +106,24 @@ export function AlistPlaylistsView() {
   const buildTrackRecord = async (item: AlistAudioItem): Promise<LocalPlaylistTrackRecord> => {
     if (!config?.url) throw new Error("Alist 未配置");
 
-    const fileDetail = await musicRoomApi.getAlistFile({
+    const fileDetail = await soqaroApi.getAlistFile({
       url: config.url,
       path: item.path,
       token: config.token
     });
 
-    const streamUrl = musicRoomApi.getAlistStreamUrl(fileDetail.rawUrl);
+    const streamUrl = soqaroApi.getAlistStreamUrl(fileDetail.rawUrl);
 
     // Try to fetch LRC lyrics if available
     let lyrics: string | null = null;
     if (item.lrcPath) {
       try {
-        const lrcDetail = await musicRoomApi.getAlistFile({
+        const lrcDetail = await soqaroApi.getAlistFile({
           url: config.url,
           path: item.lrcPath,
           token: config.token
         });
-        const lrcRes = await fetch(musicRoomApi.getAlistStreamUrl(lrcDetail.rawUrl));
+        const lrcRes = await fetch(soqaroApi.getAlistStreamUrl(lrcDetail.rawUrl));
         if (lrcRes.ok) {
           lyrics = await lrcRes.text();
         }

@@ -1,4 +1,4 @@
-import "reflect-metadata";
+﻿import "reflect-metadata";
 import dns from "node:dns";
 import { Logger } from "@nestjs/common";
 
@@ -65,7 +65,7 @@ async function bootstrap() {
   app.enableShutdownHooks();
   const port = Number(process.env.PORT ?? 3001);
   await app.listen(port);
-  Logger.log(`Music Room server listening on port ${port}`);
+  Logger.log(`Soqaro server listening on port ${port}`);
 }
 
 bootstrap().catch((error) => {

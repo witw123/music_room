@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
-import type { ProviderPlaylistDetail } from "@music-room/shared";
+import type { ProviderPlaylistDetail } from "@soqaro/shared";
 import { Button } from "@/components/ui/button";
 import {
   ProviderAlbumTrackTable,

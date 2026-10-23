@@ -1,5 +1,5 @@
 {
-  "extends": "@music-room/config-typescript/nestjs.json",
+  "extends": "@soqaro/config-typescript/nestjs.json",
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": "./src",

@@ -14,7 +14,7 @@
 - [03 · 上传流水线重构](./03-track-uploads.md)
 - [04 · 房间缓存下载器重构](./04-manual-cache-downloader.md)
 - [05 · 房间实时连接重构](./05-room-realtime-connection.md)
-- [06 · 顶层组件编排重构](./06-music-room-app.md)
+- [06 · 顶层组件编排重构](./06-soqaro-app.md)
 
 这些文档保留文件级背景，具体实现和协议以 `apps/**`、`packages/shared/**` 以及 `docs/architecture/**` 为准。
 

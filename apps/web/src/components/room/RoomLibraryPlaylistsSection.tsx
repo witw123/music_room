@@ -1,4 +1,4 @@
-/* eslint-disable @next/next/no-img-element */
+﻿/* eslint-disable @next/next/no-img-element */
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -9,10 +9,10 @@ import type {
   ProviderTrackCandidate,
   QqMusicTrackCandidate,
   TrackMeta
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import { Button } from "@/components/ui/button";
-import { formatDuration } from "@/lib/domain/music-room-ui";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import { formatDuration } from "@/lib/domain/soqaro-ui";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 import type { CachedLibraryTrack } from "@/features/library/audio-utils";
 import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
 import {
@@ -96,18 +96,18 @@ function getRoomPlaylistSource(playlist: Playlist): RoomPlaylistSource | null {
 async function fetchSourceTracks(source: RoomPlaylistSource): Promise<ProviderTrack[]> {
   try {
     if (source.type === "bilibili") {
-      const detail = await musicRoomApi.getBilibiliVideoParts(source.bvid);
+      const detail = await soqaroApi.getBilibiliVideoParts(source.bvid);
       return detail.parts;
     }
     if (source.type === "album") {
       const detail = source.provider === "netease"
-        ? await musicRoomApi.getNeteaseAlbum(source.albumId)
-        : await musicRoomApi.getQqMusicAlbum(source.albumId);
+        ? await soqaroApi.getNeteaseAlbum(source.albumId)
+        : await soqaroApi.getQqMusicAlbum(source.albumId);
       return detail.tracks;
     }
     const detail = source.provider === "netease"
-      ? await musicRoomApi.getNeteasePlaylist(source.playlistId)
-      : await musicRoomApi.getQqMusicPlaylist(source.playlistId);
+      ? await soqaroApi.getNeteasePlaylist(source.playlistId)
+      : await soqaroApi.getQqMusicPlaylist(source.playlistId);
     return detail.tracks;
   } catch {
     return [];

@@ -1,11 +1,11 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
-import type { PersonalizationExclusion, PlaybackMode } from "@music-room/shared";
+import type { PersonalizationExclusion, PlaybackMode } from "@soqaro/shared";
 import {
   ChevronLeft,
   ChevronRight,
@@ -27,7 +27,7 @@ import { AboutSettingsSection } from "./AboutSettingsSection";
 import { SettingRow, SettingsSection } from "./SettingRow";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 import { personalizationChangedEvent } from "@/features/personalization/use-personalization-reporter";
 import {
   getDefaultAppSettings,
@@ -157,7 +157,7 @@ export function SettingsPage() {
   const router = useRouter();
   const authEntryHref = buildWorkspaceAuthHref({ redirectTo: "/app/profile" });
   const { activeSession, hydrated, clearIdentity } = useSessionIdentity({
-    sessionStorageKey: "music-room-session",
+    sessionStorageKey: "soqaro-session",
     initialStatusMessage: ""
   });
   const settings = useAppSettings();
@@ -170,7 +170,7 @@ export function SettingsPage() {
   );
   const { data: recommendationExclusions = [] } = useQuery({
     queryKey: exclusionsQueryKey,
-    queryFn: ({ signal }) => musicRoomApi.listPersonalizationExclusions(signal),
+    queryFn: ({ signal }) => soqaroApi.listPersonalizationExclusions(signal),
     enabled: Boolean(activeSession)
   });
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermissionState>("default");
@@ -260,7 +260,7 @@ export function SettingsPage() {
       destructive: true,
       onConfirm: async () => {
         try {
-          await musicRoomApi.clearPersonalizationProfile();
+          await soqaroApi.clearPersonalizationProfile();
           setStatusMessage("听歌画像已重置");
         } catch (error) {
           setStatusMessage(error instanceof Error ? error.message : "听歌画像重置失败。");
@@ -273,7 +273,7 @@ export function SettingsPage() {
 
   const handleLogout = useCallback(async () => {
     try {
-      await musicRoomApi.logout();
+      await soqaroApi.logout();
     } catch {
       // Clear the local session even when the server cannot be reached.
     }
@@ -460,7 +460,7 @@ export function SettingsPage() {
                 onClick={() => {
                   notifyTrackChange(
                     {
-                      title: "Music Room 测试通知",
+                      title: "Soqaro 测试通知",
                       artist: "系统通知与推送工作正常 🎵",
                       artworkUrl: "/icons/icon-192.png"
                     },
@@ -1000,13 +1000,13 @@ export function SettingsPage() {
       categoryId: "network",
       sectionTitle: "隐私与画像数据",
       label: "重置听歌画像",
-      description: "清除当前账号在 Music Room 内产生的品味与推荐反馈，不会删除歌曲、收藏或缓存。",
+      description: "清除当前账号在 Soqaro 内产生的品味与推荐反馈，不会删除歌曲、收藏或缓存。",
       keywords: ["重置画像", "听歌画像", "推荐画像", "算法模型", "品味", "reset profile"],
       render: () => (
         <SettingRow
           key="listeningProfile"
           label="重置听歌画像"
-          description="清除当前账号在 Music Room 内产生的品味与推荐反馈，不会删除歌曲、收藏或缓存。"
+          description="清除当前账号在 Soqaro 内产生的品味与推荐反馈，不会删除歌曲、收藏或缓存。"
         >
           <Button onClick={() => void resetListeningProfile()} size="sm" type="button" variant="outline">
             重置画像
@@ -1030,7 +1030,7 @@ export function SettingsPage() {
                     <Button
                       key={`${item.kind}:${item.key}`}
                       onClick={() =>
-                        void musicRoomApi
+                        void soqaroApi
                           .removePersonalizationExclusion(item.kind, item.key)
                           .then(() => {
                             queryClient.setQueryData<PersonalizationExclusion[]>(
@@ -1074,7 +1074,7 @@ export function SettingsPage() {
       id: "aboutSection",
       categoryId: "about",
       sectionTitle: "版本与客户端信息",
-      label: "关于 Music Room 与版本更新",
+      label: "关于 Soqaro 与版本更新",
       description: "查看当前版本、运行环境平台、检查新版本与更新日志。",
       keywords: ["关于", "版本", "更新", "检测更新", "更新日志", "平台", "开源", "github", "about", "version", "update"],
       render: () => <AboutSettingsSection key="aboutSection" />

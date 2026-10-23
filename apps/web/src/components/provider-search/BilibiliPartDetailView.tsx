@@ -1,8 +1,8 @@
-"use client";
+﻿"use client";
 
-import type { BilibiliTrackCandidate } from "@music-room/shared";
+import type { BilibiliTrackCandidate } from "@soqaro/shared";
 import { Button } from "@/components/ui/button";
-import { formatDuration } from "@/lib/domain/music-room-ui";
+import { formatDuration } from "@/lib/domain/soqaro-ui";
 import { MediaArtwork } from "@/components/ui/media-artwork";
 import { PlayIcon, ChevronLeftIcon, HeartIcon, ListMusicIcon } from "@/components/icons/DiscoverIcons";
 import { Icon } from "./search-ui-primitives";

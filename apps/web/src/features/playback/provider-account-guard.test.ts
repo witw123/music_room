@@ -1,17 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
 import { checkAnyProviderAccountBound } from "./provider-account-guard";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 
 describe("provider-account-guard", () => {
   it("returns bound: false when both netease and qqmusic are disconnected", async () => {
-    vi.spyOn(musicRoomApi, "getNeteaseAccount").mockResolvedValue({
+    vi.spyOn(soqaroApi, "getNeteaseAccount").mockResolvedValue({
       connected: false,
       neteaseUserId: null,
       nickname: null,
       avatarUrl: null,
       lastValidatedAt: null
     });
-    vi.spyOn(musicRoomApi, "getQqMusicAccount").mockResolvedValue({
+    vi.spyOn(soqaroApi, "getQqMusicAccount").mockResolvedValue({
       connected: false,
       qqMusicUserId: null,
       nickname: null,
@@ -26,14 +26,14 @@ describe("provider-account-guard", () => {
   });
 
   it("returns bound: true when netease is connected", async () => {
-    vi.spyOn(musicRoomApi, "getNeteaseAccount").mockResolvedValue({
+    vi.spyOn(soqaroApi, "getNeteaseAccount").mockResolvedValue({
       connected: true,
       neteaseUserId: "12345",
       nickname: "NeteaseUser",
       avatarUrl: null,
       lastValidatedAt: null
     });
-    vi.spyOn(musicRoomApi, "getQqMusicAccount").mockResolvedValue({
+    vi.spyOn(soqaroApi, "getQqMusicAccount").mockResolvedValue({
       connected: false,
       qqMusicUserId: null,
       nickname: null,
@@ -48,14 +48,14 @@ describe("provider-account-guard", () => {
   });
 
   it("returns bound: true when qqmusic is connected", async () => {
-    vi.spyOn(musicRoomApi, "getNeteaseAccount").mockResolvedValue({
+    vi.spyOn(soqaroApi, "getNeteaseAccount").mockResolvedValue({
       connected: false,
       neteaseUserId: null,
       nickname: null,
       avatarUrl: null,
       lastValidatedAt: null
     });
-    vi.spyOn(musicRoomApi, "getQqMusicAccount").mockResolvedValue({
+    vi.spyOn(soqaroApi, "getQqMusicAccount").mockResolvedValue({
       connected: true,
       qqMusicUserId: "qq_999",
       nickname: "QQUser",

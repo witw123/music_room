@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus, Injectable } from "@nestjs/common";
+﻿import { HttpException, HttpStatus, Injectable } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import type {
   ProviderAlbumDetail,
@@ -13,8 +13,8 @@ import type {
   ProviderSearchSuggestionListResponse,
   QqMusicSearchResponse,
   QqMusicTrackCandidate
-} from "@music-room/shared";
-import { createApiErrorResponse, errorCodes } from "@music-room/shared";
+} from "@soqaro/shared";
+import { createApiErrorResponse, errorCodes } from "@soqaro/shared";
 import { RedisService } from "../../../infra/redis/redis.service";
 import { fetchProviderUrl } from "../provider-fetch";
 import { ProviderRateLimiter } from "../provider-rate-limiter";

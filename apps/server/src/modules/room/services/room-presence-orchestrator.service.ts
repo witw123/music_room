@@ -1,5 +1,5 @@
-import { Injectable, Logger } from "@nestjs/common";
-import type { RoomMember } from "@music-room/shared";
+﻿import { Injectable, Logger } from "@nestjs/common";
+import type { RoomMember } from "@soqaro/shared";
 import type { RoomRecord } from "../room.types";
 import { assertMember, incrementPresenceRevision, incrementRoomRevision } from "../room-mutation";
 import { RoomActivityService } from "./room-activity.service";
@@ -205,7 +205,7 @@ export class RoomPresenceOrchestratorService {
       return operation();
     }
 
-    const lockKey = `music-room:lock:room:${roomId}`;
+    const lockKey = `soqaro:lock:room:${roomId}`;
     const deadline = Date.now() + this.roomLockWaitMs;
     let token: string | null = null;
     while (!token && Date.now() < deadline) {

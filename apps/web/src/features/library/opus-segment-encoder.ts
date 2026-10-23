@@ -21,7 +21,7 @@ export class OpusSegmentEncoder {
     this.timeoutMs = options?.timeoutMs ?? 30_000;
     this.worker = new Worker(new URL("./opus-segment-encoder.worker.ts", import.meta.url), {
       type: "module",
-      name: "music-room-opus-encoder"
+      name: "soqaro-opus-encoder"
     });
     this.worker.onmessage = (event: MessageEvent<EncodeResponse>) => {
       const pending = this.pending.get(event.data.id);

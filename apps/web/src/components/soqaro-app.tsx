@@ -22,7 +22,7 @@ import { useRoomSegmentedPlaybackRuntime } from "@/features/room/hooks/use-room-
 import { useRoomTrackAssetAutoPreparation } from "@/features/room/playback/room-track-asset-preparation";
 import { getCurrentRoomMemberPermissions, isRoomHost } from "@/features/room/room-permissions";
 import type { Route } from "next";
-import type { RoomPlaybackReadinessInputPayload } from "@music-room/shared";
+import type { RoomPlaybackReadinessInputPayload } from "@soqaro/shared";
 import {
   awayRoomChangeEvent,
   clearAwayRoomId,
@@ -33,20 +33,20 @@ import {
   storeAwayRoomId
 } from "@/lib/domain/away-room";
 
-const lastRoomStorageKey = "music-room-last-room";
-const peerStorageKey = "music-room-peer-id";
+const lastRoomStorageKey = "soqaro-last-room";
+const peerStorageKey = "soqaro-peer-id";
 
-type MusicRoomAppProps = {
+type SoqaroAppProps = {
   workspaceOnly?: boolean;
   initialRoomId?: string | null;
   backgroundOnly?: boolean;
 };
 
-export function MusicRoomApp({
+export function SoqaroApp({
   workspaceOnly = true,
   initialRoomId = null,
   backgroundOnly = false
-}: MusicRoomAppProps) {
+}: SoqaroAppProps) {
   const router = useRouter();
   const appEntries = useRoomAppEntries({
     initialRoomId
@@ -131,7 +131,7 @@ export function MusicRoomApp({
     refreshSession
   } = useSessionIdentity({
     initialStatusMessage: "",
-    sessionStorageKey: "music-room-session"
+    sessionStorageKey: "soqaro-session"
   });
 
   useEffect(() => {

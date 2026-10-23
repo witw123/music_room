@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useMemo } from "react";
 import type {
@@ -6,7 +6,7 @@ import type {
   PeerDiagnosticsSnapshot,
   PeerRecentEvent,
   RoomSnapshot
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import type { LocalMemberPanelState } from "@/components/room/MembersPanel";
 import {
   dedupePeerDiagnostics,

@@ -1,7 +1,7 @@
-# 接口文档
+﻿# 接口文档
 
 最后更新：`2026-09-13`
-当前版本：`0.3.2`
+当前版本：`1.0.0`
 
 ## 适用范围
 
@@ -52,7 +52,7 @@ pnpm dev
 - 播放控制依赖 Realtime 可用，Redis 故障时会直接失败
 - 曲目上传请求同步元数据和资产清单，音频文件本体保留在上传者浏览器
 - IndexedDB 只保存当前用户自己的上传资产
-- WebRTC `music-room-control` DataChannel 只承载控制/健康协调；音频通过独立 RTP Opus 媒体 Track
+- WebRTC `soqaro-control` DataChannel 只承载控制/健康协调；音频通过独立 RTP Opus 媒体 Track
 - 房间不提供音频资产下载、成员间缓存同步或播放 fallback
 - 成员与诊断页面用于查看 AudioContext、buffer、underrun、limiter、RTP、ICE 和 Track identity
 - 房间工作区当前使用 `Library / My Playlists / Members`；共享队列由房间状态和播放器承载

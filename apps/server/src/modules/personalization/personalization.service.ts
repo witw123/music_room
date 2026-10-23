@@ -1,4 +1,4 @@
-import { Injectable, ServiceUnavailableException } from "@nestjs/common";
+﻿import { Injectable, ServiceUnavailableException } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import type {
   PersonalizationFeedback,
@@ -11,7 +11,7 @@ import type {
   ProviderTrackCandidate,
   RecordPersonalizationEvent,
   TasteEntityKind
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import { PrismaService } from "../../infra/prisma/prisma.service";
 import type { Prisma } from "../../generated/prisma";
 import { RedisService } from "../../infra/redis/redis.service";
@@ -340,7 +340,7 @@ export class PersonalizationService {
 
     const dailyRadar = query.surface === "discover" && dailyRadarTracks.length > 0 ? {
       date: new Date().toISOString().slice(0, 10),
-      title: "Music Room 每日心动雷达",
+      title: "Soqaro 每日心动雷达",
       subtitle: `根据你最近的品味定制，已融合 ${summaryGenres.length ? summaryGenres.join("、") : "流行与常听"} 风格`,
       tracks: dailyRadarTracks,
       summaryGenres
@@ -384,8 +384,8 @@ export class PersonalizationService {
 
   async getTrackRadio(
     userId: string,
-    query: import("@music-room/shared").TrackRadioQuery
-  ): Promise<import("@music-room/shared").PersonalizationTrack[]> {
+    query: import("@soqaro/shared").TrackRadioQuery
+  ): Promise<import("@soqaro/shared").PersonalizationTrack[]> {
     this.assertDatabaseAvailable();
     const seed = query.seedTrack;
     const providers = await this.getBoundProviders(userId);
@@ -462,7 +462,7 @@ export class PersonalizationService {
 
   async bootstrapColdStartProfile(
     userId: string,
-    input: import("@music-room/shared").ColdStartTasteInput
+    input: import("@soqaro/shared").ColdStartTasteInput
   ): Promise<{ ok: boolean }> {
     this.assertDatabaseAvailable();
     const now = new Date();

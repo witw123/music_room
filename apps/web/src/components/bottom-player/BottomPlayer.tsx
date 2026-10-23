@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import type { PlaybackSnapshot, ProviderTrackCandidate, QueueItem, RoomMember, TrackMeta } from "@music-room/shared";
+import type { PlaybackSnapshot, ProviderTrackCandidate, QueueItem, RoomMember, TrackMeta } from "@soqaro/shared";
 import {
   DesktopBottomPlayerLayout,
   MobileBottomPlayerLayout
@@ -219,7 +219,7 @@ function BottomPlayerBase({
   const artworkPalette = useArtworkPalette(artworkUrl);
   const playerStyle = usePlayerStyle();
   const { activeSession } = useSessionIdentity({
-    sessionStorageKey: "music-room-session",
+    sessionStorageKey: "soqaro-session",
     initialStatusMessage: ""
   });
   usePersonalizationReporter({

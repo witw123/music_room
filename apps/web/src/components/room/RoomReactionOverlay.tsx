@@ -1,8 +1,8 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { Socket } from "socket.io-client";
-import type { RoomReactionPayload } from "@music-room/shared";
+import type { RoomReactionPayload } from "@soqaro/shared";
 import {
   HeartIcon,
   ApplauseIcon,
@@ -53,7 +53,7 @@ const reactionConfig = {
   }
 } as const;
 
-export const localReactionDispatchEvent = "music-room:local-reaction";
+export const localReactionDispatchEvent = "soqaro:local-reaction";
 
 export function dispatchLocalReaction(payload: {
   reaction: ReactionType;

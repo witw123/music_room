@@ -29,8 +29,8 @@ pub fn init(app: &AppHandle) -> Result<(), String> {
     let hwnd = None;
 
     let config = PlatformConfig {
-        dbus_name: "musicroom",
-        display_name: "Music Room",
+        dbus_name: "soqaro",
+        display_name: "Soqaro",
         hwnd,
     };
     let mut controls = MediaControls::new(config).map_err(|error| error.to_string())?;

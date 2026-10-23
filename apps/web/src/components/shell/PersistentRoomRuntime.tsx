@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
@@ -21,8 +21,8 @@ import { StorageRootGate } from "./StorageRootGate";
 
 // 房间运行时(实时引擎/P2P/音频编码)体量很大且只在进房后渲染,
 // 动态加载让落地页/发现页/登录页等无需下载这 ~1MB 的运行时。
-const MusicRoomApp = dynamic(
-  () => import("@/components/music-room-app").then((mod) => mod.MusicRoomApp),
+const SoqaroApp = dynamic(
+  () => import("@/components/soqaro-app").then((mod) => mod.SoqaroApp),
   { ssr: false }
 );
 const DesktopLyricsOverlay = dynamic(
@@ -41,7 +41,7 @@ function RoomRuntime({ children }: { children: ReactNode }) {
     (typeof window !== "undefined" && window.location.search.includes("window=desktop-lyrics"));
   const [awayRoomId, setAwayRoomId] = useState<string | null>(null);
   const { activeSession } = useSessionIdentity({
-    sessionStorageKey: "music-room-session",
+    sessionStorageKey: "soqaro-session",
     initialStatusMessage: ""
   });
 
@@ -91,7 +91,7 @@ function RoomRuntime({ children }: { children: ReactNode }) {
           {children}
           {owner === "local" ? <AppPersistentPlayer /> : null}
           {runtimeRoomId ? (
-            <MusicRoomApp
+            <SoqaroApp
               backgroundOnly={!routeRoomId}
               initialRoomId={runtimeRoomId}
               workspaceOnly

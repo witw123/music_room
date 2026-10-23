@@ -1,4 +1,4 @@
-name: Server Web CI
+﻿name: Server Web CI
 
 on:
   push:
@@ -30,13 +30,13 @@ jobs:
       - run: node scripts/check-env-sync.mjs
       - run: pnpm lint
       - run: pnpm --filter @audio/opus-encode test
-      - run: pnpm --filter @music-room/shared build
-      - run: pnpm --filter @music-room/server typecheck
-      - run: pnpm --filter @music-room/web typecheck
-      - run: pnpm --filter @music-room/server test
-      - run: pnpm --filter @music-room/web test
-      - run: pnpm --filter @music-room/server build
-      - run: pnpm --filter @music-room/web build
+      - run: pnpm --filter @soqaro/shared build
+      - run: pnpm --filter @soqaro/server typecheck
+      - run: pnpm --filter @soqaro/web typecheck
+      - run: pnpm --filter @soqaro/server test
+      - run: pnpm --filter @soqaro/web test
+      - run: pnpm --filter @soqaro/server build
+      - run: pnpm --filter @soqaro/web build
 
   docker-images:
     if: github.event_name == 'push'
@@ -61,7 +61,7 @@ jobs:
       - id: server-meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository_owner }}/music-room-server
+          images: ghcr.io/${{ github.repository_owner }}/soqaro-server
           tags: |
             type=ref,event=branch
             type=sha,format=long
@@ -70,7 +70,7 @@ jobs:
       - id: web-meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository_owner }}/music-room-web
+          images: ghcr.io/${{ github.repository_owner }}/soqaro-web
           tags: |
             type=ref,event=branch
             type=sha,format=long
@@ -141,8 +141,8 @@ jobs:
 
       - run: node scripts/check-toolchain.mjs
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @music-room/shared build
-      - run: pnpm --filter @music-room/web exec playwright install --with-deps chromium
+      - run: pnpm --filter @soqaro/shared build
+      - run: pnpm --filter @soqaro/web exec playwright install --with-deps chromium
       - run: pnpm e2e
         env:
           REDIS_URL: redis://127.0.0.1:6379/15

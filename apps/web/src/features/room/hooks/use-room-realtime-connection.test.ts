@@ -2,7 +2,7 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import type { PlaybackSnapshot, RoomSnapshot } from "@music-room/shared";
+import type { PlaybackSnapshot, RoomSnapshot } from "@soqaro/shared";
 import {
   buildRoomSubscribePayload,
   createRoomRealtimeEventGate,

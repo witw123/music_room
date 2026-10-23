@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { memo, useState } from "react";
 import type {
@@ -9,7 +9,7 @@ import type {
   QqMusicTrackCandidate,
   RoomMember,
   TrackMeta
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import type { CachedLibraryTrack, UploadedTrack } from "@/features/library/audio-utils";
 import { TrackListSection } from "./TrackListSection";
 import { RoomLibraryPlaylistsSection } from "./RoomLibraryPlaylistsSection";

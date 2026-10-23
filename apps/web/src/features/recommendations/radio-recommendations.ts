@@ -1,5 +1,5 @@
-import type { ProviderTrackCandidate, RoomSnapshot } from "@music-room/shared";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+﻿import type { ProviderTrackCandidate, RoomSnapshot } from "@soqaro/shared";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 
 export type RadioRecommendationCandidate = {
   candidate: ProviderTrackCandidate;
@@ -20,7 +20,7 @@ export async function getRadioRecommendationCandidates(input: {
   const currentTrack = currentTrackId
     ? input.snapshot.tracks.find((track) => track.id === currentTrackId) ?? null
     : null;
-  const response = await musicRoomApi.getPersonalizationRecommendations({
+  const response = await soqaroApi.getPersonalizationRecommendations({
     surface: "radio",
     provider: input.provider,
     currentTrackKey: currentTrack?.sourceRef ? `${currentTrack.sourceRef.provider}:${currentTrack.sourceRef.trackId}` : undefined,

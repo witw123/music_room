@@ -1,8 +1,8 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+﻿import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   PlaybackAssetManifest,
   PlaybackSnapshot
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import type { AudioAssetUnitRecord } from "@/features/library/indexeddb";
 import { roomAudioOutput } from "./room-audio-output";
 import { SegmentedOpusEngine } from "./segmented-opus-engine";

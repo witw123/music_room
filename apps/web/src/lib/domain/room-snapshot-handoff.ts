@@ -1,8 +1,8 @@
-"use client";
+﻿"use client";
 
-import type { RoomJoinResponse, RoomSnapshot } from "@music-room/shared";
+import type { RoomJoinResponse, RoomSnapshot } from "@soqaro/shared";
 
-const roomSnapshotHandoffStorageKey = "music-room-pending-room-snapshot";
+const roomSnapshotHandoffStorageKey = "soqaro-pending-room-snapshot";
 const roomSnapshotHandoffTtlMs = 60_000;
 
 type RoomSnapshotHandoffPayload = {

@@ -1,19 +1,19 @@
-"use client";
+﻿"use client";
 
 import type {
   RoomSnapshot,
   TrackLoudness,
   TrackMeta
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import {
   deleteCachedLibraryTrackFile,
   getCachedLibraryTrack,
   upsertCachedLibraryTrack
 } from "@/features/library/indexeddb";
 import {
-  musicRoomApi,
+  soqaroApi,
   resolveDownloadedAudioMimeType
-} from "@/lib/network/music-room-api";
+} from "@/lib/network/soqaro-api";
 import { saveCachedAudioFileToLocalDirectory } from "@/features/library/local-audio-storage";
 import {
   buildCachedLibraryTrackUpsertRecord,
@@ -134,12 +134,12 @@ async function importOfflineProviderTrack(input: {
       : `成员不在线，正在从${source.label}下载并缓存《${track.title}》…`);
     const downloaded =
       source.provider === "netease"
-        ? await musicRoomApi.downloadNeteaseTrack(source.trackId, "exhigh", signal)
+        ? await soqaroApi.downloadNeteaseTrack(source.trackId, "exhigh", signal)
         : source.provider === "qqmusic"
-        ? await musicRoomApi.downloadQqMusicTrack(source.trackId, "exhigh", signal)
+        ? await soqaroApi.downloadQqMusicTrack(source.trackId, "exhigh", signal)
         : source.provider === "bilibili"
-        ? await musicRoomApi.downloadBilibiliTrack(source.trackId, signal)
-        : await fetch(musicRoomApi.getAlistStreamUrl(source.trackId), { signal }).then(async (res) => ({
+        ? await soqaroApi.downloadBilibiliTrack(source.trackId, signal)
+        : await fetch(soqaroApi.getAlistStreamUrl(source.trackId), { signal }).then(async (res) => ({
             blob: await res.blob(),
             contentType: res.headers.get("content-type") ?? "audio/mpeg"
           }));
@@ -240,8 +240,8 @@ async function resolveProviderLyrics(source: OfflineProviderSource) {
   }
   try {
     const response = source.provider === "netease"
-      ? await musicRoomApi.getNeteaseLyrics(source.trackId)
-      : await musicRoomApi.getQqMusicLyrics(source.trackId);
+      ? await soqaroApi.getNeteaseLyrics(source.trackId)
+      : await soqaroApi.getQqMusicLyrics(source.trackId);
     return response;
   } catch {
     return null;

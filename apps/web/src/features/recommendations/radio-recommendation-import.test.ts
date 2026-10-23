@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import type { RoomSnapshot } from "@music-room/shared";
+﻿import { afterEach, describe, expect, it, vi } from "vitest";
+import type { RoomSnapshot } from "@soqaro/shared";
 import { importRadioRecommendationCandidates } from "./radio-recommendation-import";
 import type { RadioRecommendationCandidate } from "./radio-recommendations";
 
@@ -8,8 +8,8 @@ const api = vi.hoisted(() => ({
   insertRadioAutopilotNextTrack: vi.fn()
 }));
 
-vi.mock("@/lib/network/music-room-api", () => ({
-  musicRoomApi: api
+vi.mock("@/lib/network/soqaro-api", () => ({
+  soqaroApi: api
 }));
 
 describe("radio recommendation import", () => {

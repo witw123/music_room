@@ -5,7 +5,7 @@ import "./globals.css";
 
 const themeInitScript = `(() => {
   try {
-    const raw = localStorage.getItem("music-room-settings-v1");
+    const raw = localStorage.getItem("soqaro-settings-v1");
     const value = raw ? JSON.parse(raw) : null;
     const validThemes = ["system","dark","light","sage-dark","sage-light","obsidian","midnight-dark","midnight-light","paper"];
     const preference = value && validThemes.includes(value.theme) ? value.theme : "dark";
@@ -120,9 +120,9 @@ const shellErrorReporterScript = `(() => {
 })();`;
 
 export const metadata: Metadata = {
-  title: "Music Room",
-  description: "与好友实时同步收听本地高保真音乐。Music Room 通过房间状态同步和 WebRTC RTP Opus 媒体链路，提供浏览器优先的协作听歌体验。",
-  keywords: ["Music Room", "音乐房", "一起听歌", "共享队列", "高保真音乐", "实时协作"],
+  title: "Soqaro",
+  description: "与好友实时同步收听本地高保真音乐。Soqaro 通过房间状态同步和 WebRTC RTP Opus 媒体链路，提供浏览器优先的协作听歌体验。",
+  keywords: ["Soqaro", "音乐房", "一起听歌", "共享队列", "高保真音乐", "实时协作"],
   manifest: "/manifest.webmanifest",
   referrer: "no-referrer"
 };

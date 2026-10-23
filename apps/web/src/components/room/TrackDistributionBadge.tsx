@@ -1,8 +1,8 @@
-"use client";
+﻿"use client";
 
 import { useMemo, useRef, useState } from "react";
-import type { RoomMember, RoomTrackDistributionState, TrackMeta } from "@music-room/shared";
-import { resolveTrackDistributionStatus } from "@music-room/shared";
+import type { RoomMember, RoomTrackDistributionState, TrackMeta } from "@soqaro/shared";
+import { resolveTrackDistributionStatus } from "@soqaro/shared";
 import { AnchoredDialog, getAnchoredDialogAnchor, type AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
 import {
   ensureRoomTrackDistributionAsset,

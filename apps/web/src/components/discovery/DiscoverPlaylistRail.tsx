@@ -78,7 +78,7 @@ export function DiscoverPlaylistRail({
               {playlist.title}
             </p>
             <p className="mt-0.5 truncate text-[11px] text-foreground-muted" title={playlist.description ?? playlist.creatorName ?? ""}>
-              {playlist.description || (playlist.providerPlaylistId.startsWith("music-room-curated:") ? "精选歌单" : `${providerLabel(playlist.provider)}${playlist.creatorName ? ` · ${playlist.creatorName}` : ""}`)}
+              {playlist.description || (playlist.providerPlaylistId.startsWith("soqaro-curated:") ? "精选歌单" : `${providerLabel(playlist.provider)}${playlist.creatorName ? ` · ${playlist.creatorName}` : ""}`)}
             </p>
           </div>
         );

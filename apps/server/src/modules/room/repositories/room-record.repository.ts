@@ -1,7 +1,7 @@
-import { RedisService } from "../../../infra/redis/redis.service";
+﻿import { RedisService } from "../../../infra/redis/redis.service";
 import { RoomTerminationStore } from "./room-termination.store";
 import { RoomTrackDeletionStore } from "./room-track-deletion.store";
-import type { RoomTrackDeletion } from "@music-room/shared";
+import type { RoomTrackDeletion } from "@soqaro/shared";
 import { PrismaService } from "../../../infra/prisma/prisma.service";
 import {
   deserializeRoomRecord,
@@ -430,7 +430,7 @@ export class RoomRecordRepository {
   }
 
   sessionRecentRoomKey(sessionId: string) {
-    return `music-room:session:${sessionId}:recent-room`;
+    return `soqaro:session:${sessionId}:recent-room`;
   }
 
   /**
@@ -528,11 +528,11 @@ export class RoomRecordRepository {
   }
 
   private roomCacheKey(roomId: string) {
-    return `music-room:room:${roomId}`;
+    return `soqaro:room:${roomId}`;
   }
 
   private joinCodeCacheKey(joinCode: string) {
-    return `music-room:join-code:${joinCode}`;
+    return `soqaro:join-code:${joinCode}`;
   }
 
   private isRedisAvailable() {

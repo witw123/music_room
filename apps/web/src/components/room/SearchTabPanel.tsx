@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { memo } from "react";
 import type {
@@ -6,7 +6,7 @@ import type {
   NeteaseTrackCandidate,
   QqMusicTrackCandidate,
   TrackMeta
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import { RoomProviderTrackSearch } from "./RoomProviderTrackSearch";
 
 export type SearchTabPanelProps = {

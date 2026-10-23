@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useReducer, type SetStateAction } from "react";
 import type {
@@ -7,7 +7,7 @@ import type {
   RoomDirectoryItem,
   Playlist,
   RoomPlaybackReadinessPayload
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import type { PlaybackStartRequest } from "@/features/playback/playback-start-request";
 
 type RoomRecoveryPhase =

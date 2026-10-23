@@ -1,9 +1,9 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition, type PointerEvent as ReactPointerEvent } from "react";
 import { Check, CheckSquare, GripVertical, ListMusic, Play, Trash2, X } from "lucide-react";
-import type { QueueItem, RoomMember, TrackMeta } from "@music-room/shared";
-import { formatDuration } from "@/lib/domain/music-room-ui";
+import type { QueueItem, RoomMember, TrackMeta } from "@soqaro/shared";
+import { formatDuration } from "@/lib/domain/soqaro-ui";
 import { Button } from "@/components/ui/button";
 import { useBackHandler } from "@/lib/desktop/use-back-handler";
 import { getArtworkSourceUrl } from "./artwork-colors";

@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   RepositoryDirectoryHandle as FileSystemDirectoryHandle,
   RepositoryFileHandle as FileSystemFileHandle
 } from "./directory-handle";
@@ -40,10 +40,10 @@ export type LocalAudioStorageStats = {
 };
 
 export const localOtherFilePrefixes = [
-  ".music-room/library/artwork/",
-  ".music-room/library/lyrics/",
-  ".music-room/cache/artwork/",
-  ".music-room/cache/previews/"
+  ".soqaro/library/artwork/",
+  ".soqaro/library/lyrics/",
+  ".soqaro/cache/artwork/",
+  ".soqaro/cache/previews/"
 ];
 
 export type SelectedLocalAudioFile = {

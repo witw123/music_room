@@ -1,11 +1,11 @@
-import type {
+﻿import type {
   DailyRadarResponse,
   ProviderPlaylistSummary,
   ProviderTrackCandidate
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import { favoriteTrackToCandidate } from "@/features/favorites/use-favorite-tracks";
 import { listMergedLocalPlaylistTracks } from "@/features/playlist/local-playlist";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 import type {
   DiscoverPlaylistRecommendation,
   DiscoverTrackRecommendation,
@@ -87,10 +87,10 @@ export async function generateLocalDiscoveryRecommendations(input?: {
   // 1. 并发获取用户本地资产与持久化数据
   const [localRecords, favoriteTracks, myPlaylists, bilibiliRanking] = await Promise.all([
     listMergedLocalPlaylistTracks().catch(() => []),
-    musicRoomApi.listFavoriteTracks(input?.signal).catch(() => []),
-    musicRoomApi.listMyPlaylists(input?.signal).catch(() => []),
+    soqaroApi.listFavoriteTracks(input?.signal).catch(() => []),
+    soqaroApi.listMyPlaylists(input?.signal).catch(() => []),
     // 客户端直接向开放公开榜单拉取新热补充
-    musicRoomApi.getBilibiliRanking("3", input?.signal).catch(() => [])
+    soqaroApi.getBilibiliRanking("3", input?.signal).catch(() => [])
   ]);
 
   if (input?.signal?.aborted) {

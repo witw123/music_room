@@ -1,8 +1,8 @@
-"use client";
+﻿"use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ProviderArtistFavorite, ProviderArtistSummary } from "@music-room/shared";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import type { ProviderArtistFavorite, ProviderArtistSummary } from "@soqaro/shared";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 
 export function useFavoriteArtists(userId: string | null | undefined) {
   const queryClient = useQueryClient();
@@ -10,13 +10,13 @@ export function useFavoriteArtists(userId: string | null | undefined) {
 
   const query = useQuery<ProviderArtistFavorite[]>({
     queryKey,
-    queryFn: () => musicRoomApi.listFavoriteArtists(),
+    queryFn: () => soqaroApi.listFavoriteArtists(),
     enabled: Boolean(userId),
     staleTime: 60 * 1000
   });
 
   const saveMutation = useMutation({
-    mutationFn: (artist: ProviderArtistSummary) => musicRoomApi.saveFavoriteArtist(artist),
+    mutationFn: (artist: ProviderArtistSummary) => soqaroApi.saveFavoriteArtist(artist),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey });
     }
@@ -24,7 +24,7 @@ export function useFavoriteArtists(userId: string | null | undefined) {
 
   const deleteMutation = useMutation({
     mutationFn: ({ provider, providerArtistId }: { provider: ProviderArtistFavorite["provider"]; providerArtistId: string }) =>
-      musicRoomApi.deleteFavoriteArtist(provider as "netease" | "qqmusic", providerArtistId),
+      soqaroApi.deleteFavoriteArtist(provider as "netease" | "qqmusic", providerArtistId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey });
     }

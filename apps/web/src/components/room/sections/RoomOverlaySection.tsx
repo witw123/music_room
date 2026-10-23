@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
 import { memo } from "react";
-import type { TrackMeta } from "@music-room/shared";
+import type { TrackMeta } from "@soqaro/shared";
 import { AudioUnlockOverlay, MobileAppNavigation } from "@/components/shell";
 import { CachePlaybackPromptModal } from "@/components/room/CachePlaybackPromptModal";
 

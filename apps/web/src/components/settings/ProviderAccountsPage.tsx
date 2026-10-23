@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 import { PersonalOverview } from "./PersonalOverview";
 import { ListeningProfileOverview } from "./ListeningProfileOverview";
 import { RoomCenterOverview } from "@/components/room-home";
@@ -36,7 +36,7 @@ export function ProviderAccountsPage() {
   const redirectTo = "/app/profile";
   const authEntryHref = buildWorkspaceAuthHref({ redirectTo });
   const { activeSession, clearIdentity, hydrated } = useSessionIdentity({
-    sessionStorageKey: "music-room-session",
+    sessionStorageKey: "soqaro-session",
     initialStatusMessage: ""
   });
   const [activeTab, setActiveTab] = useState<ProfileTab>("taste");
@@ -44,7 +44,7 @@ export function ProviderAccountsPage() {
 
   async function handleLogout() {
     try {
-      await musicRoomApi.logout();
+      await soqaroApi.logout();
     } catch {
       // Clear the local session even when the server cannot be reached.
     }

@@ -71,7 +71,7 @@ describe("createRoomSocket", () => {
   });
 
   it("ignores stale production websocket env values when the current page is on a different non-local origin", async () => {
-    vi.stubEnv("NEXT_PUBLIC_WS_URL", "wss://music-room.example.test");
+    vi.stubEnv("NEXT_PUBLIC_WS_URL", "wss://soqaro.example.test");
     const { createRoomSocket } = await import("./ws-client");
 
     createRoomSocket();

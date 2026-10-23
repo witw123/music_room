@@ -1,4 +1,4 @@
-import {
+﻿import {
   HttpException,
   Injectable,
   Logger,
@@ -100,7 +100,7 @@ export class AbuseProtectionService {
   }
 
   private redisKey(scope: string, name: string, value: string) {
-    return `music-room:abuse:${scope.trim().toLowerCase()}:${name}:${hash(value)}`;
+    return `soqaro:abuse:${scope.trim().toLowerCase()}:${name}:${hash(value)}`;
   }
 
   private localKey(scope: string, name: string, value: string) {

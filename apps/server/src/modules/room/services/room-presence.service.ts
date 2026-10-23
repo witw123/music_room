@@ -1,4 +1,4 @@
-import type { RoomMember } from "@music-room/shared";
+﻿import type { RoomMember } from "@soqaro/shared";
 import { RedisService } from "../../../infra/redis/redis.service";
 
 type PresenceState = RoomMember["presenceState"];
@@ -225,6 +225,6 @@ export class RoomPresenceService {
   }
 
   private realtimePresenceKey(roomId: string, sessionId: string) {
-    return `music-room:presence:${roomId}:${sessionId}`;
+    return `soqaro:presence:${roomId}:${sessionId}`;
   }
 }

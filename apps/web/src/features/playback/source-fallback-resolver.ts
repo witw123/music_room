@@ -1,6 +1,6 @@
 import type { AudioQualityPreference } from "@/features/settings/settings-store";
 import { getAppSettings } from "@/features/settings/settings-store";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 import type { ProviderTrack } from "@/features/playlist/local-playlist";
 
 export type SupportedFallbackProvider = "netease" | "qqmusic" | "bilibili";
@@ -144,7 +144,7 @@ export async function resolveFallbackSource(input: {
       }> = [];
 
       if (provider === "netease") {
-        const res = await musicRoomApi.searchNeteaseTracks(query, { limit: 5 });
+        const res = await soqaroApi.searchNeteaseTracks(query, { limit: 5 });
         candidateList = (res.items || []).map((t) => ({
           providerTrackId: t.providerTrackId,
           title: t.title,
@@ -154,7 +154,7 @@ export async function resolveFallbackSource(input: {
           artworkUrl: t.artworkUrl
         }));
       } else if (provider === "qqmusic") {
-        const res = await musicRoomApi.searchQqMusicTracks(query, { limit: 5 });
+        const res = await soqaroApi.searchQqMusicTracks(query, { limit: 5 });
         candidateList = (res.items || []).map((t) => ({
           providerTrackId: t.providerTrackId,
           title: t.title,
@@ -164,7 +164,7 @@ export async function resolveFallbackSource(input: {
           artworkUrl: t.artworkUrl
         }));
       } else if (provider === "bilibili") {
-        const res = await musicRoomApi.searchBilibiliTracks(query, { pageSize: 5 });
+        const res = await soqaroApi.searchBilibiliTracks(query, { pageSize: 5 });
         candidateList = (res.items || []).map((t) => ({
           providerTrackId: t.providerTrackId,
           title: t.title,
@@ -229,12 +229,12 @@ export async function downloadTrackWithFallback(input: {
 
   const downloadDirect = async (prov: string, trackId: string) => {
     if (prov === "netease") {
-      return musicRoomApi.downloadNeteaseTrack(trackId, quality, signal);
+      return soqaroApi.downloadNeteaseTrack(trackId, quality, signal);
     }
     if (prov === "qqmusic") {
-      return musicRoomApi.downloadQqMusicTrack(trackId, quality, signal);
+      return soqaroApi.downloadQqMusicTrack(trackId, quality, signal);
     }
-    return musicRoomApi.downloadBilibiliTrack(trackId, signal);
+    return soqaroApi.downloadBilibiliTrack(trackId, signal);
   };
 
   // 1. Try Primary Download

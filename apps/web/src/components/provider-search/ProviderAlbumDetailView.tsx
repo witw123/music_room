@@ -1,14 +1,14 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import type {
   ProviderAlbumDetail,
   ProviderTrackCandidate
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import { Button } from "@/components/ui/button";
 import { FavoriteTrackButton } from "@/components/ui/FavoriteTrackButton";
 import { MobileTrackActionsMenu, type MobileTrackAction } from "@/components/ui/MobileTrackActionsMenu";
-import { formatDuration } from "@/lib/domain/music-room-ui";
+import { formatDuration } from "@/lib/domain/soqaro-ui";
 import { getAnchoredDialogAnchor, type AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
 import { MediaArtwork } from "@/components/ui/media-artwork";
 import {

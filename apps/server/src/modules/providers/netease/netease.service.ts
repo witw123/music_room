@@ -1,4 +1,4 @@
-import {
+﻿import {
   HttpException,
   HttpStatus,
   Injectable
@@ -17,11 +17,11 @@ import type {
   ProviderSearchSuggestionListResponse,
   NeteaseSearchResponse,
   NeteaseTrackCandidate
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import {
   createApiErrorResponse,
   errorCodes
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import { RedisService } from "../../../infra/redis/redis.service";
 import { fetchProviderUrl } from "../provider-fetch";
 import { ProviderRateLimiter } from "../provider-rate-limiter";

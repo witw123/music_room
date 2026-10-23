@@ -1,4 +1,4 @@
-import {
+﻿import {
   Body,
   Controller,
   Headers,
@@ -11,7 +11,7 @@ import {
   UnauthorizedException
 } from "@nestjs/common";
 import { Logger } from "@nestjs/common";
-import { createApiErrorResponse, errorCodes, updatePlaybackRequestSchema } from "@music-room/shared";
+import { createApiErrorResponse, errorCodes, updatePlaybackRequestSchema } from "@soqaro/shared";
 import { parseRequestBody } from "../../common/validation/zod-validation";
 import { MetricsService } from "../../common/metrics/metrics.service";
 import { RedisService } from "../../infra/redis/redis.service";
@@ -59,7 +59,7 @@ export class PlaybackController {
       queueItemId?: string;
       playbackAssetId?: string;
       positionMs?: number;
-      playbackMode?: import("@music-room/shared").PlaybackMode;
+      playbackMode?: import("@soqaro/shared").PlaybackMode;
       actorPeerId?: string;
       expectedVersion?: number;
     }
@@ -218,11 +218,11 @@ export class PlaybackController {
 
       const [userCount, roomCount] = await Promise.all([
         this.redisService.incrementWithTtlMs(
-          `music-room:rate:playback:user:${userId}:${action}`,
+          `soqaro:rate:playback:user:${userId}:${action}`,
           windowMs
         ),
         this.redisService.incrementWithTtlMs(
-          `music-room:rate:playback:room:${roomId}:${action}`,
+          `soqaro:rate:playback:room:${roomId}:${action}`,
           windowMs
         )
       ]);

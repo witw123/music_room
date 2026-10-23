@@ -1,7 +1,6 @@
 {
-  "extends": "@music-room/config-typescript/nextjs.json",
+  "extends": "@soqaro/config-typescript/nextjs.json",
   "compilerOptions": {
-    
     "paths": {
       "@/*": [
         "./src/*"

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import {
   useEffect,
@@ -7,10 +7,10 @@ import {
   type MutableRefObject,
   type SetStateAction
 } from "react";
-import type { AuthSession, IceConfigResponse, RoomSnapshot } from "@music-room/shared";
+import type { AuthSession, IceConfigResponse, RoomSnapshot } from "@soqaro/shared";
 import type { Route } from "next";
-import { toUserFacingError } from "@/lib/domain/music-room-ui";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import { toUserFacingError } from "@/lib/domain/soqaro-ui";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
 import type { RoomSnapshotResyncReason } from "@/features/room/room-snapshot-resync";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
@@ -293,7 +293,7 @@ export function useRoomRuntimeLifecycle(input: {
 
     const loadIceConfig = async (isRefresh: boolean) => {
       try {
-        const nextIceConfig = await musicRoomApi.getIceConfig();
+        const nextIceConfig = await soqaroApi.getIceConfig();
         if (cancelled) {
           return;
         }
@@ -428,14 +428,14 @@ export function useRoomRuntimeLifecycle(input: {
       try {
         let joinError: unknown = null;
         try {
-          await musicRoomApi.joinRoom(initialRoomId);
+          await soqaroApi.joinRoom(initialRoomId);
         } catch (error) {
           // Existing members and hosts can already access the room even when
           // the room password prevents a redundant join request.
           joinError = error;
         }
 
-        const sync = await musicRoomApi.syncRoom(initialRoomId, 0);
+        const sync = await soqaroApi.syncRoom(initialRoomId, 0);
         if (sync.roomDeleted) {
           await deleteRoomTrackArtifacts(
             sync.deletedTracks.map((track) => track.trackId),

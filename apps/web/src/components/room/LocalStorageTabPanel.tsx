@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { memo, useState } from "react";
 import type {
@@ -8,7 +8,7 @@ import type {
   Playlist,
   QqMusicTrackCandidate,
   TrackMeta
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import type { CachedLibraryTrack } from "@/features/library/audio-utils";
 import type { LocalStorageSummary } from "@/features/upload/use-track-uploads";
 import { PlaylistPanel } from "./PlaylistPanel";

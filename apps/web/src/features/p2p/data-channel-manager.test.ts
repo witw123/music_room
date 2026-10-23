@@ -1,11 +1,11 @@
-import { describe, expect, it, vi } from "vitest";
+﻿import { describe, expect, it, vi } from "vitest";
 import {
   DataChannelManager,
   resolveDataChannelClosedAction
 } from "./data-channel-manager";
 
 class FakeDataChannel {
-  label = "music-room-control";
+  label = "soqaro-control";
   binaryType: BinaryType = "blob";
   readyState: RTCDataChannelState = "connecting";
   onmessage: ((event: MessageEvent) => void | Promise<void>) | null = null;

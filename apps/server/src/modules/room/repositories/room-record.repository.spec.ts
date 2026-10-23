@@ -1,4 +1,4 @@
-import type { Room } from "@music-room/shared";
+﻿import type { Room } from "@soqaro/shared";
 import { RoomRecordRepository } from "./room-record.repository";
 import { normalizeRoomRecord, type RoomRecord } from "../room.types";
 
@@ -70,7 +70,7 @@ describe("RoomRecordRepository", () => {
       new Map(),
       prisma as never,
       redis as never,
-      "music-room:rooms",
+      "soqaro:rooms",
       60,
       60
     );
@@ -79,7 +79,7 @@ describe("RoomRecordRepository", () => {
 
     // persistRecord 只写一次 joinCode 键(现为 roomId 字符串),不改写任何 recent-room key。
     expect(redis.setString).toHaveBeenCalledTimes(1);
-    expect(redis.setString).toHaveBeenCalledWith("music-room:join-code:ABC123", "room_1", 60);
+    expect(redis.setString).toHaveBeenCalledWith("soqaro:join-code:ABC123", "room_1", 60);
   });
   it("resolves rooms by join code through the slimmed roomId cache in redis-only mode", async () => {
     const prisma = { isAvailable: jest.fn(() => false) };
@@ -88,7 +88,7 @@ describe("RoomRecordRepository", () => {
       ...createRedisMock(),
       setJsonIfRevisionMatches: jest.fn(async (_key: string, value: unknown) => {
         const record = value as RoomRecord;
-        redisStore.set(`music-room:room:${record.room.id}`, JSON.stringify(value));
+        redisStore.set(`soqaro:room:${record.room.id}`, JSON.stringify(value));
         return true;
       }),
       setString: jest.fn(async (key: string, value: string) => {
@@ -104,14 +104,14 @@ describe("RoomRecordRepository", () => {
       new Map(),
       prisma as never,
       redis as never,
-      "music-room:rooms",
+      "soqaro:rooms",
       60,
       60
     );
 
     // joinCode 缓存写的是 roomId 字符串,不是全量 JSON
     await repository.persistRecord(createRoomRecord(1));
-    expect(redis.setString).toHaveBeenCalledWith("music-room:join-code:ABC123", "room_1", 60);
+    expect(redis.setString).toHaveBeenCalledWith("soqaro:join-code:ABC123", "room_1", 60);
 
     const room = await repository.findByJoinCode("abc123");
     expect(room.id).toBe("room_1");
@@ -130,7 +130,7 @@ describe("RoomRecordRepository", () => {
       rooms,
       prisma as never,
       redis as never,
-      "music-room:rooms",
+      "soqaro:rooms",
       60,
       60
     );
@@ -140,7 +140,7 @@ describe("RoomRecordRepository", () => {
     );
 
     expect(redis.setJsonIfRevisionMatches).toHaveBeenCalledWith(
-      "music-room:room:room_1",
+      "soqaro:room:room_1",
       expect.any(Object),
       1,
       60
@@ -167,7 +167,7 @@ describe("RoomRecordRepository", () => {
       rooms,
       prisma as never,
       redis as never,
-      "music-room:rooms",
+      "soqaro:rooms",
       60,
       60
     );
@@ -199,7 +199,7 @@ describe("RoomRecordRepository", () => {
       rooms,
       prisma as never,
       redis as never,
-      "music-room:rooms",
+      "soqaro:rooms",
       60,
       60
     );
@@ -244,7 +244,7 @@ describe("RoomRecordRepository", () => {
       rooms,
       prisma as never,
       redis as never,
-      "music-room:rooms",
+      "soqaro:rooms",
       60,
       60
     );
@@ -270,7 +270,7 @@ describe("RoomRecordRepository", () => {
       rooms,
       prisma as never,
       redis as never,
-      "music-room:rooms",
+      "soqaro:rooms",
       60,
       60
     );
@@ -294,7 +294,7 @@ describe("RoomRecordRepository", () => {
       rooms,
       prisma as never,
       createRedisMock() as never,
-      "music-room:rooms",
+      "soqaro:rooms",
       60,
       60
     );
@@ -320,7 +320,7 @@ describe("RoomRecordRepository", () => {
       rooms,
       prisma as never,
       redis as never,
-      "music-room:rooms",
+      "soqaro:rooms",
       60,
       60
     );
@@ -346,7 +346,7 @@ describe("RoomRecordRepository", () => {
       new Map(),
       prisma as never,
       createRedisMock() as never,
-      "music-room:rooms",
+      "soqaro:rooms",
       60,
       60
     );
@@ -387,7 +387,7 @@ describe("RoomRecordRepository", () => {
       new Map(),
       prisma as never,
       createRedisMock() as never,
-      "music-room:rooms",
+      "soqaro:rooms",
       60,
       60
     );
@@ -402,7 +402,7 @@ describe("RoomRecordRepository", () => {
     };
     redis.isAvailable = jest.fn(() => true);
     redis.getJson.mockImplementation(async (key: string) =>
-      key === "music-room:room-terminated:room_1"
+      key === "soqaro:room-terminated:room_1"
         ? { roomId: "room_1", status: "SUCCEEDED" }
         : null
     );
@@ -411,7 +411,7 @@ describe("RoomRecordRepository", () => {
       new Map([[record.room.id, record]]),
       prisma as never,
       redis as never,
-      "music-room:rooms",
+      "soqaro:rooms",
       60,
       60
     );
@@ -436,7 +436,7 @@ describe("RoomRecordRepository", () => {
       rooms,
       prisma as never,
       redis as never,
-      "music-room:rooms",
+      "soqaro:rooms",
       60,
       60
     );
@@ -491,7 +491,7 @@ describe("RoomRecordRepository", () => {
       rooms,
       prisma as never,
       redis as never,
-      "music-room:rooms",
+      "soqaro:rooms",
       60,
       60
     );
@@ -521,7 +521,7 @@ describe("RoomRecordRepository", () => {
       rooms,
       prisma as never,
       redis as never,
-      "music-room:rooms",
+      "soqaro:rooms",
       60,
       60
     );
@@ -531,7 +531,7 @@ describe("RoomRecordRepository", () => {
       normalizeRoomRecord(validRecord)
     ]);
 
-    expect(redis.removeFromSet).toHaveBeenCalledWith("music-room:rooms", "room_bad");
+    expect(redis.removeFromSet).toHaveBeenCalledWith("soqaro:rooms", "room_bad");
     expect(rooms.has("room_bad")).toBe(false);
     expect(rooms.has("room_valid")).toBe(true);
   });
@@ -553,14 +553,14 @@ describe("RoomRecordRepository", () => {
     };
     redis.getSetMembers.mockResolvedValueOnce([record.room.id]);
     redis.getJson.mockImplementation(async (key: string) =>
-      key === `music-room:room:${record.room.id}` ? record : null
+      key === `soqaro:room:${record.room.id}` ? record : null
     );
 
     const repository = new RoomRecordRepository(
       new Map(),
       prisma as never,
       redis as never,
-      "music-room:rooms",
+      "soqaro:rooms",
       60,
       60
     );

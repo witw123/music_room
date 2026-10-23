@@ -1,11 +1,11 @@
-"use client";
+﻿"use client";
 
 /* eslint-disable @next/next/no-img-element */
 import React, { useEffect, useState } from "react";
-import type { Playlist } from "@music-room/shared";
+import type { Playlist } from "@soqaro/shared";
 import type { LocalPlaylistRecord, LocalPlaylistTrackRecord } from "@/features/playlist/local-playlist";
 import { toProviderTrackRecord, upsertLocalPlaylistTrack } from "@/features/playlist/local-playlist";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 
 export type NetworkPlaylistSource = { provider: "netease" | "qqmusic" | "bilibili"; playlistId: string };
 
@@ -110,8 +110,8 @@ export async function resolveLegacyNetworkPlaylistArtwork(
       try {
         const track =
           source.provider === "netease"
-            ? await musicRoomApi.getNeteaseTrack(source.trackId)
-            : await musicRoomApi.getQqMusicTrack(source.trackId);
+            ? await soqaroApi.getNeteaseTrack(source.trackId)
+            : await soqaroApi.getQqMusicTrack(source.trackId);
         const resolved = toProviderTrackRecord(track, cached);
         if (resolved.artworkUrl) {
           try {
@@ -163,8 +163,8 @@ export async function resolveProviderArtwork(
   try {
     const providerTrack =
       provider === "netease"
-        ? await musicRoomApi.getNeteaseTrack(track.providerTrackId)
-        : await musicRoomApi.getQqMusicTrack(track.providerTrackId);
+        ? await soqaroApi.getNeteaseTrack(track.providerTrackId)
+        : await soqaroApi.getQqMusicTrack(track.providerTrackId);
     return toProviderTrackRecord(providerTrack, track);
   } catch {
     return track;

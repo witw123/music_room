@@ -1,4 +1,4 @@
-export const userSessionCookieName = "music_room_session";
+﻿export const userSessionCookieName = "soqaro_session";
 
 export function readUserSessionCookie(cookieHeader?: string | string[]) {
   const header = Array.isArray(cookieHeader) ? cookieHeader[0] : cookieHeader;

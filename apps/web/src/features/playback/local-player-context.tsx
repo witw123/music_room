@@ -17,8 +17,8 @@ import type {
   PlaybackSnapshot,
   QueueItem,
   TrackMeta
-} from "@music-room/shared";
-import { takeNextShuffleTrack, synchronizeShuffleBagTrackIds } from "@music-room/shared";
+} from "@soqaro/shared";
+import { takeNextShuffleTrack, synchronizeShuffleBagTrackIds } from "@soqaro/shared";
 import { getCachedLibraryTrackSummary, type LocalPlaylistTrackRecord } from "@/features/library/indexeddb";
 import {
   cacheProviderTrackForPlayback,
@@ -44,7 +44,7 @@ import {
   mergeLocalTrackRecord,
   toTrackMeta
 } from "./local-player-track-utils";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 
 type LocalPlayerContextValue = {
   audioRef: RefObject<HTMLAudioElement | null>;
@@ -317,7 +317,7 @@ export function LocalPlayerProvider({ children, active }: { children: ReactNode;
     }
     const mediaSourceUrl = file
       ? URL.createObjectURL(file)
-      : musicRoomApi.getBilibiliAudioStreamUrl(record.providerTrackId!);
+      : soqaroApi.getBilibiliAudioStreamUrl(record.providerTrackId!);
     if (file) {
       objectUrlRef.current = mediaSourceUrl;
     }

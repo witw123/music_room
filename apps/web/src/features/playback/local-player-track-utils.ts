@@ -1,4 +1,4 @@
-import type { PlaybackMode, PlaybackSnapshot, TrackMeta } from "@music-room/shared";
+﻿import type { PlaybackMode, PlaybackSnapshot, TrackMeta } from "@soqaro/shared";
 import {
   getCachedLibraryTrack,
   upsertCachedLibraryTrack,

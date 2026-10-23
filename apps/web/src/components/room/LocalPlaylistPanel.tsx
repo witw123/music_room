@@ -1,11 +1,11 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
-import type { Playlist, TrackMeta } from "@music-room/shared";
+import type { Playlist, TrackMeta } from "@soqaro/shared";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { formatDuration } from "@/lib/domain/music-room-ui";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import { formatDuration } from "@/lib/domain/soqaro-ui";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 import { CheckIcon } from "@/components/icons/DiscoverIcons";
 import { importTaskStore, useVisibleImportTasks } from "@/features/upload/import-task-store";
 import type { CachedLibraryTrack } from "@/features/library/audio-utils";
@@ -72,7 +72,7 @@ export function LocalPlaylistPanel({
       const trackIds = playlist.trackIds
         .filter((id) => typeof id === "string" && id.trim().length > 0);
 
-      await musicRoomApi.createPlaylist({
+      await soqaroApi.createPlaylist({
         title: (playlist.title || "未命名歌单").trim().slice(0, 160),
         description: playlist.description ? playlist.description.trim().slice(0, 4000) : null,
         trackIds,

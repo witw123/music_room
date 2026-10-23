@@ -1,9 +1,9 @@
-import {
+﻿import {
   hasCompleteRoomAsset,
   type GaplessTransition,
   type PlaybackSnapshot,
   type TrackMeta
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import type { RoomRecord } from "../room.types";
 
 export type SourceCandidate = {

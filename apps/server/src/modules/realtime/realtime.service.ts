@@ -1,10 +1,10 @@
-import { Injectable, Logger } from "@nestjs/common";
+﻿import { Injectable, Logger } from "@nestjs/common";
 import { createHmac } from "node:crypto";
 import {
   iceConfigResponseSchema,
   type IceConfigResponse,
   type IceServerConfig
-} from "@music-room/shared";
+} from "@soqaro/shared";
 
 const defaultStunUrl = "stun:stun.l.google.com:19302";
 const defaultTtlSeconds = 60 * 60;

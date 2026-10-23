@@ -1,6 +1,6 @@
-"use client";
+﻿"use client";
 
-import type { PlaybackSnapshot } from "@music-room/shared";
+import type { PlaybackSnapshot } from "@soqaro/shared";
 
 export type RoomRealtimeEventKind =
   | "snapshot"

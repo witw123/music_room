@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
-import type { ProviderAlbumDetail, ProviderAlbumFavorite, ProviderArtistFavorite, ProviderTrackCandidate } from "@music-room/shared";
+import type { ProviderAlbumDetail, ProviderAlbumFavorite, ProviderArtistFavorite, ProviderTrackCandidate } from "@soqaro/shared";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,7 @@ import {
 } from "@/components/provider-search";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
-import { MusicRoomApiError, musicRoomApi } from "@/lib/network/music-room-api";
+import { SoqaroApiError, soqaroApi } from "@/lib/network/soqaro-api";
 import { useFavoriteAlbums } from "@/features/favorites/use-favorite-albums";
 import { useFavoriteArtists } from "@/features/favorites/use-favorite-artists";
 import { useLocalPlayer } from "@/features/playback/local-player-context";
@@ -56,7 +56,7 @@ export function FavoriteAlbumsPage({
   const router = useRouter();
   const authEntryHref = buildWorkspaceAuthHref({ redirectTo: "/app/profile" });
   const { activeSession, hydrated } = useSessionIdentity({
-    sessionStorageKey: "music-room-session",
+    sessionStorageKey: "soqaro-session",
     initialStatusMessage: ""
   });
   const player = useLocalPlayer();
@@ -150,9 +150,9 @@ export function FavoriteAlbumsPage({
     if (track.artworkUrl) return track;
     try {
       return track.provider === "netease"
-        ? await musicRoomApi.getNeteaseTrack(track.providerTrackId)
+        ? await soqaroApi.getNeteaseTrack(track.providerTrackId)
         : track.provider === "qqmusic"
-          ? await musicRoomApi.getQqMusicTrack(track.providerTrackId)
+          ? await soqaroApi.getQqMusicTrack(track.providerTrackId)
           : track;
     } catch {
       return track;
@@ -293,7 +293,7 @@ export function FavoriteAlbumsPage({
       await upsertLocalPlaylistTrack(record);
       setLocalTracks((current) => [...current.filter((item) => item.id !== record.id), record]);
       if (!option.playlist.trackIds.includes(trackId)) {
-        await musicRoomApi.updatePlaylist(option.playlist.id, { trackIds: [...option.playlist.trackIds, trackId] });
+        await soqaroApi.updatePlaylist(option.playlist.id, { trackIds: [...option.playlist.trackIds, trackId] });
         setStatusMessage(`《${resolvedTrack.title}》已加入“${option.playlist.title}”。`);
       } else {
         setStatusMessage(`《${resolvedTrack.title}》已在“${option.playlist.title}”中。`);
@@ -313,10 +313,10 @@ export function FavoriteAlbumsPage({
     setErrorMessage(null);
     try {
       const nextDetail = item.provider === "netease"
-        ? await musicRoomApi.getNeteaseAlbum(item.providerAlbumId)
+        ? await soqaroApi.getNeteaseAlbum(item.providerAlbumId)
         : item.provider === "qqmusic"
-          ? await musicRoomApi.getQqMusicAlbum(item.providerAlbumId)
-          : await musicRoomApi.getBilibiliVideoParts(item.providerAlbumId).then((partsDetail) => ({
+          ? await soqaroApi.getQqMusicAlbum(item.providerAlbumId)
+          : await soqaroApi.getBilibiliVideoParts(item.providerAlbumId).then((partsDetail) => ({
               provider: "bilibili" as const,
               providerAlbumId: partsDetail.bvid,
               title: partsDetail.title,
@@ -622,7 +622,7 @@ function HeartIcon({ filled = false }: { filled?: boolean }) {
 }
 
 function toErrorMessage(error: unknown) {
-  if (error instanceof MusicRoomApiError) {
+  if (error instanceof SoqaroApiError) {
     if (error.code === "QQMUSIC_TRACK_NOT_FOUND") return "该歌曲没有可用的公开音频，可能受到 VIP 或版权限制，请换一首歌曲重试。";
     if (error.code === "QQMUSIC_AUTH_EXPIRED") return "QQ 音乐登录已失效，请回我的页面重新绑定。";
     return error.message;

@@ -5,7 +5,7 @@ import type {
   NeteaseTrackCandidate,
   QqMusicTrackCandidate,
   RoomSnapshot
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import {
   getRadioRecommendationCandidates,
   type RadioRecommendationCandidate

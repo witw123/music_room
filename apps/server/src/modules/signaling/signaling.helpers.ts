@@ -1,5 +1,5 @@
-import type { Socket } from "socket.io";
-import type { RoomSnapshot, RoomSubscribeAckPayload } from "@music-room/shared";
+﻿import type { Socket } from "socket.io";
+import type { RoomSnapshot, RoomSubscribeAckPayload } from "@soqaro/shared";
 import { readUserSessionCookie } from "../auth/auth.cookies";
 import { isPrivateAddress } from "../providers/provider-fetch";
 

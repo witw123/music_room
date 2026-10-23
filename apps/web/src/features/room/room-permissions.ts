@@ -1,9 +1,9 @@
-import {
+﻿import {
   defaultRoomMemberPermissions,
   getRoomMemberPermissions,
   type RoomMemberPermissions,
   type RoomSnapshot
-} from "@music-room/shared";
+} from "@soqaro/shared";
 
 export type RoomPermission = keyof RoomMemberPermissions;
 

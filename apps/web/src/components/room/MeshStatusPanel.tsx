@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type {
@@ -6,7 +6,7 @@ import type {
   PeerRecentEvent,
   RoomMember,
   RoomSnapshot
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import { Button } from "@/components/ui/button";
 import {
   dedupePeerDiagnostics,

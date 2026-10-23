@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
-import type { RoomSnapshot, TrackMeta } from "@music-room/shared";
+﻿import { describe, expect, it, vi } from "vitest";
+import type { RoomSnapshot, TrackMeta } from "@soqaro/shared";
 import { getRoomQueuePreloadTracks, RoomAudioPreloader } from "./room-queue-preload";
 
 const tracks = ["a", "b", "c", "d"].map((id) => ({ id, fileHash: id } as TrackMeta));

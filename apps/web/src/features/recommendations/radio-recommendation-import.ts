@@ -1,9 +1,9 @@
-import type {
+﻿import type {
   NeteaseTrackCandidate,
   QqMusicTrackCandidate,
   RoomSnapshot
-} from "@music-room/shared";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+} from "@soqaro/shared";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 import type { RadioRecommendationCandidate } from "./radio-recommendations";
 
 export type RadioRecommendationImportResult =
@@ -40,7 +40,7 @@ export async function importRadioRecommendationCandidates(input: {
       }
       if (!input.isCurrent()) return { kind: "cancelled" };
 
-      const freshSnapshot = await musicRoomApi.getRoom(input.roomId);
+      const freshSnapshot = await soqaroApi.getRoom(input.roomId);
       if (!input.isCurrent() || !input.isSeedCurrent(freshSnapshot)) {
         return { kind: "cancelled" };
       }
@@ -54,7 +54,7 @@ export async function importRadioRecommendationCandidates(input: {
         throw new Error(`《${candidate.candidate.title}》导入后未同步到曲库。`);
       }
 
-      await musicRoomApi.insertRadioAutopilotNextTrack(input.roomId, {
+      await soqaroApi.insertRadioAutopilotNextTrack(input.roomId, {
         trackId: imported.id
       });
       if (!input.isCurrent()) return { kind: "cancelled" };

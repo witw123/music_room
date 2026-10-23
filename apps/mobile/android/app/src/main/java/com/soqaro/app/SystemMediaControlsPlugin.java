@@ -1,4 +1,4 @@
-package com.musicroom.app;
+package com.soqaro.app;
 
 import android.content.Context;
 import android.content.Intent;

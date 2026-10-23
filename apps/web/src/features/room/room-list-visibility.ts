@@ -1,6 +1,6 @@
-"use client";
+﻿"use client";
 
-import type { RoomDirectoryItem } from "@music-room/shared";
+import type { RoomDirectoryItem } from "@soqaro/shared";
 
 export function filterOpenPublicRooms(rooms: RoomDirectoryItem[]) {
   return rooms.filter((room) => room.room.visibility === "public");

@@ -1,6 +1,6 @@
-import { Injectable, ServiceUnavailableException } from "@nestjs/common";
+﻿import { Injectable, ServiceUnavailableException } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
-import type { ProviderAlbumFavorite, ProviderAlbumSummary, ProviderArtistFavorite, ProviderArtistSummary, ProviderTrackCandidate, ProviderTrackFavorite } from "@music-room/shared";
+import type { ProviderAlbumFavorite, ProviderAlbumSummary, ProviderArtistFavorite, ProviderArtistSummary, ProviderTrackCandidate, ProviderTrackFavorite } from "@soqaro/shared";
 import { PrismaService } from "../../infra/prisma/prisma.service";
 
 @Injectable()

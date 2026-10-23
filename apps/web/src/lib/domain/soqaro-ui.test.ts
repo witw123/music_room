@@ -13,9 +13,9 @@ import {
   shouldAcceptPlaybackSnapshot,
   shouldReplacePlaybackSnapshot,
   toUserFacingError
-} from "./music-room-ui";
+} from "./soqaro-ui";
 
-describe("music-room-ui helpers", () => {
+describe("soqaro-ui helpers", () => {
   it("formats Kbps transfer samples as megabytes per second", () => {
     expect(formatTransferRateMBps(15_000)).toBe("1.88 MB/s");
     expect(formatTransferRateMBps(800)).toBe("0.10 MB/s");

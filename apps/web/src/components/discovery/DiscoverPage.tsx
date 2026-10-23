@@ -1,11 +1,11 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   ProviderPlaylistDetail,
   ProviderTrackCandidate
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import { Button } from "@/components/ui/button";
 import {
   ProviderAlbumTrackTable,
@@ -15,7 +15,7 @@ import {
 } from "@/components/provider-search";
 import type { AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 import { useWorkspacePageActive } from "@/features/workspace/page-activity";
 import { useFavoriteTracks } from "@/features/favorites/use-favorite-tracks";
 import { useNetworkPlaylists } from "@/features/playlist/use-network-playlists";
@@ -67,7 +67,7 @@ import {
 export function DiscoverPage() {
   const pageActive = useWorkspacePageActive();
   const { activeSession, hydrated } = useSessionIdentity({
-    sessionStorageKey: "music-room-session",
+    sessionStorageKey: "soqaro-session",
     initialStatusMessage: ""
   });
   const player = useLocalPlayer();
@@ -139,8 +139,8 @@ export function DiscoverPage() {
     if (track.artworkUrl) return track;
     try {
       return track.provider === "netease"
-        ? await musicRoomApi.getNeteaseTrack(track.providerTrackId)
-        : await musicRoomApi.getQqMusicTrack(track.providerTrackId);
+        ? await soqaroApi.getNeteaseTrack(track.providerTrackId)
+        : await soqaroApi.getQqMusicTrack(track.providerTrackId);
     } catch {
       return track;
     }
@@ -193,7 +193,7 @@ export function DiscoverPage() {
       if (option.playlist.trackIds.includes(trackId)) {
         setStatusMessage(`《${resolvedTrack.title}》已在“${option.playlist.title}”中。`);
       } else {
-        await musicRoomApi.updatePlaylist(option.playlist.id, { trackIds: [...option.playlist.trackIds, trackId] });
+        await soqaroApi.updatePlaylist(option.playlist.id, { trackIds: [...option.playlist.trackIds, trackId] });
         setStatusMessage(`《${resolvedTrack.title}》已加入“${option.playlist.title}”。`);
       }
       setPlaylistPickerTrack(null);
@@ -268,7 +268,7 @@ export function DiscoverPage() {
     },
     onStartRadio: async (track) => {
       try {
-        const radioTracks = await musicRoomApi.getTrackRadio({ seedTrack: track, limit: 15 });
+        const radioTracks = await soqaroApi.getTrackRadio({ seedTrack: track, limit: 15 });
         const prepared = await prepareTrackForImmediatePlayback(track);
         await player.playTrack(prepared.record);
         const queuedTracks = radioTracks.slice(0, 10);
@@ -315,11 +315,11 @@ export function DiscoverPage() {
       if (favoritePlaylistKeys.has(key)) {
         const found = networkPlaylists.find((l) => l.tags.includes(`network:${key}`));
         if (found) {
-          await musicRoomApi.deletePlaylist(found.id);
+          await soqaroApi.deletePlaylist(found.id);
         }
         setStatusMessage(`已取消收藏歌单《${playlistDetail.title}》。`);
       } else {
-        await musicRoomApi.createPlaylist({
+        await soqaroApi.createPlaylist({
           title: playlistDetail.title,
           description: playlistDetail.description,
           coverUrl: playlistDetail.artworkUrl ?? playlistDetail.tracks.find((t) => t.artworkUrl)?.artworkUrl ?? null,
@@ -361,7 +361,7 @@ export function DiscoverPage() {
     }
 
     // If it's a curated playlist with no tracks:
-    if (playlist.providerPlaylistId.startsWith("music-room-curated:")) {
+    if (playlist.providerPlaylistId.startsWith("soqaro-curated:")) {
       setDetail({
         summary: playlist,
         value: {
@@ -380,8 +380,8 @@ export function DiscoverPage() {
     setDetailLoading(key);
     try {
       const full = playlist.provider === "netease"
-        ? await musicRoomApi.getNeteasePlaylist(playlist.providerPlaylistId)
-        : await musicRoomApi.getQqMusicPlaylist(playlist.providerPlaylistId);
+        ? await soqaroApi.getNeteasePlaylist(playlist.providerPlaylistId)
+        : await soqaroApi.getQqMusicPlaylist(playlist.providerPlaylistId);
       if (controller.signal.aborted || detailRequestVersionRef.current !== version) return;
       setDetail({
         summary: playlist,
@@ -403,10 +403,10 @@ export function DiscoverPage() {
     try {
       let tracks = card.tracks;
       if (!tracks || !tracks.length) {
-        if (!playlist.providerPlaylistId.startsWith("music-room-curated:")) {
+        if (!playlist.providerPlaylistId.startsWith("soqaro-curated:")) {
           const full = playlist.provider === "netease"
-            ? await musicRoomApi.getNeteasePlaylist(playlist.providerPlaylistId)
-            : await musicRoomApi.getQqMusicPlaylist(playlist.providerPlaylistId);
+            ? await soqaroApi.getNeteasePlaylist(playlist.providerPlaylistId)
+            : await soqaroApi.getQqMusicPlaylist(playlist.providerPlaylistId);
           tracks = full.tracks;
         }
       }
@@ -507,8 +507,8 @@ export function DiscoverPage() {
     : [];
 
   const deepCutTracks = (data?.deepCuts ?? []).map((i) => i.candidate).slice(0, 6);
-  const dailyMixCards = recommendedPlaylists.filter((p) => p.playlist.providerPlaylistId.startsWith("music-room-curated:daily-mix-"));
-  const otherPlaylists = filteredPlaylists.filter((p) => !p.playlist.providerPlaylistId.startsWith("music-room-curated:daily-mix-"));
+  const dailyMixCards = recommendedPlaylists.filter((p) => p.playlist.providerPlaylistId.startsWith("soqaro-curated:daily-mix-"));
+  const otherPlaylists = filteredPlaylists.filter((p) => !p.playlist.providerPlaylistId.startsWith("soqaro-curated:daily-mix-"));
 
   const hasContent = Boolean(data?.forYou.length || data?.familiarArtists.length || data?.moodDiscovery.length || data?.deepCuts.length || data?.playlists.length);
   const noProfile = Boolean(data && !hasContent);
@@ -676,7 +676,7 @@ export function DiscoverPage() {
             {!loading && !noAccounts && noProfile ? (
               <DiscoverEmptyState
                 title="发现更多好音乐"
-                description="在 Music Room 播放或收藏歌曲，或通过偏好设置选择喜爱的曲风与艺人。"
+                description="在 Soqaro 播放或收藏歌曲，或通过偏好设置选择喜爱的曲风与艺人。"
                 actionLabel="定制聆听偏好"
                 onAction={() => setShowColdStartDialog(true)}
               />

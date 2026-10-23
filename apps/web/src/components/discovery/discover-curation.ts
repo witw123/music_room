@@ -123,12 +123,12 @@ export function buildCuratedPlaylistCards(data: ProfileProviderRecommendations):
     return [{
       playlist: {
         provider: firstTrack.provider,
-        providerPlaylistId: `music-room-curated:${id}`,
+        providerPlaylistId: `soqaro-curated:${id}`,
         title,
         description,
         tags,
         artworkUrl: firstTrack.artworkUrl ?? null,
-        creatorName: "Music Room",
+        creatorName: "Soqaro",
         trackCount: tracks.length
       },
       tracks,

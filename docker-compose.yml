@@ -9,10 +9,10 @@ x-default-logging: &default_logging
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: music-room-postgres
+    container_name: soqaro-postgres
     logging: *default_logging
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-music_room}
+      POSTGRES_DB: ${POSTGRES_DB:-soqaro}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
     ports:
@@ -20,7 +20,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postgres} -d $${POSTGRES_DB:-music_room}"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postgres} -d $${POSTGRES_DB:-soqaro}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -28,7 +28,7 @@ services:
   redis:
     logging: *default_logging
     image: redis:7-alpine
-    container_name: music-room-redis
+    container_name: soqaro-redis
     environment:
       REDISCLI_AUTH: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
     command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD must be set}"]
@@ -45,7 +45,7 @@ services:
   coturn:
     logging: *default_logging
     image: coturn/coturn:4.6.3
-    container_name: music-room-coturn
+    container_name: soqaro-coturn
     # host networking avoids mapping dozens of relay ports individually.
     # On Linux, remove network_mode and uncomment the ports block below
     # if you prefer bridge networking (required for Docker Desktop on Win/Mac).
@@ -70,7 +70,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.server
-    container_name: music-room-server
+    container_name: soqaro-server
     depends_on:
       postgres:
         condition: service_healthy
@@ -80,7 +80,7 @@ services:
       NODE_ENV: ${NODE_ENV:-development}
       PORT: 3001
       TRUST_PROXY: ${TRUST_PROXY:-loopback}
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgres:5432/${POSTGRES_DB:-music_room}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgres:5432/${POSTGRES_DB:-soqaro}
       REDIS_MODE: ${REDIS_MODE:-single}
       REDIS_URL: redis://redis:6379
       REDIS_SENTINELS: ${REDIS_SENTINELS:-}
@@ -148,7 +148,7 @@ services:
         NEXT_PUBLIC_SOCKET_PATH: ${NEXT_PUBLIC_SOCKET_PATH:-/ws/socket.io}
         NEXT_PUBLIC_STUN_URL: ${NEXT_PUBLIC_STUN_URL:-stun:stun.l.google.com:19302}
         NEXT_PUBLIC_TURN_URL: ${NEXT_PUBLIC_TURN_URL:-}
-        NEXT_PUBLIC_TURN_USERNAME: ${NEXT_PUBLIC_TURN_USERNAME:-music-room}
+        NEXT_PUBLIC_TURN_USERNAME: ${NEXT_PUBLIC_TURN_USERNAME:-soqaro}
         NEXT_PUBLIC_TURN_CREDENTIAL: ${NEXT_PUBLIC_TURN_CREDENTIAL:-}
         NEXT_PUBLIC_WEBRTC_ICE_SERVERS: ${NEXT_PUBLIC_WEBRTC_ICE_SERVERS:-}
         NEXT_PUBLIC_NETEASE_ENABLED: ${NEXT_PUBLIC_NETEASE_ENABLED:-false}
@@ -158,7 +158,7 @@ services:
         NEXT_PUBLIC_TAIHE_ENABLED: ${NEXT_PUBLIC_TAIHE_ENABLED:-false}
         NEXT_PUBLIC_MIGU_ENABLED: ${NEXT_PUBLIC_MIGU_ENABLED:-false}
         NEXT_PUBLIC_BAIDU_ENABLED: ${NEXT_PUBLIC_BAIDU_ENABLED:-false}
-    container_name: music-room-web
+    container_name: soqaro-web
     depends_on:
       server:
         condition: service_healthy
@@ -171,7 +171,7 @@ services:
       NEXT_PUBLIC_SOCKET_PATH: ${NEXT_PUBLIC_SOCKET_PATH:-/ws/socket.io}
       NEXT_PUBLIC_STUN_URL: ${NEXT_PUBLIC_STUN_URL:-stun:stun.l.google.com:19302}
       NEXT_PUBLIC_TURN_URL: ${NEXT_PUBLIC_TURN_URL:-}
-      NEXT_PUBLIC_TURN_USERNAME: ${NEXT_PUBLIC_TURN_USERNAME:-music-room}
+      NEXT_PUBLIC_TURN_USERNAME: ${NEXT_PUBLIC_TURN_USERNAME:-soqaro}
       NEXT_PUBLIC_TURN_CREDENTIAL: ${NEXT_PUBLIC_TURN_CREDENTIAL:-}
       NEXT_PUBLIC_WEBRTC_ICE_SERVERS: ${NEXT_PUBLIC_WEBRTC_ICE_SERVERS:-}
       NEXT_PUBLIC_NETEASE_ENABLED: ${NEXT_PUBLIC_NETEASE_ENABLED:-false}

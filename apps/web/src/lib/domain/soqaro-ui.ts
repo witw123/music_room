@@ -1,7 +1,7 @@
 "use client";
 
-import { errorCodes, getRoomMemberPermissions, type PlaybackSnapshot, type RoomMember, type RoomSnapshot } from "@music-room/shared";
-import { MusicRoomApiError } from "../network/music-room-api";
+import { errorCodes, getRoomMemberPermissions, type PlaybackSnapshot, type RoomMember, type RoomSnapshot } from "@soqaro/shared";
+import { SoqaroApiError } from "../network/soqaro-api";
 
 export function formatDuration(durationMs: number) {
   if (!durationMs) {
@@ -272,7 +272,7 @@ function ensurePlaybackTrackMetadata(
 
 export function toUserFacingError(error: unknown) {
   const message = error instanceof Error ? error.message : "请求失败。";
-  const code = error instanceof MusicRoomApiError ? error.code : null;
+  const code = error instanceof SoqaroApiError ? error.code : null;
 
   // Prefer error-code-based mapping; fall back to message matching only
   // when the server response didn't carry a structured error code.

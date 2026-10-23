@@ -1,2 +1,2 @@
-export const storageRootChangingEvent = "music-room-storage-root-changing";
-export const storageRootChangedEvent = "music-room-storage-root-changed";
+export const storageRootChangingEvent = "soqaro-storage-root-changing";
+export const storageRootChangedEvent = "soqaro-storage-root-changed";

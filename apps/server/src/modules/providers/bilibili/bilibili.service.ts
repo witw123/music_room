@@ -1,5 +1,5 @@
-import { Injectable, Logger, NotFoundException, Optional } from "@nestjs/common";
-import type { BilibiliSearchResponse, BilibiliTrackCandidate, BilibiliVideoDetail, ProviderLyrics } from "@music-room/shared";
+﻿import { Injectable, Logger, NotFoundException, Optional } from "@nestjs/common";
+import type { BilibiliSearchResponse, BilibiliTrackCandidate, BilibiliVideoDetail, ProviderLyrics } from "@soqaro/shared";
 import { NeteaseApiClient } from "../netease/netease-api.client";
 import { QqMusicApiClient } from "../qqmusic/qqmusic-api.client";
 import { BilibiliApiClient, sortBilibiliAudioUrls } from "./bilibili-api.client";

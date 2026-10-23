@@ -1,9 +1,9 @@
-import { Injectable, Logger, Optional } from "@nestjs/common";
+﻿import { Injectable, Logger, Optional } from "@nestjs/common";
 import type {
   RoomPlaybackReadinessInputPayload,
   RoomPlaybackReadinessPayload,
   RoomSnapshot
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import type { Server } from "socket.io";
 import { RedisService } from "../../infra/redis/redis.service";
 import { RoomRealtimeBroadcaster } from "../realtime/room-realtime.broadcaster";
@@ -274,14 +274,14 @@ export class RoomPlaybackReadinessService {
     const deadline = Date.now() + 3_000;
     let token: string | null = null;
     while (!token && Date.now() < deadline) {
-      token = await redis.acquireLock(`music-room:lock:room:${roomId}`, 30_000);
+      token = await redis.acquireLock(`soqaro:lock:room:${roomId}`, 30_000);
       if (!token) await delay(20);
     }
     if (!token) throw new Error("Room playback readiness is busy.");
     try {
       return await operation();
     } finally {
-      await redis.releaseLock(`music-room:lock:room:${roomId}`, token).catch((error) => {
+      await redis.releaseLock(`soqaro:lock:room:${roomId}`, token).catch((error) => {
         this.logger.warn(`Unable to release playback readiness lock ${roomId}: ${String(error)}`);
       });
     }
@@ -467,7 +467,7 @@ export class RoomPlaybackReadinessService {
   }
 
   private stateKey(roomId: string) {
-    return `music-room:playback-readiness:${roomId}`;
+    return `soqaro:playback-readiness:${roomId}`;
   }
 }
 

@@ -6,7 +6,7 @@ import {
   type ProviderAudioResolveResponse,
   type QueueItem,
   type RoomType
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import {
   isTauriRuntime,
   isCapacitorRuntime,
@@ -14,7 +14,7 @@ import {
   capacitorPlugin
 } from "../desktop/tauri";
 
-export class MusicRoomApiError extends Error {
+export class SoqaroApiError extends Error {
   constructor(
     message: string,
     public readonly code: ApiErrorResponse["code"] | null,
@@ -54,8 +54,8 @@ export type AuthConfig = {
   siteKey: string;
 };
 
-export const playlistsChangedEventName = "music-room-playlists-changed";
-export const playlistsChangedStorageKey = "music-room-playlists-version";
+export const playlistsChangedEventName = "soqaro-playlists-changed";
+export const playlistsChangedStorageKey = "soqaro-playlists-version";
 
 let playlistsChangeSequence = 0;
 
@@ -149,12 +149,12 @@ export async function request<T>(
       typeof window !== "undefined";
     if (shouldExpireSession) {
       window.dispatchEvent(
-        new CustomEvent("music-room-auth-expired", {
+        new CustomEvent("soqaro-auth-expired", {
           detail: { message }
         })
       );
     }
-    throw new MusicRoomApiError(
+    throw new SoqaroApiError(
       message || `Request failed: ${response.status}`,
       apiError?.code ?? null,
       apiError?.details
@@ -202,12 +202,12 @@ export async function requestBlob(
       typeof window !== "undefined"
     ) {
       window.dispatchEvent(
-        new CustomEvent("music-room-auth-expired", {
+        new CustomEvent("soqaro-auth-expired", {
           detail: { message }
         })
       );
     }
-    throw new MusicRoomApiError(
+    throw new SoqaroApiError(
       message || `Request failed: ${response.status}`,
       apiError?.code ?? null,
       apiError?.details
@@ -713,7 +713,7 @@ export async function downloadDirectTrack(input: DirectAudioDownloadInput): Prom
     };
   }
 
-  throw new Error("本地下载未成功。若受浏览器跨域或防盗链限制，请使用 Music Room 桌面客户端或移动客户端以享受本地不限速下载。");
+  throw new Error("本地下载未成功。若受浏览器跨域或防盗链限制，请使用 Soqaro 桌面客户端或移动客户端以享受本地不限速下载。");
 }
 
 export const downloadWithDirectFallback = downloadDirectTrack;

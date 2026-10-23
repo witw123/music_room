@@ -6,7 +6,7 @@ import {
   type AssetUnitDescriptor,
   type AudioAssetManifest,
   type TrackLoudness
-} from "@music-room/shared";
+} from "@soqaro/shared";
 
 export type { AssetUnitDescriptor };
 
@@ -162,7 +162,7 @@ export type FavoriteProviderAlbumRecord = {
 };
 
 
-export class MusicRoomDatabase extends Dexie {
+export class SoqaroDatabase extends Dexie {
   cachedTrackLibrary!: Table<CachedLibraryTrackRecord, string>;
   cachedTrackLibraryMetadata!: Table<CachedLibraryTrackSummaryRecord, string>;
   assetManifests!: Table<AudioAssetManifestRecord, string>;
@@ -178,7 +178,7 @@ export class MusicRoomDatabase extends Dexie {
   favoriteProviderAlbums!: Table<FavoriteProviderAlbumRecord, string>;
 
   constructor() {
-    super("music-room");
+    super("soqaro");
     this.version(2).stores({
       trackAssets: "&trackId, fileHash, cachedAt",
       trackPieces: "&pieceId, trackId, peerId, [trackId+peerId], createdAt"
@@ -421,7 +421,7 @@ export class MusicRoomDatabase extends Dexie {
     this.version(21).stores({ recommendationEvents: null });
   }
 }
-export const musicRoomDatabase = new MusicRoomDatabase();
+export const soqaroDatabase = new SoqaroDatabase();
 
 
 export function assetUnitId(assetId: string, unitIndex: number) {
@@ -445,21 +445,21 @@ export function toCachedLibraryTrackSummaryRecord(
 
 
 export async function backfillCachedLibraryTrackMetadataIfNeeded() {
-  const metadataCount = await musicRoomDatabase.cachedTrackLibraryMetadata.count();
+  const metadataCount = await soqaroDatabase.cachedTrackLibraryMetadata.count();
   if (metadataCount > 0) {
     return;
   }
 
-  const libraryCount = await musicRoomDatabase.cachedTrackLibrary.count();
+  const libraryCount = await soqaroDatabase.cachedTrackLibrary.count();
   if (libraryCount === 0) {
     return;
   }
 
   const summaries: CachedLibraryTrackSummaryRecord[] = [];
-  await musicRoomDatabase.cachedTrackLibrary.each((record) => {
+  await soqaroDatabase.cachedTrackLibrary.each((record) => {
     summaries.push(toCachedLibraryTrackSummaryRecord(record));
   });
   if (summaries.length > 0) {
-    await musicRoomDatabase.cachedTrackLibraryMetadata.bulkPut(summaries);
+    await soqaroDatabase.cachedTrackLibraryMetadata.bulkPut(summaries);
   }
 }

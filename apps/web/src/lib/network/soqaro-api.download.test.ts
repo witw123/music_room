@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { downloadWithDirectFallback } from "./music-room-api.base";
+import { downloadWithDirectFallback } from "./soqaro-api.base";
 
 type FetchCall = { url: string; init?: RequestInit };
 

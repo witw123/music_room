@@ -1,4 +1,4 @@
-import type { NextConfig } from "next";
+﻿import type { NextConfig } from "next";
 import path from "node:path";
 import packageJson from "./package.json";
 
@@ -17,7 +17,7 @@ const nextConfig: NextConfig = {
     ]
   },
   typedRoutes: true,
-  transpilePackages: ["@music-room/shared"],
+  transpilePackages: ["@soqaro/shared"],
   async headers() {
     return [
       {

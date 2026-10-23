@@ -3,7 +3,7 @@
 import React, { useState, type DragEvent } from "react";
 import type { LocalPlaylistTrackRecord } from "@/features/playlist/local-playlist";
 import { toCachedProviderTrack } from "@/features/playlist/local-playlist";
-import { formatDuration } from "@/lib/domain/music-room-ui";
+import { formatDuration } from "@/lib/domain/soqaro-ui";
 import { FavoriteTrackButton } from "@/components/ui/FavoriteTrackButton";
 import { MobileTrackActionsMenu, type MobileTrackAction } from "@/components/ui/MobileTrackActionsMenu";
 import { getAnchoredDialogAnchor, type AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { memo } from "react";
 import type {
@@ -7,7 +7,7 @@ import type {
   RoomMember,
   RoomMemberPermissions,
   RoomSnapshot
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import type { LocalMemberPanelState } from "./MembersPanel";
 import { MembersPanel } from "./MembersPanel";
 import { MeshStatusPanel } from "./MeshStatusPanel";

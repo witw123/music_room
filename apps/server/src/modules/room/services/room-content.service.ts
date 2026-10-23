@@ -1,6 +1,6 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
+﻿import { BadRequestException, Injectable } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
-import type { PrepareTrackAssetRequest, QueueItem, RadioAutopilot, ReportTrackAssetUnavailableRequest, RoomTrackDeletion, TrackMeta } from "@music-room/shared";
+import type { PrepareTrackAssetRequest, QueueItem, RadioAutopilot, ReportTrackAssetUnavailableRequest, RoomTrackDeletion, TrackMeta } from "@soqaro/shared";
 import type { RoomRecord } from "../room.types";
 import {
   assertHost,

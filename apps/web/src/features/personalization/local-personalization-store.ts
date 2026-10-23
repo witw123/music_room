@@ -1,9 +1,9 @@
-import type {
+﻿import type {
   PersonalizationProfileResponse,
   PersonalizationTrack
-} from "@music-room/shared";
+} from "@soqaro/shared";
 
-const LOCAL_PROFILE_KEY = "music_room_local_profile";
+const LOCAL_PROFILE_KEY = "soqaro_local_profile";
 
 export function getLocalStoredProfile(): PersonalizationProfileResponse | null {
   if (typeof window === "undefined") return null;

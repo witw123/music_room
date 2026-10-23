@@ -17,7 +17,7 @@ import {
   toPlaybackPreparationErrorMessage
 } from "@/features/playback/provider-playback-preparation";
 import { downloadProviderTrackToLibrary } from "@/features/playback/provider-track-download";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 import { useLocalPlayer } from "@/features/playback/local-player-context";
 import type { AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
 import { Button } from "@/components/ui/button";
@@ -117,10 +117,10 @@ export function PlaylistDetailView({
     setRemoteLoading(true);
     const load =
       networkProvider === "netease"
-        ? musicRoomApi.getNeteasePlaylist(networkPlaylistId)
+        ? soqaroApi.getNeteasePlaylist(networkPlaylistId)
         : networkProvider === "qqmusic"
-          ? musicRoomApi.getQqMusicPlaylist(networkPlaylistId)
-          : musicRoomApi.getBilibiliVideoParts(networkPlaylistId).then((partsDetail) => ({
+          ? soqaroApi.getQqMusicPlaylist(networkPlaylistId)
+          : soqaroApi.getBilibiliVideoParts(networkPlaylistId).then((partsDetail) => ({
               provider: "bilibili" as const,
               providerPlaylistId: partsDetail.bvid,
               title: partsDetail.title,

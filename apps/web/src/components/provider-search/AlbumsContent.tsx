@@ -1,5 +1,5 @@
-import React from "react";
-import type { ProviderAlbumDetail, ProviderAlbumSummary } from "@music-room/shared";
+﻿import React from "react";
+import type { ProviderAlbumDetail, ProviderAlbumSummary } from "@soqaro/shared";
 import { ProviderAlbumDetailView, type ProviderAlbumTrackActions } from "./ProviderAlbumDetailView";
 import type { AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
 import { Artwork, Icon, SearchEmptyState, albumKey } from "./search-ui-primitives";

@@ -1,11 +1,11 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type { AlistConfig, AlistTestResponse } from "@music-room/shared";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import type { AlistConfig, AlistTestResponse } from "@soqaro/shared";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 
-export const alistStorageKey = "music-room-alist-config-v1";
-export const alistConfigChangeEvent = "music-room-alist-config-changed";
+export const alistStorageKey = "soqaro-alist-config-v1";
+export const alistConfigChangeEvent = "soqaro-alist-config-changed";
 
 export function getStoredAlistConfig(): AlistConfig | null {
   if (typeof window === "undefined") return null;
@@ -77,7 +77,7 @@ export function useAlistStorage() {
     setTesting(true);
     setTestResult(null);
     try {
-      const res = await musicRoomApi.testAlistConnection({
+      const res = await soqaroApi.testAlistConnection({
         url: activeConfig.url,
         mountPath: activeConfig.mountPath || "/Music",
         token: activeConfig.token

@@ -1,14 +1,14 @@
-"use client";
+﻿"use client";
 /* eslint-disable @next/next/no-img-element */
 
 import { useEffect, useMemo, useState } from "react";
 import { RoomTabPanelPlaceholder, preloadRoomPanelChunks } from "./RoomTabPanelPlaceholder";
 import dynamic from "next/dynamic";
-import type { BilibiliTrackCandidate, NeteaseTrackCandidate, QqMusicTrackCandidate } from "@music-room/shared";
+import type { BilibiliTrackCandidate, NeteaseTrackCandidate, QqMusicTrackCandidate } from "@soqaro/shared";
 import { Button } from "@/components/ui/button";
 import { PlayerQueueList } from "@/components/bottom-player";
-import { formatDuration } from "@/lib/domain/music-room-ui";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import { formatDuration } from "@/lib/domain/soqaro-ui";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 import { RoomControlHeader } from "./RoomControlHeader";
 import { RoomImportProgressBar } from "./RoomImportProgressBar";
 import type { RoomDashboardViewProps } from "./RoomDashboardView";
@@ -502,7 +502,7 @@ function RadioAutopilotSection({
   const toggleAutopilot = async () => {
     setMessage(null);
     try {
-      await musicRoomApi.updateRadioAutopilot(props.roomSnapshot.room.id, { enabled: !isAutopilotEnabled });
+      await soqaroApi.updateRadioAutopilot(props.roomSnapshot.room.id, { enabled: !isAutopilotEnabled });
       await props.onRefreshRoom();
       setMessage(isAutopilotEnabled ? "自动续播已停止。" : "自动续播已开启，将在播放到节目单最后一首时补充下一首。");
     } catch (error) {

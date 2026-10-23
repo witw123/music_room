@@ -1,5 +1,5 @@
-import type { GaplessTransition, PlaybackMode, PlaybackSnapshot } from "@music-room/shared";
-import { synchronizeShuffleBagTrackIds } from "@music-room/shared";
+﻿import type { GaplessTransition, PlaybackMode, PlaybackSnapshot } from "@soqaro/shared";
+import { synchronizeShuffleBagTrackIds } from "@soqaro/shared";
 import type { RoomRecord } from "../room.types";
 import { RoomPresenceService } from "./room-presence.service";
 import {

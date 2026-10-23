@@ -1,6 +1,6 @@
-import { HttpException, HttpStatus } from "@nestjs/common";
-import type { ProviderSearchSuggestion } from "@music-room/shared";
-import { errorCodes } from "@music-room/shared";
+﻿import { HttpException, HttpStatus } from "@nestjs/common";
+import type { ProviderSearchSuggestion } from "@soqaro/shared";
+import { errorCodes } from "@soqaro/shared";
 
 export type SongRecord = {
   id?: unknown;
@@ -23,7 +23,7 @@ export type SongRecord = {
 export type SearchTermCache = { expiresAt: number; items: ProviderSearchSuggestion[] };
 export type QrAttempt = { userId: string; key: string };
 export const qrTtlSeconds = 180;
-export const qrKeyPrefix = "music-room:netease:qr:";
+export const qrKeyPrefix = "soqaro:netease:qr:";
 
 export function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)

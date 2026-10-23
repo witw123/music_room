@@ -1,8 +1,8 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { Music, ChevronRight, X } from "lucide-react";
-import type { Playlist } from "@music-room/shared";
+import type { Playlist } from "@soqaro/shared";
 import { AnchoredDialog, type AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
 import { Button } from "@/components/ui/button";
 

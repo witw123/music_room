@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type MutableRefObject, type RefObject, type SetStateAction } from "react";
 import type {
@@ -6,7 +6,7 @@ import type {
   RoomPlaybackReadinessPayload,
   RoomSnapshot,
   TrackMeta
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
 import { preferredAudioRtpBitrateKbps } from "@/features/p2p/audio-bitrate-policy";
 import {

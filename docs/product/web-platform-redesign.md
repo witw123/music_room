@@ -1,7 +1,7 @@
-# Web 平台当前设计基线
+﻿# Web 平台当前设计基线
 
 最后更新：`2026-09-13`
-当前版本：`0.3.2`
+当前版本：`1.0.0`
 
 ## 文档状态
 
@@ -70,7 +70,7 @@ IndexedDB segmented Opus
 - 音频文件不上传到服务端
 - NetEase/QQ Music 只在导入阶段由服务端临时代理，导入后音频资产回到浏览器本地存储
 - 房间只同步元数据、队列、播放状态、presence 和 WebRTC 信令
-- `music-room-control` DataChannel 只承载控制/健康协调
+- `soqaro-control` DataChannel 只承载控制/健康协调
 - 音频通过独立 WebRTC RTP Opus Track 发送
 - 曲目拥有者是当前播放源；拥有者离线时播放暂停
 - 不提供缓存下载、缓存导出、成员间音频资产传输或播放 fallback

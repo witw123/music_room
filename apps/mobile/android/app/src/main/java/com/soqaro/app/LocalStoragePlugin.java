@@ -1,4 +1,4 @@
-package com.musicroom.app;
+package com.soqaro.app;
 
 import android.util.Base64;
 import android.net.Uri;
@@ -24,7 +24,7 @@ public class LocalStoragePlugin extends Plugin {
             throw new IOException("Invalid repository path");
         }
         String[] parts = relative.split("/", -1);
-        if (!parts[0].equals(".music-room")) throw new IOException("Path must stay inside .music-room");
+        if (!parts[0].equals(".soqaro")) throw new IOException("Path must stay inside .soqaro");
         File path = getContext().getFilesDir().getCanonicalFile();
         for (String part : parts) {
             if (part.isEmpty() || part.equals(".") || part.equals("..")) throw new IOException("Invalid path segment");
@@ -60,8 +60,8 @@ public class LocalStoragePlugin extends Plugin {
     public void execute(PluginCall call) {
         getActivity().runOnUiThread(() -> {
             Uri uri = Uri.parse(getBridge().getWebView().getUrl());
-            if (!"https".equals(uri.getScheme()) || !"musicroom.witw.top".equals(uri.getHost())) {
-                call.reject("Storage is only available to Music Room");
+            if (!"https".equals(uri.getScheme()) || !"soqaro.witw.top".equals(uri.getHost())) {
+                call.reject("Storage is only available to Soqaro");
                 return;
             }
             runOperation(call);
@@ -127,7 +127,7 @@ public class LocalStoragePlugin extends Plugin {
                         if (!file.renameTo(resolve(target))) throw new IOException("Cannot commit file");
                         break;
                     case "remove":
-                        if (relative.equals(".music-room")) throw new IOException("Cannot remove repository root");
+                        if (relative.equals(".soqaro")) throw new IOException("Cannot remove repository root");
                         remove(file, Boolean.TRUE.equals(call.getBoolean("recursive", false)));
                         break;
                     default:

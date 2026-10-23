@@ -1,5 +1,5 @@
-import type { RemoteTrackSourceRef, TrackMeta, TrackSourceType } from "@music-room/shared";
-import { MusicRoomApiError, musicRoomApi, resolveDownloadedAudioMimeType } from "@/lib/network/music-room-api";
+﻿import type { RemoteTrackSourceRef, TrackMeta, TrackSourceType } from "@soqaro/shared";
+import { SoqaroApiError, soqaroApi, resolveDownloadedAudioMimeType } from "@/lib/network/soqaro-api";
 import { fetchProviderLyricsCached } from "@/features/playback/lyrics";
 import { getAssetUnit } from "@/features/library/indexeddb";
 import { playbackProfileId } from "@/features/library/audio-asset-builder";
@@ -83,8 +83,8 @@ export async function resolveImportedLyrics(input: {
       try {
         const response =
           provider === "netease"
-            ? await musicRoomApi.searchNeteaseTracks(keyword, { limit: 10 })
-            : await musicRoomApi.searchQqMusicTracks(keyword, { limit: 10 });
+            ? await soqaroApi.searchNeteaseTracks(keyword, { limit: 10 })
+            : await soqaroApi.searchQqMusicTracks(keyword, { limit: 10 });
         return {
           provider,
           track: findMatchingProviderTrack(response.items, input)
@@ -177,7 +177,7 @@ export function normalizeLyricsMatchText(value: string) {
 }
 
 export function toProviderImportErrorMessage(error: unknown) {
-  if (error instanceof MusicRoomApiError) {
+  if (error instanceof SoqaroApiError) {
     if (error.code === "QQMUSIC_TRACK_NOT_FOUND") {
       return "该歌曲没有可用的公开音频，可能受付费、VIP 或版权限制。";
     }

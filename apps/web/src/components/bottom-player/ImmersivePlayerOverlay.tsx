@@ -1,9 +1,9 @@
-"use client";
+﻿"use client";
 import { ImmersivePositionProvider, useImmersivePositionMs } from "./ImmersivePositionProvider";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import type { ProviderTrackCandidate, QueueItem, RoomMember, TrackMeta } from "@music-room/shared";
-import { formatDuration } from "@/lib/domain/music-room-ui";
+import type { ProviderTrackCandidate, QueueItem, RoomMember, TrackMeta } from "@soqaro/shared";
+import { formatDuration } from "@/lib/domain/soqaro-ui";
 import { VinylTonearm } from "@/components/room/VinylTonearm";
 import { RoomLyricsPanel } from "@/components/room/RoomLyricsPanel";
 import { fetchProviderLyricsCached, hasWordSyncedRoomLyrics, selectRoomLyrics } from "@/features/playback/lyrics";

@@ -1,4 +1,4 @@
-# 02 · WebRTC Peer 连接重构归档
+﻿# 02 · WebRTC Peer 连接重构归档
 
 状态：`历史提案，不代表当前实现`
 
@@ -7,7 +7,7 @@
 当前有效边界：
 
 - Socket.IO 负责房间状态和 WebRTC offer/answer/candidate 信令
-- `music-room-control` DataChannel 只负责控制/健康协调
+- `soqaro-control` DataChannel 只负责控制/健康协调
 - 音频通过独立 WebRTC Media RTP Opus Track 发布
 - 成员之间不传输原始资产、播放资产或缓存分片
 

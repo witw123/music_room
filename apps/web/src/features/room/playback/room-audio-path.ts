@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Room audio path resolution for the segmented playback runtime.
  *
  * These helpers decide which audio source a member should play (local file,
@@ -12,7 +12,7 @@ import type {
   RoomPlaybackReadinessInputPayload,
   TrackLoudness,
   TrackMeta
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import {
   getRoomPlaybackClockNowMs,
   resolveRoomPlaybackPositionMs,

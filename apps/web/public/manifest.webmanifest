@@ -1,6 +1,6 @@
 {
-  "name": "Music Room",
-  "short_name": "MusicRoom",
+  "name": "Soqaro",
+  "short_name": "Soqaro",
   "description": "与好友实时同步收听本地高保真音乐，提供浏览器与桌面优先的协作听歌体验。",
   "start_url": "/app",
   "display": "standalone",

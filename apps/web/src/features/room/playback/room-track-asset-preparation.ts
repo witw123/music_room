@@ -1,10 +1,10 @@
-import {
+﻿import {
   hasCompleteRoomAsset,
   type RoomSnapshot,
   type RoomTrackDistributionState,
   type TrackMeta
-} from "@music-room/shared";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+} from "@soqaro/shared";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 import { getRoomLocalAudioFile, hasDirectoryReadPermission } from "@/features/library/local-audio-storage";
 import {
   getCachedLibraryTrack,
@@ -12,7 +12,7 @@ import {
   getAssetManifest,
   getLocalAudioDirectory,
   linkTrackAssets,
-  musicRoomDatabase
+  soqaroDatabase
 } from "@/features/library/indexeddb";
 import { toCachedLibraryFile } from "@/features/library/cache-library";
 import { prepareAudioAssets } from "@/features/library/audio-asset-builder";
@@ -96,7 +96,7 @@ export async function verifyPlaybackAssetIntegrity(playbackAssetId: string | nul
     const manifestRecord = await getAssetManifest(playbackAssetId);
     if (!manifestRecord) return false;
     if (manifestRecord.complete) return true;
-    const count = await musicRoomDatabase.assetUnits.where("assetId").equals(playbackAssetId).count();
+    const count = await soqaroDatabase.assetUnits.where("assetId").equals(playbackAssetId).count();
     return count >= manifestRecord.manifest.unitCount;
   } catch {
     return false;
@@ -178,11 +178,11 @@ export async function resolveTrackAudioFile(
   if (track.sourceType !== "local_upload" && track.sourceRef?.trackId) {
     const preferredQuality = getAppSettings().playback.preferredAudioQuality;
     const download = track.sourceType === "netease"
-      ? await musicRoomApi.downloadNeteaseTrack(track.sourceRef.trackId, preferredQuality, signal)
+      ? await soqaroApi.downloadNeteaseTrack(track.sourceRef.trackId, preferredQuality, signal)
       : track.sourceType === "qqmusic"
-        ? await musicRoomApi.downloadQqMusicTrack(track.sourceRef.trackId, preferredQuality, signal)
+        ? await soqaroApi.downloadQqMusicTrack(track.sourceRef.trackId, preferredQuality, signal)
         : track.sourceType === "bilibili"
-          ? await musicRoomApi.downloadBilibiliTrack(track.sourceRef.trackId, signal)
+          ? await soqaroApi.downloadBilibiliTrack(track.sourceRef.trackId, signal)
           : null;
 
     if (download?.blob) {
@@ -220,7 +220,7 @@ export async function ensureRoomTrackDistributionAsset(
     trackPreparationStates.set(track.id, "failed");
     setTrackUnavailableReason(track.id, "asset-corrupt");
     notifyListeners();
-    void musicRoomApi.reportTrackAssetUnavailable(roomId, track.id, {
+    void soqaroApi.reportTrackAssetUnavailable(roomId, track.id, {
       trackId: track.id,
       reason: "asset-corrupt"
     }).catch(() => undefined);
@@ -256,7 +256,7 @@ export async function ensureRoomTrackDistributionAsset(
         trackPreparationStates.set(track.id, reason === "source-missing" ? "source-missing" : "failed");
         setTrackUnavailableReason(track.id, reason);
         notifyListeners();
-        void musicRoomApi.reportTrackAssetUnavailable(roomId, track.id, {
+        void soqaroApi.reportTrackAssetUnavailable(roomId, track.id, {
           trackId: track.id,
           reason
         }).catch(() => undefined);
@@ -274,7 +274,7 @@ export async function ensureRoomTrackDistributionAsset(
       signal?.throwIfAborted();
 
       // Register asset with the room server
-      const updatedTrack = await musicRoomApi.prepareTrackAsset(roomId, track.id, {
+      const updatedTrack = await soqaroApi.prepareTrackAsset(roomId, track.id, {
         trackId: track.id,
         fileHash: assets.fileHash,
         originalAsset: assets.originalAsset,
@@ -306,7 +306,7 @@ export async function ensureRoomTrackDistributionAsset(
         }
         trackPreparationStates.set(track.id, "failed");
         setTrackUnavailableReason(track.id, reason);
-        void musicRoomApi.reportTrackAssetUnavailable(roomId, track.id, {
+        void soqaroApi.reportTrackAssetUnavailable(roomId, track.id, {
           trackId: track.id,
           reason
         }).catch(() => undefined);
@@ -344,7 +344,7 @@ export async function prepareTrackWithLocalFile(
     });
 
     signal?.throwIfAborted();
-    const updatedTrack = await musicRoomApi.prepareTrackAsset(roomId, track.id, {
+    const updatedTrack = await soqaroApi.prepareTrackAsset(roomId, track.id, {
       trackId: track.id,
       fileHash: assets.fileHash,
       originalAsset: assets.originalAsset,

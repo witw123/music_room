@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useParams, useRouter } from "next/navigation";
-import type { RoomChatMessage } from "@music-room/shared";
+import type { RoomChatMessage } from "@soqaro/shared";
 import { adminApi, AdminApiError, ADMIN_CONFIRM_REASON, type AdminRoomDetail } from "@/lib/network/admin-api";
 
 type RoomMember = { id?: string; nickname?: string; peerId?: string | null; presenceState?: string; role?: string; joinedAt?: string };

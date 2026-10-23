@@ -1,4 +1,4 @@
-import type { ProviderPlaylistSummary, ProviderTrackCandidate } from "@music-room/shared";
+﻿import type { ProviderPlaylistSummary, ProviderTrackCandidate } from "@soqaro/shared";
 import { rankRecommendationCandidates, isRecommendationCandidateExcluded, partitionDiscoveryRecommendations, rerankRecommendationCandidates, selectPersonalizedPlaylists, trackIdentity } from "./recommendation-engine";
 import { buildTopArtists } from "./personalization.service";
 

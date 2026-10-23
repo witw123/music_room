@@ -1,11 +1,11 @@
-"use client";
+﻿"use client";
 
 import type { MutableRefObject, RefObject } from "react";
 import type {
   AuthSession,
   PeerDiagnosticsSnapshot,
   RoomSnapshot
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import type { PeerConnectionStatsSample } from "@/features/p2p/connection-stats";
 import type { PeerConnectionSupervisorState } from "@/features/p2p/connection-supervisor";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";

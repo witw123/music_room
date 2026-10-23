@@ -1,9 +1,9 @@
-"use client";
+﻿"use client";
 
 import { memo, useEffect, useRef, useState } from "react";
 import { Check, CheckSquare, Copy, GripVertical, Play, Plus, Save, Trash2 } from "lucide-react";
-import type { AuthSession, RoomMember, TrackMeta } from "@music-room/shared";
-import { formatDuration } from "@/lib/domain/music-room-ui";
+import type { AuthSession, RoomMember, TrackMeta } from "@soqaro/shared";
+import { formatDuration } from "@/lib/domain/soqaro-ui";
 import { Button } from "@/components/ui/button";
 import type { UploadedTrack } from "@/features/library/audio-utils";
 import { listRoomPlaylistTrackIndex, providerTrackKey } from "@/features/playlist/local-playlist";

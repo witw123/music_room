@@ -1,6 +1,6 @@
-import { Injectable, BadRequestException } from "@nestjs/common";
+﻿import { Injectable, BadRequestException } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
-import type { Playlist } from "@music-room/shared";
+import type { Playlist } from "@soqaro/shared";
 import { PrismaService } from "../../infra/prisma/prisma.service";
 import { RoomService } from "../room/room.service";
 

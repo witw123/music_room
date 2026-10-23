@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
 import { useMemo, useRef } from "react";
-import type { RoomSnapshot } from "@music-room/shared";
+import type { RoomSnapshot } from "@soqaro/shared";
 import { isCurrentPlaybackSourceDevice } from "@/features/playback/playback-source-identity";
 import {
   resolvePlaybackSurfaceKey,

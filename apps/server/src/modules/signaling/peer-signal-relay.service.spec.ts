@@ -1,4 +1,4 @@
-import type { PeerSignalMessage } from "@music-room/shared";
+﻿import type { PeerSignalMessage } from "@soqaro/shared";
 import { PeerSignalRelayService } from "./peer-signal-relay.service";
 import { RoomSessionLeaseService } from "./room-session-lease.service";
 

@@ -1,11 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+﻿import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const indexedDbMocks = vi.hoisted(() => ({
   upsertCachedLibraryTrack: vi.fn()
 }));
 
 const apiMocks = vi.hoisted(() => ({
-  musicRoomApi: {
+  soqaroApi: {
     downloadNeteaseTrack: vi.fn(),
     downloadQqMusicTrack: vi.fn(),
     getNeteaseLyrics: vi.fn(),
@@ -24,10 +24,10 @@ const cacheLibraryMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/features/library/indexeddb", () => indexedDbMocks);
-vi.mock("@/lib/network/music-room-api", () => apiMocks);
+vi.mock("@/lib/network/soqaro-api", () => apiMocks);
 vi.mock("@/features/library/local-audio-storage", () => storageMocks);
 vi.mock("@/features/library/cache-library", () => cacheLibraryMocks);
-import type { RoomSnapshot, TrackMeta } from "@music-room/shared";
+import type { RoomSnapshot, TrackMeta } from "@soqaro/shared";
 import { ensureOfflineProviderPlaybackAsset } from "./offline-source-fallback";
 
 function buildTrack(overrides: Partial<TrackMeta> = {}) {
@@ -99,14 +99,14 @@ function buildInput(overrides: Partial<Parameters<typeof ensureOfflineProviderPl
 describe("offline provider fallback", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    apiMocks.musicRoomApi.getNeteaseLyrics.mockResolvedValue({ plainLyric: null });
+    apiMocks.soqaroApi.getNeteaseLyrics.mockResolvedValue({ plainLyric: null });
     apiMocks.resolveDownloadedAudioMimeType.mockResolvedValue("audio/mpeg");
     storageMocks.saveCachedAudioFileToLocalDirectory.mockResolvedValue(null);
     cacheLibraryMocks.buildCachedLibraryTrackUpsertRecord.mockReturnValue({});
   });
 
   it("falls back to streaming when provider caching fails", async () => {
-    apiMocks.musicRoomApi.downloadNeteaseTrack.mockRejectedValue(
+    apiMocks.soqaroApi.downloadNeteaseTrack.mockRejectedValue(
       new Error("NetEase account is not available.")
     );
 
@@ -124,14 +124,14 @@ describe("offline provider fallback", () => {
     const download = new Promise<{ blob: Blob; contentType: string }>((resolve) => {
       resolveDownload = resolve;
     });
-    apiMocks.musicRoomApi.downloadNeteaseTrack.mockReturnValue(download);
+    apiMocks.soqaroApi.downloadNeteaseTrack.mockReturnValue(download);
 
     const controller = new AbortController();
     const first = ensureOfflineProviderPlaybackAsset({
       ...buildInput(),
       signal: controller.signal
     });
-    await vi.waitFor(() => expect(apiMocks.musicRoomApi.downloadNeteaseTrack).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(apiMocks.soqaroApi.downloadNeteaseTrack).toHaveBeenCalledOnce());
     controller.abort();
 
     const second = ensureOfflineProviderPlaybackAsset(buildInput());
@@ -143,6 +143,6 @@ describe("offline provider fallback", () => {
     const [firstResult, secondResult] = await Promise.all([first, second]);
     expect(firstResult.file).toBeInstanceOf(File);
     expect(secondResult.file).toBe(firstResult.file);
-    expect(apiMocks.musicRoomApi.downloadNeteaseTrack).toHaveBeenCalledOnce();
+    expect(apiMocks.soqaroApi.downloadNeteaseTrack).toHaveBeenCalledOnce();
   });
 });

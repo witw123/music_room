@@ -1,5 +1,5 @@
-import React from "react";
-import type { Playlist } from "@music-room/shared";
+﻿import React from "react";
+import type { Playlist } from "@soqaro/shared";
 import type { LocalPlaylistRecord, LocalPlaylistTrackRecord } from "@/features/playlist/local-playlist";
 import { Button } from "@/components/ui/button";
 import {

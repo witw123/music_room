@@ -1,9 +1,9 @@
-import type {
+﻿import type {
   PeerDiagnosticsSnapshot,
   PeerRecentEvent,
   PeerSignalStats,
   RemoteTrackStatus
-} from "@music-room/shared";
+} from "@soqaro/shared";
 
 export type DiagnosticsState = {
   peers: Record<string, PeerDiagnosticsSnapshot>;

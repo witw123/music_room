@@ -1,4 +1,4 @@
-import type { Playlist, RoomSnapshot } from "@music-room/shared";
+﻿import type { Playlist, RoomSnapshot } from "@soqaro/shared";
 import type { RoomRecord } from "../room.types";
 import { RoomPlaybackService } from "./room-playback.service";
 import { RoomPresenceService } from "./room-presence.service";

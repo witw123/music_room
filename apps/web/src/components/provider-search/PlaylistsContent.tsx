@@ -1,5 +1,5 @@
-import React from "react";
-import type { ProviderPlaylistDetail, ProviderPlaylistSummary } from "@music-room/shared";
+﻿import React from "react";
+import type { ProviderPlaylistDetail, ProviderPlaylistSummary } from "@soqaro/shared";
 import { ProviderPlaylistDetailView } from "./ProviderPlaylistDetailView";
 import type { ProviderAlbumTrackActions } from "./ProviderAlbumDetailView";
 import { Artwork, SearchEmptyState } from "./search-ui-primitives";

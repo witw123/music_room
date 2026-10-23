@@ -1,4 +1,4 @@
-import type { BilibiliTrackCandidate, ProviderPlaylistSummary } from "@music-room/shared";
+﻿import type { BilibiliTrackCandidate, ProviderPlaylistSummary } from "@soqaro/shared";
 
 /**
  * 判断 B 站条目是否为合集/分P/专辑集合（而非单曲）

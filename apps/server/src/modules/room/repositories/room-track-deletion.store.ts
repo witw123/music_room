@@ -1,4 +1,4 @@
-import type { RoomTrackDeletion } from "@music-room/shared";
+﻿import type { RoomTrackDeletion } from "@soqaro/shared";
 import type { PrismaService } from "../../../infra/prisma/prisma.service";
 import type { RedisService } from "../../../infra/redis/redis.service";
 
@@ -115,11 +115,11 @@ export class RoomTrackDeletionStore {
 
 
   private trackDeletionsKey(roomId: string) {
-    return `music-room:room-track-deletions:${roomId}`;
+    return `soqaro:room-track-deletions:${roomId}`;
   }
 
   private trackDeletionKey(roomId: string, trackId: string) {
-    return `music-room:room-track-deletion:${roomId}:${trackId}`;
+    return `soqaro:room-track-deletion:${roomId}:${trackId}`;
   }
 
 

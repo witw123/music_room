@@ -1,4 +1,4 @@
-package com.musicroom.app;
+package com.soqaro.app;
 
 import android.Manifest;
 import android.app.NotificationChannel;
@@ -42,8 +42,8 @@ import java.util.concurrent.Executors;
     }
 )
 public class SystemNotificationPlugin extends Plugin {
-    private static final String CHANNEL_ID = "music_room_notifications";
-    private static final String CHANNEL_NAME = "Music Room 房间通知";
+    private static final String CHANNEL_ID = "soqaro_notifications";
+    private static final String CHANNEL_NAME = "Soqaro 房间通知";
     private static final String CHANNEL_DESC = "用于接收切歌、点歌、曲库变动和聊天消息通知";
     private final ExecutorService imageExecutor = Executors.newSingleThreadExecutor();
 
@@ -137,7 +137,7 @@ public class SystemNotificationPlugin extends Plugin {
 
     @PluginMethod
     public void show(PluginCall call) {
-        String title = call.getString("title", "Music Room");
+        String title = call.getString("title", "Soqaro");
         String body = call.getString("body", "");
         String artworkUrl = call.getString("artworkUrl");
         int notificationId = call.getInt("id", (int) (System.currentTimeMillis() % 100000));

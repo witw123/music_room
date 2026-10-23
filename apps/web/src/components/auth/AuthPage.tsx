@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import Script from "next/script";
@@ -6,12 +6,12 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import { ArrowLeft, Eye, EyeOff, X } from "lucide-react";
-import { loginRequestSchema, registerRequestSchema } from "@music-room/shared";
+import { loginRequestSchema, registerRequestSchema } from "@soqaro/shared";
 import { Button } from "@/components/ui/button";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildAppEntryHref } from "@/lib/domain/client-shell";
-import { musicRoomApi } from "@/lib/network/music-room-api";
-import { toUserFacingError } from "@/lib/domain/music-room-ui";
+import { soqaroApi } from "@/lib/network/soqaro-api";
+import { toUserFacingError } from "@/lib/domain/soqaro-ui";
 
 declare global {
   interface Window {
@@ -87,13 +87,13 @@ export function AuthPage() {
     setStatusMessage,
     setActiveSession
   } = useSessionIdentity({
-    sessionStorageKey: "music-room-session",
+    sessionStorageKey: "soqaro-session",
     initialStatusMessage: ""
   });
 
   useEffect(() => {
     let cancelled = false;
-    void musicRoomApi
+    void soqaroApi
       .getAuthConfig()
       .then((config) => {
         if (cancelled) return;
@@ -140,7 +140,7 @@ export function AuthPage() {
     }
 
     try {
-      const session = await musicRoomApi.login(
+      const session = await soqaroApi.login(
         loginUsername.trim(),
         loginPassword,
         turnstileToken ?? undefined
@@ -177,7 +177,7 @@ export function AuthPage() {
     }
 
     try {
-      const session = await musicRoomApi.register(
+      const session = await soqaroApi.register(
         registerUsername.trim(),
         registerPassword,
         registerNickname.trim(),
@@ -242,7 +242,7 @@ export function AuthPage() {
           </Link>
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-accent" />
-            <span className="text-xs font-semibold tracking-wider text-foreground-muted uppercase">Music Room</span>
+            <span className="text-xs font-semibold tracking-wider text-foreground-muted uppercase">Soqaro</span>
           </div>
         </div>
 

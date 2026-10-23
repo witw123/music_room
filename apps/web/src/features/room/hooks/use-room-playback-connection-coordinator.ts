@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useRef, type MutableRefObject } from "react";
-import type { RoomSnapshot } from "@music-room/shared";
+import type { RoomSnapshot } from "@soqaro/shared";
 import type {
   PlaybackConnectionKey,
   PlaybackRecoveryAction,

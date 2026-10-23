@@ -1,4 +1,4 @@
-import type { TrackMeta } from "@music-room/shared";
+﻿import type { TrackMeta } from "@soqaro/shared";
 import type { UploadedTrack } from "@/features/library/audio-utils";
 
 type TrackRegistrationDraft = Omit<TrackMeta, "id"> & {

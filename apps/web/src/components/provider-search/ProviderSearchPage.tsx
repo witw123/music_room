@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -7,10 +7,10 @@ import type {
   ProviderAlbumSummary,
   ProviderPlaylistDetail,
   ProviderPlaylistSummary
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 import {
   localPlaylistTrackId,
   listMergedLocalPlaylistTracks,
@@ -96,7 +96,7 @@ export function ProviderSearchPage({
   const player = useLocalPlayer();
   const authEntryHref = buildWorkspaceAuthHref({ redirectTo: onClose ? "/app/discover?search=1" : "/app/search" });
   const { activeSession, hydrated } = useSessionIdentity({
-    sessionStorageKey: "music-room-session",
+    sessionStorageKey: "soqaro-session",
     initialStatusMessage: ""
   });
   const {
@@ -190,11 +190,11 @@ export function ProviderSearchPage({
       try {
         const response = query
           ? provider === "netease"
-            ? await musicRoomApi.searchNeteaseSuggestions(query)
-            : await musicRoomApi.searchQqMusicSuggestions(query)
+            ? await soqaroApi.searchNeteaseSuggestions(query)
+            : await soqaroApi.searchQqMusicSuggestions(query)
           : provider === "netease"
-            ? await musicRoomApi.getNeteaseSearchHot()
-            : await musicRoomApi.getQqMusicSearchHot();
+            ? await soqaroApi.getNeteaseSearchHot()
+            : await soqaroApi.getQqMusicSearchHot();
         if (cancelled) return;
         const items = response.items.map((item) => ({
           label: item.label,
@@ -261,16 +261,16 @@ export function ProviderSearchPage({
     try {
       const activeTid = customTid !== undefined ? customTid : bilibiliSubCategory;
       const response = provider === "netease"
-        ? await musicRoomApi.searchNeteaseTracks(query)
+        ? await soqaroApi.searchNeteaseTracks(query)
         : provider === "qqmusic"
-          ? await musicRoomApi.searchQqMusicTracks(query)
-          : await musicRoomApi.searchBilibiliTracks(query, { tid: activeTid, page, pageSize: 15 });
+          ? await soqaroApi.searchQqMusicTracks(query)
+          : await soqaroApi.searchBilibiliTracks(query, { tid: activeTid, page, pageSize: 15 });
 
       if (provider === "bilibili") {
         const collections: ProviderPlaylistSummary[] = [];
         const singles: Track[] = [];
         for (const item of response.items) {
-          const biliItem = item as import("@music-room/shared").BilibiliTrackCandidate;
+          const biliItem = item as import("@soqaro/shared").BilibiliTrackCandidate;
           if (isBilibiliCollection(biliItem)) {
             collections.push(bilibiliTrackToPlaylistSummary(biliItem));
           } else {
@@ -312,7 +312,7 @@ export function ProviderSearchPage({
     setPending(`parts:${bvid}`);
     setErrorMessage(null);
     try {
-      const detail = await musicRoomApi.getBilibiliVideoParts(bvid);
+      const detail = await soqaroApi.getBilibiliVideoParts(bvid);
       setBilibiliPartDetail(detail);
     } catch (error) {
       setErrorMessage(toProviderErrorMessage(error, "bilibili"));
@@ -324,7 +324,7 @@ export function ProviderSearchPage({
   async function handleImportBilibiliSuccess(tracks: Track[], playlistTitle: string) {
     try {
       setPending("import-bilibili-favorite");
-      await musicRoomApi.createPlaylist({
+      await soqaroApi.createPlaylist({
         title: playlistTitle,
         description: "导入自哔哩哔哩公开收藏夹",
         coverUrl: tracks[0]?.artworkUrl ?? null,
@@ -390,14 +390,14 @@ export function ProviderSearchPage({
     setErrorMessage(null);
     try {
       if (provider === "netease") {
-        const response = await musicRoomApi.searchNeteasePlaylists(query);
+        const response = await soqaroApi.searchNeteasePlaylists(query);
         setPlaylists(response.items);
       } else if (provider === "qqmusic") {
-        const response = await musicRoomApi.searchQqMusicPlaylists(query);
+        const response = await soqaroApi.searchQqMusicPlaylists(query);
         setPlaylists(response.items);
       } else {
         const searchKeyword = query.includes("歌单") || query.includes("合集") ? query : `${query} 歌单`;
-        const response = await musicRoomApi.searchBilibiliTracks(searchKeyword, { pageSize: 20 });
+        const response = await soqaroApi.searchBilibiliTracks(searchKeyword, { pageSize: 20 });
         const summaries: ProviderPlaylistSummary[] = response.items.map((item) =>
           bilibiliTrackToPlaylistSummary(item)
         );
@@ -421,8 +421,8 @@ export function ProviderSearchPage({
     setErrorMessage(null);
     try {
       const response = provider === "netease"
-        ? await musicRoomApi.searchNeteaseAlbums(query)
-        : await musicRoomApi.searchQqMusicAlbums(query);
+        ? await soqaroApi.searchNeteaseAlbums(query)
+        : await soqaroApi.searchQqMusicAlbums(query);
       setAlbums(response.items);
       setAlbum(null);
     } catch (error) {
@@ -488,7 +488,7 @@ export function ProviderSearchPage({
       if (option.playlist.trackIds.includes(trackId)) {
         setStatusMessage(`《${resolvedTrack.title}》已在“${option.playlist.title}”中。`);
       } else {
-        await musicRoomApi.updatePlaylist(option.playlist.id, { trackIds: [...option.playlist.trackIds, trackId] });
+        await soqaroApi.updatePlaylist(option.playlist.id, { trackIds: [...option.playlist.trackIds, trackId] });
         setStatusMessage(`《${resolvedTrack.title}》已加入“${option.playlist.title}”。`);
       }
       setPlaylistPickerTrack(null);
@@ -545,7 +545,7 @@ export function ProviderSearchPage({
       const nextTrackIds = [...option.playlist.trackIds, ...trackIds.filter((trackId) => !existingIds.has(trackId))];
       const addedCount = nextTrackIds.length - option.playlist.trackIds.length;
       if (addedCount > 0) {
-        await musicRoomApi.updatePlaylist(option.playlist.id, { trackIds: nextTrackIds });
+        await soqaroApi.updatePlaylist(option.playlist.id, { trackIds: nextTrackIds });
       }
       setStatusMessage(addedCount > 0
         ? `专辑《${albumToAdd.title}》中的 ${addedCount} 首歌曲已加入“${option.playlist.title}”。`
@@ -565,10 +565,10 @@ export function ProviderSearchPage({
     setErrorMessage(null);
     try {
       const detail: ProviderPlaylistDetail = item.provider === "netease"
-        ? await musicRoomApi.getNeteasePlaylist(item.providerPlaylistId)
+        ? await soqaroApi.getNeteasePlaylist(item.providerPlaylistId)
         : item.provider === "qqmusic"
-          ? await musicRoomApi.getQqMusicPlaylist(item.providerPlaylistId)
-          : await musicRoomApi.getBilibiliVideoParts(item.providerPlaylistId).then((partsDetail) => ({
+          ? await soqaroApi.getQqMusicPlaylist(item.providerPlaylistId)
+          : await soqaroApi.getBilibiliVideoParts(item.providerPlaylistId).then((partsDetail) => ({
               provider: "bilibili" as const,
               providerPlaylistId: partsDetail.bvid,
               title: partsDetail.title,
@@ -594,7 +594,7 @@ export function ProviderSearchPage({
     setPending(`save-playlist:${detail.provider}:${detail.providerPlaylistId}`);
     setErrorMessage(null);
     try {
-      await musicRoomApi.createPlaylist({
+      await soqaroApi.createPlaylist({
         title: detail.title,
         description: detail.description,
         coverUrl: detail.artworkUrl ?? detail.tracks.find((track) => track.artworkUrl)?.artworkUrl ?? null,
@@ -642,10 +642,10 @@ export function ProviderSearchPage({
     setContentTab("albums");
     try {
       const detail = itemProvider === "netease"
-        ? await musicRoomApi.getNeteaseAlbum(id)
+        ? await soqaroApi.getNeteaseAlbum(id)
         : itemProvider === "qqmusic"
-          ? await musicRoomApi.getQqMusicAlbum(id)
-          : await musicRoomApi.getBilibiliVideoParts(id).then((partsDetail) => ({
+          ? await soqaroApi.getQqMusicAlbum(id)
+          : await soqaroApi.getBilibiliVideoParts(id).then((partsDetail) => ({
               provider: "bilibili" as const,
               providerAlbumId: partsDetail.bvid,
               title: partsDetail.title,
@@ -698,8 +698,8 @@ export function ProviderSearchPage({
       setErrorMessage(null);
       try {
         const detail = track.provider === "netease"
-          ? await musicRoomApi.getNeteaseTrack(track.providerTrackId)
-          : await musicRoomApi.getQqMusicTrack(track.providerTrackId);
+          ? await soqaroApi.getNeteaseTrack(track.providerTrackId)
+          : await soqaroApi.getQqMusicTrack(track.providerTrackId);
         albumId = detail.providerAlbumId;
       } catch (error) {
         setErrorMessage(toProviderErrorMessage(error, track.provider));

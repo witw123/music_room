@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import {
   buildMerkleTree,
@@ -12,7 +12,7 @@ import {
   type OriginalAssetManifest,
   type PlaybackAssetManifest,
   type TrackLoudness
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import { createSHA256 } from "hash-wasm";
 import {
   deleteAudioAsset,

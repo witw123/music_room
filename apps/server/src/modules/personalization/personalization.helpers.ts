@@ -1,8 +1,8 @@
-import type {
+﻿import type {
   PersonalizationTasteTag,
   ProviderTrackCandidate,
   RecordPersonalizationEvent
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import { extractTasteEvidence } from "./taste-taxonomy";
 
 export const longTermHalfLifeMs = 120 * 24 * 60 * 60 * 1_000;

@@ -1,4 +1,4 @@
-import type { RoomPlaybackReadinessInputPayload, RoomPlaybackReadinessPayload } from "@music-room/shared";
+﻿import type { RoomPlaybackReadinessInputPayload, RoomPlaybackReadinessPayload } from "@soqaro/shared";
 import { RoomPlaybackReadinessService } from "./room-playback-readiness.service";
 
 function createRoomService() {

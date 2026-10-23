@@ -1,6 +1,6 @@
-export const awayRoomStorageKey = "music-room-away-room";
-export const awayRoomChangeEvent = "music-room-away-room-change";
-export const awayRoomResumeStorageKey = "music-room-away-room-resume";
+export const awayRoomStorageKey = "soqaro-away-room";
+export const awayRoomChangeEvent = "soqaro-away-room-change";
+export const awayRoomResumeStorageKey = "soqaro-away-room-resume";
 
 export function readAwayRoomId() {
   if (typeof window === "undefined") return null;

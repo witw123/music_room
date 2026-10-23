@@ -1,4 +1,4 @@
-import type { IceServerConfig } from "@music-room/shared";
+﻿import type { IceServerConfig } from "@soqaro/shared";
 import {
   clearPeerTimers,
   type PeerEntry
@@ -234,7 +234,7 @@ export function bindPeerConnectionEvents(input: {
       return;
     }
     const channel = event.channel;
-    if (channel.label !== "music-room-control") {
+    if (channel.label !== "soqaro-control") {
       channel.close();
       return;
     }

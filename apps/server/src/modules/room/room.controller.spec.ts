@@ -1,4 +1,4 @@
-import { computeAssetId, type Room, type RoomSnapshot } from "@music-room/shared";
+﻿import { computeAssetId, type Room, type RoomSnapshot } from "@soqaro/shared";
 import { RoomController } from "./room.controller";
 
 function buildSnapshot(overrides?: Partial<Room>): RoomSnapshot {

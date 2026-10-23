@@ -1,9 +1,9 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { SystemAnnouncement } from "@music-room/shared";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import type { SystemAnnouncement } from "@soqaro/shared";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -12,7 +12,7 @@ import {
   DialogTitle
 } from "@/components/ui/dialog";
 
-const DISMISSED_STORAGE_KEY = "music-room-dismissed-announcements";
+const DISMISSED_STORAGE_KEY = "soqaro-dismissed-announcements";
 
 function readDismissedIds(): Set<string> {
   if (typeof window === "undefined") return new Set();
@@ -73,7 +73,7 @@ function formatExactTime(isoString: string): string {
 export function AnnouncementBanner() {
   const announcementsQuery = useQuery({
     queryKey: ["system-announcements", "active"],
-    queryFn: ({ signal }) => musicRoomApi.getActiveAnnouncements(signal),
+    queryFn: ({ signal }) => soqaroApi.getActiveAnnouncements(signal),
     staleTime: 30_000,
     refetchInterval: 30_000
   });

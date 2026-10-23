@@ -8,7 +8,7 @@ import {
 
 export type UpdateCheckStatus = "idle" | "checking" | "latest" | "available" | "error";
 
-const SESSION_CHECKED_KEY = "music-room-update-checked-session";
+const SESSION_CHECKED_KEY = "soqaro-update-checked-session";
 
 export function useAppUpdate(options?: { autoCheck?: boolean }) {
   const [status, setStatus] = useState<UpdateCheckStatus>("idle");

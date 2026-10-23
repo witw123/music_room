@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useRef } from "react";
-import type { RoomSnapshot } from "@music-room/shared";
+import type { RoomSnapshot } from "@soqaro/shared";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
 import { createPeerSnapshot } from "@/features/p2p/diagnostics";
 import type { DataTransportStatsInput } from "./room-runtime-types";

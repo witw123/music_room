@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import {
   useCallback,
@@ -8,8 +8,8 @@ import {
   type RefObject,
   type SetStateAction
 } from "react";
-import type { QueueItem, RoomSnapshot } from "@music-room/shared";
-import { toUserFacingError } from "@/lib/domain/music-room-ui";
+import type { QueueItem, RoomSnapshot } from "@soqaro/shared";
+import { toUserFacingError } from "@/lib/domain/soqaro-ui";
 import {
   createPlaybackStartRequest,
   type PlaybackStartRequest

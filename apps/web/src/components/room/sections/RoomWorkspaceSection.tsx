@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { memo } from "react";
 import type {
@@ -6,7 +6,7 @@ import type {
   RoomMediaConnectionState,
   RoomSnapshot,
   TrackMeta
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import type { RoomSocket } from "@/lib/network/ws-client";
 import type { useRoomWorkspaceViewModel } from "@/components/room/hooks/use-room-workspace-view-model";
 import type { useTrackUploads } from "@/features/upload/use-track-uploads";

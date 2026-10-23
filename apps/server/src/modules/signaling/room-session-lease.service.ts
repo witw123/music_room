@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+﻿import { Injectable, Logger } from "@nestjs/common";
 import { WsException } from "@nestjs/websockets";
 import type { Socket } from "socket.io";
 import { RedisService } from "../../infra/redis/redis.service";
@@ -46,7 +46,7 @@ export class RoomSessionLeaseService {
   ) {}
 
   key(roomId: string, sessionId: string) {
-    return `music-room:realtime-session:${roomId}:${sessionId}`;
+    return `soqaro:realtime-session:${roomId}:${sessionId}`;
   }
 
   async claim(
@@ -390,7 +390,7 @@ export class RoomSessionLeaseService {
       return operation();
     }
 
-    const lockKey = `music-room:lock:room:${roomId}`;
+    const lockKey = `soqaro:lock:room:${roomId}`;
     const deadline = Date.now() + this.roomLockWaitMs;
     let token: string | null = null;
     while (!token && Date.now() < deadline) {

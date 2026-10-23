@@ -1,4 +1,4 @@
-package com.musicroom.app;
+package com.soqaro.app;
 
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -40,9 +40,9 @@ import java.util.concurrent.Executors;
  * while active in a room or playing media, avoiding WebSocket/WebRTC disconnections.
  */
 public class SystemMediaService extends Service {
-    private static final String CHANNEL_ID = "music_room_media";
+    private static final String CHANNEL_ID = "soqaro_media";
     private static final int NOTIFICATION_ID = 42;
-    private static final String ACTION_MEDIA_COMMAND = "com.musicroom.app.SYSTEM_MEDIA_COMMAND";
+    private static final String ACTION_MEDIA_COMMAND = "com.soqaro.app.SYSTEM_MEDIA_COMMAND";
 
     private MediaSessionCompat session;
     private final ExecutorService imageExecutor = Executors.newSingleThreadExecutor();
@@ -69,7 +69,7 @@ public class SystemMediaService extends Service {
         super.onCreate();
         createChannel();
         acquireLocks();
-        session = new MediaSessionCompat(this, "MusicRoomMediaSession");
+        session = new MediaSessionCompat(this, "SoqaroMediaSession");
         session.setCallback(new MediaSessionCompat.Callback() {
             @Override
             public void onPlay() {
@@ -174,7 +174,7 @@ public class SystemMediaService extends Service {
             if (wakeLock == null) {
                 PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
                 if (pm != null) {
-                    wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MusicRoom:MediaPlaybackWakeLock");
+                    wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Soqaro:MediaPlaybackWakeLock");
                     wakeLock.setReferenceCounted(false);
                 }
             }
@@ -188,7 +188,7 @@ public class SystemMediaService extends Service {
             if (wifiLock == null) {
                 WifiManager wm = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
                 if (wm != null) {
-                    wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "MusicRoom:MediaPlaybackWifiLock");
+                    wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "Soqaro:MediaPlaybackWifiLock");
                     wifiLock.setReferenceCounted(false);
                 }
             }
@@ -432,7 +432,7 @@ public class SystemMediaService extends Service {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel channel = new NotificationChannel(
                     CHANNEL_ID,
-                    "Music Room 播放控制",
+                    "Soqaro 播放控制",
                     NotificationManager.IMPORTANCE_LOW);
             channel.setDescription("系统媒体播放控制通知");
             channel.setShowBadge(false);

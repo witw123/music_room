@@ -1,4 +1,4 @@
-import type { PlaybackSnapshot } from "@music-room/shared";
+﻿import type { PlaybackSnapshot } from "@soqaro/shared";
 
 function hasActivePlayback(playback: PlaybackSnapshot | null | undefined) {
   return playback?.status === "playing" || playback?.status === "buffering";

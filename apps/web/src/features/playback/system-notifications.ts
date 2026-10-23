@@ -234,7 +234,7 @@ function dispatchSystemToastNotification(
   title: string,
   body: string,
   icon?: string,
-  tag = "music-room-toast"
+  tag = "soqaro-toast"
 ) {
   if (typeof window === "undefined") return;
 
@@ -314,10 +314,10 @@ export function notifyTrackChange(payload: TrackNotificationPayload, options?: {
   lastNotifiedTrackKey = trackKey;
   lastNotifiedAtMs = now;
 
-  const body = payload.artist ? `${payload.artist}` : "Music Room";
+  const body = payload.artist ? `${payload.artist}` : "Soqaro";
   const icon = resolveNotificationArtworkUrl(payload.artworkUrl) ?? NOTIFICATION_ICONS.track;
 
-  dispatchSystemToastNotification(payload.title, body, icon, "music-room-now-playing");
+  dispatchSystemToastNotification(payload.title, body, icon, "soqaro-now-playing");
 }
 
 /**
@@ -349,7 +349,7 @@ export function notifyRoomQueueTrackAdded(
     ? `《${payload.title}》 - ${payload.artist}`
     : `《${payload.title}》`;
   const icon = resolveNotificationArtworkUrl(payload.artworkUrl) ?? NOTIFICATION_ICONS.queue;
-  const tag = `music-room-queue-${payload.title}-${Date.now()}`;
+  const tag = `soqaro-queue-${payload.title}-${Date.now()}`;
 
   dispatchSystemToastNotification(title, body, icon, tag);
 }
@@ -382,7 +382,7 @@ export function notifyRoomTrackAddedToLibrary(
     ? `《${payload.title}》 - ${payload.artist}`
     : `《${payload.title}》`;
   const icon = resolveNotificationArtworkUrl(payload.artworkUrl) ?? NOTIFICATION_ICONS.library;
-  const tag = `music-room-library-${payload.title}-${Date.now()}`;
+  const tag = `soqaro-library-${payload.title}-${Date.now()}`;
 
   dispatchSystemToastNotification(title, body, icon, tag);
 }
@@ -414,7 +414,7 @@ export function notifyRoomChatMessage(
     : payload.senderName;
   const body = payload.content;
   const icon = NOTIFICATION_ICONS.chat;
-  const tag = `music-room-chat-${Date.now()}`;
+  const tag = `soqaro-chat-${Date.now()}`;
 
   dispatchSystemToastNotification(title, body, icon, tag);
 }
@@ -449,12 +449,12 @@ export function notifyRoomMemberPresence(
     ? `${payload.nickname} ${actionText} (${payload.roomTitle})`
     : `${payload.nickname} ${actionText}`;
   const icon = NOTIFICATION_ICONS.presence;
-  const tag = `music-room-presence-${payload.nickname}-${payload.action}-${Date.now()}`;
+  const tag = `soqaro-presence-${payload.nickname}-${payload.action}-${Date.now()}`;
 
   dispatchSystemToastNotification(title, body, icon, tag);
 }
 
-function sendWebNotification(title: string, body: string, icon?: string, tag = "music-room-now-playing") {
+function sendWebNotification(title: string, body: string, icon?: string, tag = "soqaro-now-playing") {
   if (typeof window === "undefined" || typeof Notification === "undefined") return;
   if (Notification.permission !== "granted") return;
 

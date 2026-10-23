@@ -1,4 +1,4 @@
-import type { PlaybackAssetManifest } from "@music-room/shared";
+﻿import type { PlaybackAssetManifest } from "@soqaro/shared";
 
 export const playbackPrefetchWindowMs = 16_000;
 

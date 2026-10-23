@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 /* eslint-disable @next/next/no-img-element */
 
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
@@ -10,11 +10,11 @@ import type {
   QqMusicTrackCandidate,
   RoomRequest,
   TrackMeta
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import { Button } from "@/components/ui/button";
 import { PlayerQueueList } from "@/components/bottom-player";
-import { formatDuration } from "@/lib/domain/music-room-ui";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import { formatDuration } from "@/lib/domain/soqaro-ui";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 import { RoomControlHeader } from "./RoomControlHeader";
 import { RoomImportProgressBar } from "./RoomImportProgressBar";
 import type { RoomDashboardViewProps } from "./RoomDashboardView";
@@ -127,14 +127,14 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
     setMessage(null);
     try {
       if (decision === "rejected") {
-        await musicRoomApi.rejectRoomRequest(roomId, request.id);
+        await soqaroApi.rejectRoomRequest(roomId, request.id);
         setMessage(`已拒绝《${request.title}》。`);
         return;
       }
 
-      snapshotRef.current = await musicRoomApi.getRoom(roomId);
+      snapshotRef.current = await soqaroApi.getRoom(roomId);
       const track = await importRequestedTrack(request, props, snapshotRef);
-      snapshotRef.current = await musicRoomApi.getRoom(roomId);
+      snapshotRef.current = await soqaroApi.getRoom(roomId);
       let queuedId = snapshotRef.current.queue.find((item) => item.trackId === track.id)?.id;
       if (!queuedId) {
         const queuedItem = await props.onAddToQueue(track.id);
@@ -143,7 +143,7 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
         }
         queuedId = (queuedItem as { id?: string })?.id;
       }
-      await musicRoomApi.approveRoomRequest(roomId, request.id);
+      await soqaroApi.approveRoomRequest(roomId, request.id);
 
       if (options?.playNext && queuedId) {
         await props.onPlayNextQueueItem(queuedId);
@@ -166,14 +166,14 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
       let count = 0;
       for (const request of pendingRequests) {
         try {
-          snapshotRef.current = await musicRoomApi.getRoom(roomId);
+          snapshotRef.current = await soqaroApi.getRoom(roomId);
           const track = await importRequestedTrack(request, props, snapshotRef);
-          snapshotRef.current = await musicRoomApi.getRoom(roomId);
+          snapshotRef.current = await soqaroApi.getRoom(roomId);
           const alreadyQueued = snapshotRef.current.queue.some((item) => item.trackId === track.id);
           if (!alreadyQueued) {
             await props.onAddToQueue(track.id);
           }
-          await musicRoomApi.approveRoomRequest(roomId, request.id);
+          await soqaroApi.approveRoomRequest(roomId, request.id);
           count += 1;
         } catch {
           // Continue with subsequent items in batch
@@ -187,7 +187,7 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
 
   const submitRequest = async (track: ProviderCandidate) => {
     setMessage(null);
-    const request = await musicRoomApi.createRoomRequest(roomId, {
+    const request = await soqaroApi.createRoomRequest(roomId, {
       provider: track.provider,
       providerTrackId: track.providerTrackId,
       title: track.title,
@@ -972,7 +972,7 @@ async function importRequestedTrack(
     });
   }
 
-  snapshotRef.current = await musicRoomApi.getRoom(props.roomSnapshot.room.id);
+  snapshotRef.current = await soqaroApi.getRoom(props.roomSnapshot.room.id);
   const importedTrack = snapshotRef.current.tracks.find(
     (item) => item.sourceRef?.provider === request.provider && item.sourceRef.trackId === request.providerTrackId
   );

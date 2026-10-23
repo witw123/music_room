@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
-import type { PeerSignalMessage, PlaybackSnapshot, RoomSnapshot } from "@music-room/shared";
-import { shouldReplacePlaybackSnapshot } from "@/lib/domain/music-room-ui";
+import type { PeerSignalMessage, PlaybackSnapshot, RoomSnapshot } from "@soqaro/shared";
+import { shouldReplacePlaybackSnapshot } from "@/lib/domain/soqaro-ui";
 
 export function createRoomRealtimeEventGate(initialSnapshot?: RoomSnapshot | null) {
   let latestRoomRevision = initialSnapshot?.room.roomRevision ?? 0;

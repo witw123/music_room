@@ -249,8 +249,8 @@ test("metrics-smoke", async ({ request }) => {
   const response = await request.get("http://127.0.0.1:3001/metrics");
   expect(response.ok()).toBeTruthy();
   const body = await response.text();
-  expect(body).toContain("music_room_ws_connections");
-  expect(body).toContain("music_room_active_rooms");
-  expect(body).toContain("music_room_realtime_failures_total");
-  expect(body).toContain("music_room_playback_conflicts_total");
+  expect(body).toContain("soqaro_ws_connections");
+  expect(body).toContain("soqaro_active_rooms");
+  expect(body).toContain("soqaro_realtime_failures_total");
+  expect(body).toContain("soqaro_playback_conflicts_total");
 });

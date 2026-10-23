@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import {
   useCallback,
@@ -6,7 +6,7 @@ import {
   useRef,
   type MutableRefObject
 } from "react";
-import type { AuthSession, RoomSnapshot } from "@music-room/shared";
+import type { AuthSession, RoomSnapshot } from "@soqaro/shared";
 import type { RoomSocket } from "@/lib/network/ws-client";
 import type { RoomSnapshotResyncReason } from "@/features/room/room-snapshot-resync";
 import type { RoomRecoveryMode } from "./room-runtime-types";

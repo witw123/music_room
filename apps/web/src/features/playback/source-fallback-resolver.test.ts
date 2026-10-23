@@ -24,8 +24,8 @@ const settingsMocks = vi.hoisted(() => ({
   }))
 }));
 
-vi.mock("@/lib/network/music-room-api", () => ({
-  musicRoomApi: apiMocks
+vi.mock("@/lib/network/soqaro-api", () => ({
+  soqaroApi: apiMocks
 }));
 
 vi.mock("@/features/settings/settings-store", () => settingsMocks);

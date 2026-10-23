@@ -1,12 +1,12 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "local-storage",
-  "description": "Fixed repository access for the main Music Room window",
+  "description": "Fixed repository access for the main Soqaro window",
   "windows": ["main"],
   "remote": {
     "urls": [
-      "https://musicroom.witw.top",
-      "https://musicroom.witw.top/*",
+      "https://soqaro.witw.top",
+      "https://soqaro.witw.top/*",
       "http://localhost:*",
       "http://localhost:*/*"
     ]

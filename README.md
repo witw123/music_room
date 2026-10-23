@@ -1,14 +1,14 @@
-# Music Room
+# Soqaro
 
 [English](./README.md) | [中文](./README.zh-CN.md)
 
 [![Node](https://img.shields.io/badge/Node.js-22.x-339933)](https://nodejs.org/)
 [![pnpm](https://img.shields.io/badge/pnpm-10.x-F69220)](https://pnpm.io/)
 
-Music Room is a multi-client collaborative music-room application for listening to users' own local audio and imported tracks together in real time. The monorepo contains the Next.js Web client, Tauri 2 desktop app, Capacitor 7 mobile app, NestJS server, and shared frontend/server contracts.
+Soqaro is a multi-client collaborative music application for listening to users' own local audio and imported tracks together in real time. The monorepo contains the Next.js Web client, Tauri 2 desktop app, Capacitor 7 mobile app, NestJS server, and shared frontend/server contracts.
 
-Current workspace version: `0.3.3`<br>
-Documentation snapshot: `2026-09`
+Current workspace version: `1.0.0`<br>
+Documentation snapshot: `2026-10`
 
 ## Product Scope
 
@@ -106,7 +106,7 @@ Recommended reading order:
 - **End-to-End Diagnostics**: Connection, signaling, ICE state, Web Audio scheduling, and RTP stream quality metrics
 - **Resilient Traversal**: Server-issued short-lived TURN credentials with static ICE configuration fallback
 
-The WebRTC `music-room-control` DataChannel carries control/health coordination only. It is not an audio asset or cache transfer channel.
+The WebRTC `soqaro-control` DataChannel carries control/health coordination only. It is not an audio asset or cache transfer channel.
 
 ## Quick Start
 
@@ -127,7 +127,7 @@ The WebRTC `music-room-control` DataChannel carries control/health coordination 
 pnpm install
 cp .env.example .env
 docker compose up -d postgres redis
-pnpm --filter @music-room/server db:push
+pnpm --filter @soqaro/server db:push
 pnpm dev
 ```
 
@@ -162,8 +162,8 @@ pnpm desktop:build        # Build desktop installer packages
 
 # Mobile client (Capacitor 7)
 pnpm mobile:sync          # Sync Web build artifacts to Android / iOS projects
-pnpm --filter @music-room/mobile open:android  # Open project in Android Studio
-pnpm --filter @music-room/mobile open:ios      # Open project in Xcode
+pnpm --filter @soqaro/mobile open:android  # Open project in Android Studio
+pnpm --filter @soqaro/mobile open:ios      # Open project in Xcode
 
 # Code quality and deployment checks
 pnpm lint                 # Run ESLint across packages

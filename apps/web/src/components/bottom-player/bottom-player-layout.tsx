@@ -1,8 +1,8 @@
-"use client";
+﻿"use client";
 
 import { useRef, useState, type CSSProperties } from "react";
-import { formatDuration } from "@/lib/domain/music-room-ui";
-import type { ProviderTrackCandidate, QueueItem, RoomMember, TrackMeta } from "@music-room/shared";
+import { formatDuration } from "@/lib/domain/soqaro-ui";
+import type { ProviderTrackCandidate, QueueItem, RoomMember, TrackMeta } from "@soqaro/shared";
 import { PlayerQueueDrawer } from "./PlayerQueueDrawer";
 import { FavoriteTrackButton } from "@/components/ui/FavoriteTrackButton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";

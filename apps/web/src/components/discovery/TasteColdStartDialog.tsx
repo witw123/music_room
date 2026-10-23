@@ -1,8 +1,8 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { ColdStartTasteDimension } from "@music-room/shared";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import type { ColdStartTasteDimension } from "@soqaro/shared";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 import { personalizationChangedEvent } from "@/features/personalization/use-personalization-reporter";
 import { Button } from "@/components/ui/button";
 import {
@@ -63,7 +63,7 @@ export function TasteColdStartDialog({
     dialogOpenRef.current = true;
 
     let cancelled = false;
-    void musicRoomApi.getPersonalizationProfile()
+    void soqaroApi.getPersonalizationProfile()
       .then((profile) => {
         if (cancelled || userEditedRef.current) return;
         const effectiveLabels = new Set<string>();
@@ -133,7 +133,7 @@ export function TasteColdStartDialog({
     if (selectedLabels.length === 0) return;
     setSubmitting(true);
     try {
-      await musicRoomApi.bootstrapColdStartProfile({
+      await soqaroApi.bootstrapColdStartProfile({
         selections: TASTE_DIMENSION_GROUPS.flatMap((group) =>
           group.options
             .filter((option) => selectedLabels.includes(option.label))

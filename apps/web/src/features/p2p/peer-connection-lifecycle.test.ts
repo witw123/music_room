@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+﻿import { describe, expect, it, vi } from "vitest";
 import { PeerConnectionLifecycleManager } from "./peer-connection-lifecycle-manager";
 import { createPeerEntry } from "./peer-connection-registry";
 import { SignalingTransport } from "./signaling-transport";
@@ -12,7 +12,7 @@ import {
 } from "./peer-connection-lifecycle";
 
 class FakeDataChannel {
-  label = "music-room-control";
+  label = "soqaro-control";
   readyState: RTCDataChannelState = "connecting";
   close = vi.fn(() => {
     this.readyState = "closed";

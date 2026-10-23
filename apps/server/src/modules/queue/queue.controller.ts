@@ -1,11 +1,11 @@
-import { Body, Controller, Delete, Get, Headers, Ip, Patch, Param, Post, UnauthorizedException } from "@nestjs/common";
+﻿import { Body, Controller, Delete, Get, Headers, Ip, Patch, Param, Post, UnauthorizedException } from "@nestjs/common";
 import {
   addQueueItemRequestSchema,
   batchAddQueueItemsRequestSchema,
   batchRemoveQueueItemsRequestSchema,
   reorderQueueRequestSchema,
   setNextQueueItemRequestSchema
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import { parseRequestBody } from "../../common/validation/zod-validation";
 import { AbuseProtectionService } from "../../common/security/abuse-protection.service";
 import { AuthService } from "../auth/auth.service";

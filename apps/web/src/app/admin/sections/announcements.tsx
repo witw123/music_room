@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
 import { useState, type FormEvent } from "react";
-import type { SystemAnnouncement } from "@music-room/shared";
+import type { SystemAnnouncement } from "@soqaro/shared";
 import { adminApi } from "@/lib/network/admin-api";
 import {
   Dialog,

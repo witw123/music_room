@@ -1,10 +1,10 @@
-import type { PeerDiagnosticsSnapshot } from "@music-room/shared";
+﻿import type { PeerDiagnosticsSnapshot } from "@soqaro/shared";
 import {
   resolvePeerLinkProfile,
   type PeerLinkProfile,
   type PeerLinkProfileInput
 } from "@/features/p2p/peer-link-profile";
-import { formatTransferRateMBps } from "@/lib/domain/music-room-ui";
+import { formatTransferRateMBps } from "@/lib/domain/soqaro-ui";
 
 export type WanLinkTone = "neutral" | "success" | "warning" | "danger" | "accent";
 

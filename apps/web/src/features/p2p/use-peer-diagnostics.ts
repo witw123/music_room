@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { PeerDiagnosticsSnapshot, PeerRecentEvent } from "@music-room/shared";
+import type { PeerDiagnosticsSnapshot, PeerRecentEvent } from "@soqaro/shared";
 import { createEmptyDiagnosticsState, recordDiagnosticsEvent } from "./diagnostics";
 
 export type PeerDiagnosticInput = Parameters<typeof recordDiagnosticsEvent>[1];

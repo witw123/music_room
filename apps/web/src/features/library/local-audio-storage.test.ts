@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+﻿import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const indexedDbMocks = vi.hoisted(() => ({
   deleteCachedLibraryTrack: vi.fn(),
@@ -50,7 +50,7 @@ function createDirectoryHandle(input: {
   };
   const fileHandle = {
     getFile: vi.fn().mockResolvedValue(new File([JSON.stringify({
-      format: "music-room-local-repository", schemaVersion: 1,
+      format: "soqaro-local-repository", schemaVersion: 1,
       repositoryId: "repository_1", hashAlgorithm: "sha256",
       playbackProfiles: {}, createdAt: "2026-09-19", updatedAt: "2026-09-19"
     })], "repository.json")),
@@ -68,7 +68,7 @@ function createDirectoryHandle(input: {
   };
   cacheDirectory.getDirectoryHandle.mockResolvedValue(cacheDirectory);
   const handle = {
-    name: "Music Room",
+    name: "Soqaro",
     queryPermission: vi.fn().mockResolvedValue(input.queryPermission),
     requestPermission: vi.fn().mockResolvedValue(input.requestPermission),
     getDirectoryHandle: vi.fn().mockResolvedValue(cacheDirectory),
@@ -107,7 +107,7 @@ type MemoryDirectoryEntry = {
  * `getFileByPath` make, recording which segments were requested and whether the
  * caller asked to create them. The create flag is what distinguishes an actual
  * repository open from the read-only path walk, which visits the same
- * `.music-room` segment.
+ * `.soqaro` segment.
  */
 function createMemoryTree(fileSizes: Record<string, number>) {
   const openedDirectoryPaths: string[] = [];
@@ -167,7 +167,7 @@ function createMemoryTree(fileSizes: Record<string, number>) {
     return directory;
   };
 
-  const root = buildDirectory("Music Room", "") as unknown as FileSystemDirectoryHandle;
+  const root = buildDirectory("Soqaro", "") as unknown as FileSystemDirectoryHandle;
   return {
     root,
     async initialize() {
@@ -204,7 +204,7 @@ describe("local audio storage reads", () => {
     indexedDbMocks.getLocalAudioDirectory.mockResolvedValue({
       id: "default",
       handle: tree.root,
-      name: "Music Room",
+      name: "Soqaro",
       updatedAt: "2026-09-01T00:00:00.000Z"
     });
   }
@@ -222,15 +222,15 @@ describe("local audio storage reads", () => {
 
   it("uses the saved index without opening audio files for statistics", async () => {
     const tree = createMemoryTree({
-      "/.music-room/catalog/tracks/track_0.mp3": 10,
-      "/.music-room/catalog/tracks/track_1.mp3": 20,
-      "/.music-room/catalog/tracks/track_2.mp3": 30
+      "/.soqaro/catalog/tracks/track_0.mp3": 10,
+      "/.soqaro/catalog/tracks/track_1.mp3": 20,
+      "/.soqaro/catalog/tracks/track_2.mp3": 30
     });
     await useRootDirectory(tree);
     indexedDbMocks.listLocalAudioFiles.mockResolvedValue(savedRecords([
-      ".music-room/catalog/tracks/track_0.mp3",
-      ".music-room/catalog/tracks/track_1.mp3",
-      ".music-room/catalog/tracks/track_2.mp3"
+      ".soqaro/catalog/tracks/track_0.mp3",
+      ".soqaro/catalog/tracks/track_1.mp3",
+      ".soqaro/catalog/tracks/track_2.mp3"
     ]));
 
     const { getLocalAudioStorageStats } = await import("./local-audio-storage");
@@ -246,17 +246,17 @@ describe("local audio storage reads", () => {
   });
 
   it("opens the repository once for both storage kinds", async () => {
-    const tree = createMemoryTree({ "/.music-room/catalog/tracks/track_0.mp3": 10 });
+    const tree = createMemoryTree({ "/.soqaro/catalog/tracks/track_0.mp3": 10 });
     await useRootDirectory(tree);
     indexedDbMocks.listLocalAudioFiles.mockResolvedValue([
-      ...savedRecords([".music-room/catalog/tracks/track_0.mp3"]),
-      ...savedRecords([".music-room/catalog/tracks/gone.mp3"])
+      ...savedRecords([".soqaro/catalog/tracks/track_0.mp3"]),
+      ...savedRecords([".soqaro/catalog/tracks/gone.mp3"])
     ]);
     indexedDbMocks.listLocalAudioCacheFiles.mockResolvedValue([
       {
         fileHash: "cache_hash",
         fileName: "track_0.mp3",
-        relativePath: ".music-room/catalog/tracks/track_0.mp3",
+        relativePath: ".soqaro/catalog/tracks/track_0.mp3",
         storageKind: "cached" as const,
         savedAt: "2026-09-01T00:00:00.000Z"
       }
@@ -308,7 +308,7 @@ describe("local audio storage reads", () => {
         fileName: "song.mp3",
         // Present, but the source-directory branch wins — the shared repository
         // must not be consulted for these records.
-        relativePath: ".music-room/catalog/tracks/absent.mp3",
+        relativePath: ".soqaro/catalog/tracks/absent.mp3",
         sourceDirectoryId: "source_1",
         storageKind: "saved" as const,
         savedAt: "2026-09-01T00:00:00.000Z"
@@ -322,7 +322,7 @@ describe("local audio storage reads", () => {
     });
     expect(indexedDbMocks.getLocalPlaylistDirectory).not.toHaveBeenCalled();
     expect(tree.requestedFilePaths).not.toContain("/song.mp3");
-    expect(tree.requestedFilePaths).not.toContain("/.music-room/catalog/tracks/absent.mp3");
+    expect(tree.requestedFilePaths).not.toContain("/.soqaro/catalog/tracks/absent.mp3");
   });
 });
 
@@ -349,12 +349,12 @@ describe("local audio cache persistence", () => {
     const picker = vi.fn().mockResolvedValue(handle);
     vi.stubGlobal("window", { showDirectoryPicker: picker, dispatchEvent: vi.fn() });
 
-    await expect(chooseLocalAudioDirectory()).resolves.toBe("Music Room");
+    await expect(chooseLocalAudioDirectory()).resolves.toBe("Soqaro");
 
     expect(picker).toHaveBeenCalledWith({ mode: "readwrite" });
     expect(indexedDbMocks.saveLocalAudioDirectory).toHaveBeenCalledWith({
       handle,
-      name: "Music Room",
+      name: "Soqaro",
       repositoryId: expect.any(String),
       schemaVersion: 1
     });
@@ -370,14 +370,14 @@ describe("local audio cache persistence", () => {
     indexedDbMocks.getLocalAudioDirectory.mockResolvedValue({
       id: "default",
       handle,
-      name: "Music Room",
+      name: "Soqaro",
       repositoryId: "repository_1",
       schemaVersion: 1,
       updatedAt: "2026-08-07T00:00:00.000Z"
     });
 
     await expect(getLocalAudioStorageState()).resolves.toMatchObject({
-      directoryName: "Music Room",
+      directoryName: "Soqaro",
       permission: "granted"
     });
   });
@@ -529,7 +529,7 @@ describe("local audio cache persistence", () => {
       fileHash: "hash_1",
       title: "Song",
       mimeType: "audio/mpeg"
-    })).rejects.toThrow("请先选择 Music Room 根目录");
+    })).rejects.toThrow("请先选择 Soqaro 根目录");
 
     expect(indexedDbMocks.saveLocalAudioCacheFileRecord).not.toHaveBeenCalled();
     expect(indexedDbMocks.deleteCachedLibraryTrackFile).not.toHaveBeenCalled();
@@ -542,7 +542,7 @@ describe("local audio cache persistence", () => {
     });
     indexedDbMocks.getLocalAudioDirectory.mockResolvedValue({
       handle,
-      name: "Music Room"
+      name: "Soqaro"
     });
     const file = new Blob(["audio"], { type: "audio/mpeg" });
 
@@ -557,7 +557,7 @@ describe("local audio cache persistence", () => {
     expect(indexedDbMocks.saveLocalAudioCacheFileRecord).toHaveBeenCalledWith({
       fileHash: "hash_1",
       fileName: "Song [hash_1].mp3",
-      relativePath: ".music-room/cache/provider/local_upload/ha/hash_1.mp3",
+      relativePath: ".soqaro/cache/provider/local_upload/ha/hash_1.mp3",
       sizeBytes: 5
     });
     expect(indexedDbMocks.deleteCachedLibraryTrackFile).toHaveBeenCalledWith("hash_1");
@@ -570,7 +570,7 @@ describe("local audio cache persistence", () => {
     });
     indexedDbMocks.getLocalAudioDirectory.mockResolvedValue({
       handle,
-      name: "Music Room"
+      name: "Soqaro"
     });
 
     await expect(ensureLocalAudioDirectoryWriteAccess()).rejects.toThrow(

@@ -8,11 +8,11 @@ web
 
 ## Users
 
-Hosts curate real-time music rooms. Members join them to listen together, collaborate on a shared queue, or request songs from a host.
+Hosts curate real-time rooms. Members join them to listen together, collaborate on a shared queue, or request songs from a host.
 
 ## Product Purpose
 
-Music Room makes browser-based, synchronized listening sessions workable for groups using local and provider-backed music.
+Soqaro makes browser-based, synchronized listening sessions workable for groups using local and provider-backed music.
 
 ## Positioning
 
@@ -32,7 +32,7 @@ Users enter a room from the lobby with a room code or public listing. Hosts crea
 
 ## Brand Commitments
 
-Music Room remains a dark, precise, low-light listening workspace with electric blue as its primary signal color, strictly adhering to restrained, conventional, and anti-AI-slop design principles.
+Soqaro remains a dark, precise, low-light listening workspace with electric blue as its primary signal color, strictly adhering to restrained, conventional, and anti-AI-slop design principles.
 
 ## Product Principles
 

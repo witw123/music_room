@@ -1,4 +1,4 @@
-import type { RoomType } from "@music-room/shared";
+﻿import type { RoomType } from "@soqaro/shared";
 
 export type RoomPlaybackStrategy = {
   cache: "shared-library-and-provider";

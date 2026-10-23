@@ -1,4 +1,4 @@
-import { createApiErrorResponse, errorCodes } from "@music-room/shared";
+﻿import { createApiErrorResponse, errorCodes } from "@soqaro/shared";
 import type { NextFunction, Request, Response } from "express";
 
 type Bucket = { windowStart: number; count: number };

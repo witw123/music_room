@@ -1,4 +1,4 @@
-import type { RoomSnapshot, TrackMeta } from "@music-room/shared";
+﻿import type { RoomSnapshot, TrackMeta } from "@soqaro/shared";
 
 /**
  * Resolve the playback asset declared by the current room timeline.

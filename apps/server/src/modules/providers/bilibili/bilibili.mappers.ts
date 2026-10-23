@@ -1,4 +1,4 @@
-import type { BilibiliTrackCandidate } from "@music-room/shared";
+﻿import type { BilibiliTrackCandidate } from "@soqaro/shared";
 import type { BilibiliFavoriteItem, BilibiliRankingItem, BilibiliSearchItem } from "./bilibili-api.client";
 import { cleanBilibiliTitle } from "./bilibili-title-cleaner";
 

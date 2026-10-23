@@ -1,15 +1,15 @@
-"use client";
+﻿"use client";
 
 import { useState, type FormEvent, type Dispatch, type SetStateAction } from "react";
 import { createPortal } from "react-dom";
-import { getNewMemberPermissions } from "@music-room/shared";
+import { getNewMemberPermissions } from "@soqaro/shared";
 import type {
   RoomMember,
   RoomMediaConnectionState,
   RoomSnapshot,
   TrackMeta,
   UpdateRoomRequest
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {

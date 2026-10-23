@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { memo, type RefObject } from "react";
 import type {
@@ -7,7 +7,7 @@ import type {
   PlaybackSnapshot,
   RoomSnapshot,
   TrackMeta
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import type { RoomPlaybackBarrierClock } from "@/features/playback/room-playback-clock";
 import { BottomPlayerController } from "@/components/bottom-player/BottomPlayerController";
 import { getNextPlaybackMode } from "@/components/bottom-player/playback-mode";

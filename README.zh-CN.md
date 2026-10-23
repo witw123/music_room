@@ -1,18 +1,18 @@
-# Music Room
+# Soqaro
 
 [English](./README.md) | [中文](./README.zh-CN.md)
 
 [![Node](https://img.shields.io/badge/Node.js-22.x-339933)](https://nodejs.org/)
 [![pnpm](https://img.shields.io/badge/pnpm-10.x-F69220)](https://pnpm.io/)
 
-Music Room 是一个面向多人同步听歌的多端音乐房应用。仓库采用 Monorepo 架构，包含 Next.js Web 前端、Tauri 2 桌面端、Capacitor 7 移动端、NestJS 服务端以及前后端共享协议。
+Soqaro 是一个面向多人同步听歌的多端音乐房应用。仓库采用 Monorepo 架构，包含 Next.js Web 前端、Tauri 2 桌面端、Capacitor 7 移动端、NestJS 服务端以及前后端共享协议。
 
-当前工作区版本：`0.3.3`<br>
-文档快照：`2026-09`
+当前工作区版本：`1.0.0`<br>
+文档快照：`2026-10`
 
 ## 项目定位
 
-Music Room 聚焦于用户本地音频和已导入外部曲目的多人协作收听。服务端负责账号、房间、权限、队列、播放状态、实时同步和曲目元数据；音频文件不会由服务端持久化。每个客户端只在本机 IndexedDB 保存当前用户自己导入的原始资产和播放资产（支持通过 File System Access API 同步至本地目录）。
+Soqaro 聚焦于用户本地音频和已导入外部曲目的多人协作收听。服务端负责账号、房间、权限、队列、播放状态、实时同步和曲目元数据；音频文件不会由服务端持久化。每个客户端只在本机 IndexedDB 保存当前用户自己导入的原始资产和播放资产（支持通过 File System Access API 同步至本地目录）。
 
 房间不会在成员之间下载或交换音频资产。曲目拥有者从本地已经准备好的分段 Opus 播放资产发布 WebRTC 媒体流，监听成员只接收一条 RTP Opus 音频流。网易云、QQ 音乐和 B 站（哔哩哔哩）导入由服务端临时代理取流，随后仍进入客户端本地播放资产流程。
 
@@ -106,7 +106,7 @@ IndexedDB 分段 Opus
 - **端到端诊断**：成员级连接状态、信令时序、ICE 状态、Web Audio 调度与 RTP 流质量诊断
 - **弹性网络穿透**：服务端下发短期 TURN 凭证，前端自动回退静态 ICE 配置
 
-WebRTC 的 `music-room-control` DataChannel 只承载控制和健康状态协调，不传输音频资产，也不负责缓存下载。
+WebRTC 的 `soqaro-control` DataChannel 只承载控制和健康状态协调，不传输音频资产，也不负责缓存下载。
 
 ## 快速开始
 
@@ -127,7 +127,7 @@ WebRTC 的 `music-room-control` DataChannel 只承载控制和健康状态协调
 pnpm install
 cp .env.example .env
 docker compose up -d postgres redis
-pnpm --filter @music-room/server db:push
+pnpm --filter @soqaro/server db:push
 pnpm dev
 ```
 
@@ -162,8 +162,8 @@ pnpm desktop:build        # 构建桌面端安装包
 
 # 移动端同步与打包 (Capacitor 7)
 pnpm mobile:sync          # 同步 Web 构建产物至 Android / iOS 工程
-pnpm --filter @music-room/mobile open:android  # 在 Android Studio 中打开
-pnpm --filter @music-room/mobile open:ios      # 在 Xcode 中打开
+pnpm --filter @soqaro/mobile open:android  # 在 Android Studio 中打开
+pnpm --filter @soqaro/mobile open:ios      # 在 Xcode 中打开
 
 # 质量与部署检查
 pnpm lint                 # ESLint 代码检查

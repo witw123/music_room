@@ -34,19 +34,20 @@ describe("MetricsService", () => {
         prismaAvailable: true,
         redisAvailable: false
       })
-    ).toContain("music_room_ws_connections 1");
+    ).toContain("soqaro_ws_connections 1");
     expect(
       metrics.renderPrometheus({
         prismaAvailable: true,
         redisAvailable: false
       })
-    ).toContain("music_room_realtime_failures_total 1");
+    ).toContain("soqaro_realtime_failures_total 1");
     expect(
       metrics.renderPrometheus({
         prismaAvailable: true,
         redisAvailable: false
       })
-    ).toContain("music_room_redis_available 0");
+    ).toContain("soqaro_redis_available 0");
   });
 });
+
 

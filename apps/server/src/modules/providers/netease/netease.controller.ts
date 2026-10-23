@@ -1,4 +1,4 @@
-import {
+﻿import {
   Controller,
   Delete,
   Get,
@@ -14,7 +14,7 @@ import {
   UnauthorizedException
 } from "@nestjs/common";
 import type { Request, Response } from "express";
-import { createApiErrorResponse, errorCodes } from "@music-room/shared";
+import { createApiErrorResponse, errorCodes } from "@soqaro/shared";
 import { AuthService } from "../../auth/auth.service";
 import { parseRequestBody } from "../../../common/validation/zod-validation";
 import {

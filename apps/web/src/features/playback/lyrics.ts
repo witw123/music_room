@@ -1,5 +1,5 @@
-﻿import type { ProviderLyrics } from "@music-room/shared";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+﻿import type { ProviderLyrics } from "@soqaro/shared";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 
 export type RoomLyricLine = {
   id: string;
@@ -402,10 +402,10 @@ export function fetchProviderLyricsCached(
   if (cached) return cached;
   const promise = (
     provider === "netease"
-      ? musicRoomApi.getNeteaseLyrics(trackId)
+      ? soqaroApi.getNeteaseLyrics(trackId)
       : provider === "qqmusic"
-        ? musicRoomApi.getQqMusicLyrics(trackId)
-        : musicRoomApi.getBilibiliLyrics(trackId)
+        ? soqaroApi.getQqMusicLyrics(trackId)
+        : soqaroApi.getBilibiliLyrics(trackId)
   ).catch((error) => {
     providerLyricsCache.delete(cacheKey);
     throw error;

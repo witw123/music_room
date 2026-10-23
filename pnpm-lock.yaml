@@ -86,9 +86,6 @@ importers:
 
   apps/server:
     dependencies:
-      '@music-room/shared':
-        specifier: workspace:*
-        version: link:../../packages/shared
       '@nestjs/common':
         specifier: ^11.1.28
         version: 11.1.28(reflect-metadata@0.2.2)(rxjs@7.8.2)
@@ -116,6 +113,9 @@ importers:
       '@sansenjian/qq-music-api':
         specifier: 2.4.0
         version: 2.4.0
+      '@soqaro/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       ioredis:
         specifier: ^5.5.0
         version: 5.10.1
@@ -135,12 +135,6 @@ importers:
         specifier: ^3.24.2
         version: 3.25.76
     devDependencies:
-      '@music-room/config-eslint':
-        specifier: workspace:*
-        version: link:../../packages/config-eslint
-      '@music-room/config-typescript':
-        specifier: workspace:*
-        version: link:../../packages/config-typescript
       '@nestjs/cli':
         specifier: ^11.0.5
         version: 11.0.16(@types/node@22.19.15)
@@ -150,6 +144,12 @@ importers:
       '@nestjs/testing':
         specifier: ^11.1.28
         version: 11.1.28(@nestjs/common@11.1.28(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.28)(@nestjs/platform-express@11.1.28)
+      '@soqaro/config-eslint':
+        specifier: workspace:*
+        version: link:../../packages/config-eslint
+      '@soqaro/config-typescript':
+        specifier: workspace:*
+        version: link:../../packages/config-typescript
       '@types/express':
         specifier: ^5.0.1
         version: 5.0.6
@@ -189,9 +189,6 @@ importers:
       '@dnd-kit/utilities':
         specifier: ^3.2.2
         version: 3.2.2(react@19.2.4)
-      '@music-room/shared':
-        specifier: workspace:*
-        version: link:../../packages/shared
       '@radix-ui/react-alert-dialog':
         specifier: ^1.2.1
         version: 1.2.1(@types/react-dom@19.2.4(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -207,6 +204,9 @@ importers:
       '@radix-ui/react-switch':
         specifier: ^1.4.1
         version: 1.4.1(@types/react-dom@19.2.4(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      '@soqaro/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@tanstack/react-query':
         specifier: ^5.68.0
         version: 5.95.2(react@19.2.4)
@@ -256,15 +256,15 @@ importers:
         specifier: ^5.0.15
         version: 5.0.15(@types/react@19.2.14)(react@19.2.4)
     devDependencies:
-      '@music-room/config-eslint':
-        specifier: workspace:*
-        version: link:../../packages/config-eslint
-      '@music-room/config-typescript':
-        specifier: workspace:*
-        version: link:../../packages/config-typescript
       '@playwright/test':
         specifier: ^1.52.0
         version: 1.59.1
+      '@soqaro/config-eslint':
+        specifier: workspace:*
+        version: link:../../packages/config-eslint
+      '@soqaro/config-typescript':
+        specifier: workspace:*
+        version: link:../../packages/config-typescript
       '@types/node':
         specifier: ^22.13.10
         version: 22.19.15
@@ -316,10 +316,10 @@ importers:
         specifier: ^3.24.2
         version: 3.25.76
     devDependencies:
-      '@music-room/config-eslint':
+      '@soqaro/config-eslint':
         specifier: workspace:*
         version: link:../config-eslint
-      '@music-room/config-typescript':
+      '@soqaro/config-typescript':
         specifier: workspace:*
         version: link:../config-typescript
       eslint:

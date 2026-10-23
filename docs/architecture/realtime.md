@@ -1,4 +1,4 @@
-# 实时链路
+﻿# 实时链路
 
 最后更新：`2026-09-13`
 
@@ -18,7 +18,7 @@ Socket.IO 不传输音频文件、播放资产或缓存分片。
 
 ### WebRTC 控制连接
 
-每个房间 peer 使用 `music-room-control` DataChannel 做控制和连接健康协调。它不是媒体源，也不是资产传输通道。
+每个房间 peer 使用 `soqaro-control` DataChannel 做控制和连接健康协调。它不是媒体源，也不是资产传输通道。
 
 ### WebRTC 媒体连接
 

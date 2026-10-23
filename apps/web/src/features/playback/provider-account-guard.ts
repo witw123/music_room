@@ -1,4 +1,4 @@
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 
 export type ProviderBindingStatus = {
   bound: boolean;
@@ -12,8 +12,8 @@ export type ProviderBindingStatus = {
 export async function checkAnyProviderAccountBound(): Promise<ProviderBindingStatus> {
   try {
     const [netease, qqmusic] = await Promise.allSettled([
-      musicRoomApi.getNeteaseAccount(),
-      musicRoomApi.getQqMusicAccount()
+      soqaroApi.getNeteaseAccount(),
+      soqaroApi.getQqMusicAccount()
     ]);
     const neteaseConnected = netease.status === "fulfilled" && netease.value?.connected === true;
     const qqmusicConnected = qqmusic.status === "fulfilled" && qqmusic.value?.connected === true;

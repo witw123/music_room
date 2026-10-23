@@ -1,9 +1,9 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import type { AuthSession, RoomChatMessage } from "@music-room/shared";
+import type { AuthSession, RoomChatMessage } from "@soqaro/shared";
 import { Button } from "@/components/ui/button";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 import type { RoomSocket } from "@/lib/network/ws-client";
 
 type RoomChatPanelProps = {
@@ -43,7 +43,7 @@ export function RoomChatPanel({ roomId, activeSession, isHost, socket, scrollEna
     setErrorMessage(null);
     setIsLoading(true);
 
-    void musicRoomApi.listRoomChatHistory(roomId)
+    void soqaroApi.listRoomChatHistory(roomId)
       .then((history) => {
         if (!active) return;
         setMessages((current) => mergeMessages(current, history.messages));
@@ -119,7 +119,7 @@ export function RoomChatPanel({ roomId, activeSession, isHost, socket, scrollEna
     setErrorMessage(null);
 
     try {
-      const history = await musicRoomApi.listRoomChatHistory(roomId, nextCursor);
+      const history = await soqaroApi.listRoomChatHistory(roomId, nextCursor);
       setMessages((current) => mergeMessages(history.messages, current));
       setNextCursor(history.nextCursor);
       requestAnimationFrame(() => {
@@ -149,7 +149,7 @@ export function RoomChatPanel({ roomId, activeSession, isHost, socket, scrollEna
     setDeletingMessageId(messageId);
     setErrorMessage(null);
     try {
-      await musicRoomApi.deleteRoomChatMessage(roomId, messageId);
+      await soqaroApi.deleteRoomChatMessage(roomId, messageId);
       setMessages((current) => current.filter((message) => message.id !== messageId));
     } catch (error) {
       setErrorMessage(toChatErrorMessage(error));

@@ -1,4 +1,4 @@
-import {
+﻿import {
   ArgumentsHost,
   Catch,
   ExceptionFilter,
@@ -11,7 +11,7 @@ import {
   errorCodes,
   type ApiErrorResponse,
   type ErrorCode
-} from "@music-room/shared";
+} from "@soqaro/shared";
 
 @Catch()
 export class ApiExceptionFilter implements ExceptionFilter {

@@ -1,4 +1,4 @@
-import type { AdminIncident, AdminOverview, AdminRoomSummary } from "@music-room/shared";
+﻿import type { AdminIncident, AdminOverview, AdminRoomSummary } from "@soqaro/shared";
 import {
   AuditPanel,
   Icon,

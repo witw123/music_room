@@ -1,4 +1,4 @@
-import type { ProviderPlaylistSummary, ProviderTrackCandidate } from "@music-room/shared";
+﻿import type { ProviderPlaylistSummary, ProviderTrackCandidate } from "@soqaro/shared";
 import { generateLocalDiscoveryRecommendations } from "./local-discover-engine";
 
 export type DiscoverTrackRecommendation = {
@@ -21,8 +21,8 @@ export type ProfileProviderRecommendations = {
   moodDiscovery: DiscoverTrackRecommendation[];
   deepCuts: DiscoverTrackRecommendation[];
   playlists: DiscoverPlaylistRecommendation[];
-  dailyRadar?: import("@music-room/shared").DailyRadarResponse;
-  liveRooms?: import("@music-room/shared").LiveRoomRecommendation[];
+  dailyRadar?: import("@soqaro/shared").DailyRadarResponse;
+  liveRooms?: import("@soqaro/shared").LiveRoomRecommendation[];
 };
 
 export async function getProfileProviderRecommendations(input: {

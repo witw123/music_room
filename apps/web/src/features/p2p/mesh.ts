@@ -1,7 +1,7 @@
-import {
+﻿import {
   type IceServerConfig,
   type PeerSignalMessage
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import {
   type PeerConnectionStatsSample
 } from "./connection-stats";

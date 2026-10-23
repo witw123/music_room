@@ -1,9 +1,9 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   Playlist
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import { Button } from "@/components/ui/button";
 import {
   DeletePlaylistDialog,
@@ -46,7 +46,7 @@ import {
 import {
   getLocalAudioStorageState
 } from "@/features/library/local-audio-storage";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 import {
   isLocalPlaylistMirror,
   localPlaylistIdFromMirror,
@@ -79,7 +79,7 @@ export function PlaylistsWorkspacePage({
     redirectTo: playlistView === "local" ? "/app/profile/playlists" : "/app/playlists"
   });
   const { activeSession, hydrated } = useSessionIdentity({
-    sessionStorageKey: "music-room-session",
+    sessionStorageKey: "soqaro-session",
     initialStatusMessage: ""
   });
   const [localTracks, setLocalTracks] = useState<LocalPlaylistTrackRecord[]>([]);
@@ -180,7 +180,7 @@ export function PlaylistsWorkspacePage({
     };
 
     const loadNetworkData = async () => {
-      const playlists = await musicRoomApi.listMyPlaylists();
+      const playlists = await soqaroApi.listMyPlaylists();
       applyDatabasePlaylists(playlists);
       return playlists;
     };
@@ -232,7 +232,7 @@ export function PlaylistsWorkspacePage({
 
       if (Object.keys(localPlaylistDatabaseIds).length > 0) {
         try {
-          applyDatabasePlaylists(await musicRoomApi.listMyPlaylists());
+          applyDatabasePlaylists(await soqaroApi.listMyPlaylists());
         } catch {
           // The first successful response is still valid for displaying network playlists.
         }
@@ -276,8 +276,8 @@ export function PlaylistsWorkspacePage({
         if (source) {
           try {
             const detail = source.provider === "netease"
-              ? await musicRoomApi.getNeteasePlaylist(source.playlistId)
-              : await musicRoomApi.getQqMusicPlaylist(source.playlistId);
+              ? await soqaroApi.getNeteasePlaylist(source.playlistId)
+              : await soqaroApi.getQqMusicPlaylist(source.playlistId);
             artworkUrls = uniqueArtworkUrls([
               detail.artworkUrl,
               ...detail.tracks.map((track) => track.artworkUrl),
@@ -385,7 +385,7 @@ export function PlaylistsWorkspacePage({
           }
         }
       } else {
-        playlist = await musicRoomApi.createPlaylist({
+        playlist = await soqaroApi.createPlaylist({
           title,
           description: newPlaylistDescription.trim() || null,
           tags: ["network"],
@@ -423,10 +423,10 @@ export function PlaylistsWorkspacePage({
         deleteLocalPlaylist(target.playlist.id);
         const databasePlaylistId = localPlaylistDatabaseIds[target.playlist.id];
         if (databasePlaylistId) {
-          await musicRoomApi.deletePlaylist(databasePlaylistId);
+          await soqaroApi.deletePlaylist(databasePlaylistId);
         }
       } else {
-        await musicRoomApi.deletePlaylist(target.playlist.id);
+        await soqaroApi.deletePlaylist(target.playlist.id);
       }
       await refresh();
       if (selectedPlaylist?.kind === target.kind && selectedPlaylist.playlist.id === target.playlist.id) {
@@ -454,7 +454,7 @@ export function PlaylistsWorkspacePage({
         await refresh();
         setSelectedPlaylist({ kind: "local", playlist: updated });
       } else {
-        const updated = await musicRoomApi.updatePlaylist(target.playlist.id, { trackIds });
+        const updated = await soqaroApi.updatePlaylist(target.playlist.id, { trackIds });
         await refresh();
         setSelectedPlaylist({ kind: "network", playlist: updated });
       }
@@ -491,7 +491,7 @@ export function PlaylistsWorkspacePage({
           throw new Error("本地上传歌曲只能移动到本地歌单。");
         }
         if (!target.playlist.trackIds.includes(trackId)) {
-          await musicRoomApi.updatePlaylist(target.playlist.id, {
+          await soqaroApi.updatePlaylist(target.playlist.id, {
             trackIds: [...target.playlist.trackIds, trackId]
           });
         }
@@ -508,7 +508,7 @@ export function PlaylistsWorkspacePage({
         await refresh();
         setSelectedPlaylist({ kind: "local", playlist: updatedSource });
       } else {
-        const updatedSource = await musicRoomApi.updatePlaylist(request.source.playlist.id, {
+        const updatedSource = await soqaroApi.updatePlaylist(request.source.playlist.id, {
           trackIds: request.source.playlist.trackIds.filter((id) => id !== trackId)
         });
         await refresh();

@@ -1,8 +1,8 @@
-import type {
+﻿import type {
   CachedLibraryTrackRecord,
   CachedLibraryTrackSummaryRecord
 } from "@/features/library/indexeddb";
-import type { TrackMeta } from "@music-room/shared";
+import type { TrackMeta } from "@soqaro/shared";
 import type {
   CachedLibraryTrack,
   UploadedTrack

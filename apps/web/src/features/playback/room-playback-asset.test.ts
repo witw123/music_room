@@ -1,4 +1,4 @@
-import type { RoomSnapshot, TrackMeta } from "@music-room/shared";
+﻿import type { RoomSnapshot, TrackMeta } from "@soqaro/shared";
 import { describe, expect, it } from "vitest";
 import {
   resolveCurrentRoomPlaybackAsset,

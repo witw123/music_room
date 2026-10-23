@@ -1,4 +1,4 @@
-import type { AuthService } from "../auth/auth.service";
+﻿import type { AuthService } from "../auth/auth.service";
 import type { PrismaService } from "../../infra/prisma/prisma.service";
 import type { RedisService } from "../../infra/redis/redis.service";
 import type { RoomRecord } from "./room.types";
@@ -12,7 +12,7 @@ import { RoomPresenceService, realtimePresenceTtlSeconds } from "./services/room
 import { RoomSnapshotService } from "./services/room-snapshot.service";
 import { RoomService } from "./room.service";
 
-export const ROOM_REGISTRY_KEY = "music-room:rooms";
+export const ROOM_REGISTRY_KEY = "soqaro:rooms";
 export const ROOM_CACHE_TTL_SECONDS = 43_200;
 export const SESSION_RECENT_ROOM_TTL_SECONDS = 604_800;
 

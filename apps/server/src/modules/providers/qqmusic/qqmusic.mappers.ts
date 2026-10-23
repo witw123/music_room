@@ -1,14 +1,14 @@
-import type {
+﻿import type {
   ProviderAlbumSummary,
   ProviderArtistSummary,
   ProviderPlaylistSummary,
   ProviderSearchSuggestion,
   QqMusicTrackCandidate
-} from "@music-room/shared";
+} from "@soqaro/shared";
 
 export const qrTtlSeconds = 180;
 export const accountValidationTtlMs = 5 * 60_000;
-export const qrKeyPrefix = "music-room:qqmusic:qr:";
+export const qrKeyPrefix = "soqaro:qqmusic:qr:";
 
 export type QrAttempt = { userId: string; qrsig: string; ptqrtoken: string };
 export type SearchTermCache = { expiresAt: number; items: ProviderSearchSuggestion[] };

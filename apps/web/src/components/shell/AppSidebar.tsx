@@ -178,7 +178,7 @@ export function AppSidebar({
             <Music size={18} strokeWidth={2} aria-hidden="true" />
           </span>
           <span className={`min-w-0 leading-none ${collapsed ? "md:hidden" : ""}`}>
-            <span className="block truncate text-sm font-bold text-foreground tracking-tight">Music Room</span>
+            <span className="block truncate text-sm font-bold text-foreground tracking-tight">Soqaro</span>
             <span className="mt-1 block truncate text-[10px] text-foreground-muted">实时协作听歌空间</span>
           </span>
         </Link>

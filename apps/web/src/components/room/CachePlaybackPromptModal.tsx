@@ -1,9 +1,9 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
-import type { TrackMeta } from "@music-room/shared";
+import type { TrackMeta } from "@soqaro/shared";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,

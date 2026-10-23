@@ -1,4 +1,4 @@
 [[permission]]
 identifier = "allow-local-storage"
-description = "Access the fixed Music Room repository"
+description = "Access the fixed Soqaro repository"
 commands.allow = ["local_storage"]

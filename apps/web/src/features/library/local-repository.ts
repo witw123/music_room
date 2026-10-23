@@ -9,14 +9,14 @@ import {
   type RoomSnapshot,
   type TrackMeta,
   type TrackLoudness
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import { forEachWithConcurrency, resolveLocalFileConcurrency } from "./local-audio-storage-helpers";
 import type {
   RepositoryDirectoryHandle as FileSystemDirectoryHandle,
   RepositoryFileHandle as FileSystemFileHandle
 } from "./directory-handle";
-export const localRepositoryDirectoryName = ".music-room";
-export const localRepositoryFormat = "music-room-local-repository" as const;
+export const localRepositoryDirectoryName = ".soqaro";
+export const localRepositoryFormat = "soqaro-local-repository" as const;
 export const localRepositorySchemaVersion = 1 as const;
 
 const repositoryManifestFileName = "repository.json";
@@ -202,7 +202,7 @@ export class LocalRepository {
   static async open(root: FileSystemDirectoryHandle, options?: { recover?: boolean }) {
     const dataDirectory = await root.getDirectoryHandle(localRepositoryDirectoryName);
     const manifest = await readJsonFile<LocalRepositoryManifest>(dataDirectory, repositoryManifestFileName);
-    if (!manifest) throw new Error("Music Room 仓库未初始化或无法读取。");
+    if (!manifest) throw new Error("Soqaro 仓库未初始化或无法读取。");
     validateRepositoryManifest(manifest);
     const repository = new LocalRepository(root, dataDirectory, manifest);
     if (options?.recover !== false) {
@@ -985,7 +985,7 @@ function validateRepositoryManifest(manifest: LocalRepositoryManifest) {
     manifest.hashAlgorithm !== "sha256" ||
     typeof manifest.repositoryId !== "string"
   ) {
-    throw new Error("所选文件夹不是兼容的 Music Room 本地仓库，或仓库版本过旧。 ");
+    throw new Error("所选文件夹不是兼容的 Soqaro 本地仓库，或仓库版本过旧。 ");
   }
 }
 

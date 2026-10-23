@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
 import type { ReactNode } from "react";
-import type { AdminIncident, AdminOverview, AdminRoomSummary, AdminUserSummary } from "@music-room/shared";
+import type { AdminIncident, AdminOverview, AdminRoomSummary, AdminUserSummary } from "@soqaro/shared";
 import {
   AlertTriangle,
   ArrowRight,

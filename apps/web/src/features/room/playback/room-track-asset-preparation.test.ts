@@ -1,5 +1,5 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
-import type { TrackMeta } from "@music-room/shared";
+﻿import { describe, expect, it, vi, beforeEach } from "vitest";
+import type { TrackMeta } from "@soqaro/shared";
 import {
   ensureRoomTrackDistributionAsset,
   getTrackAssetPreparationState,
@@ -16,10 +16,10 @@ import {
   getAssetManifest,
   getLocalAudioDirectory,
   linkTrackAssets,
-  musicRoomDatabase
+  soqaroDatabase
 } from "@/features/library/indexeddb";
 import { prepareAudioAssets } from "@/features/library/audio-asset-builder";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 
 vi.mock("@/features/library/local-audio-storage", () => ({
   getRoomLocalAudioFile: vi.fn().mockResolvedValue(null),
@@ -32,7 +32,7 @@ vi.mock("@/features/library/indexeddb", () => ({
   getAssetManifest: vi.fn().mockResolvedValue(undefined),
   getLocalAudioDirectory: vi.fn().mockResolvedValue(undefined),
   linkTrackAssets: vi.fn().mockResolvedValue(undefined),
-  musicRoomDatabase: {
+  soqaroDatabase: {
     assetUnits: {
       where: vi.fn()
     }
@@ -43,12 +43,12 @@ vi.mock("@/features/library/audio-asset-builder", () => ({
   prepareAudioAssets: vi.fn()
 }));
 
-vi.mock("@/lib/network/music-room-api", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/network/music-room-api")>();
+vi.mock("@/lib/network/soqaro-api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/network/soqaro-api")>();
   return {
     ...actual,
-    musicRoomApi: {
-      ...actual.musicRoomApi,
+    soqaroApi: {
+      ...actual.soqaroApi,
       downloadNeteaseTrack: vi.fn(),
       downloadQqMusicTrack: vi.fn(),
       downloadBilibiliTrack: vi.fn(),
@@ -95,7 +95,7 @@ describe("room-track-asset-preparation", () => {
     expect(file).toBe(mockFile);
     expect(getRoomLocalAudioFile).toHaveBeenCalled();
     expect(getCachedLibraryTrackByProviderTrack).not.toHaveBeenCalled();
-    expect(musicRoomApi.downloadNeteaseTrack).not.toHaveBeenCalled();
+    expect(soqaroApi.downloadNeteaseTrack).not.toHaveBeenCalled();
   });
 
   it("falls back to indexeddb cache when local directory file is absent", async () => {
@@ -111,7 +111,7 @@ describe("room-track-asset-preparation", () => {
     const file = await resolveTrackAudioFile(baseTrack);
     expect(file).toBeInstanceOf(File);
     expect(file?.type).toBe("audio/mpeg");
-    expect(musicRoomApi.downloadNeteaseTrack).not.toHaveBeenCalled();
+    expect(soqaroApi.downloadNeteaseTrack).not.toHaveBeenCalled();
   });
 
   it("falls back to provider download when neither local nor cache exists", async () => {
@@ -120,14 +120,14 @@ describe("room-track-asset-preparation", () => {
     vi.mocked(getCachedLibraryTrack).mockResolvedValue(undefined);
 
     const downloadBlob = new Blob(["downloaded-audio"], { type: "audio/mpeg" });
-    vi.mocked(musicRoomApi.downloadNeteaseTrack).mockResolvedValue({
+    vi.mocked(soqaroApi.downloadNeteaseTrack).mockResolvedValue({
       blob: downloadBlob,
       contentType: "audio/mpeg"
     } as never);
 
     const file = await resolveTrackAudioFile(baseTrack);
     expect(file).toBeInstanceOf(File);
-    expect(musicRoomApi.downloadNeteaseTrack).toHaveBeenCalledWith("12345", "exhigh", undefined);
+    expect(soqaroApi.downloadNeteaseTrack).toHaveBeenCalledWith("12345", "exhigh", undefined);
   });
 
   it("returns immediately when track already has complete room assets", async () => {
@@ -212,7 +212,7 @@ describe("room-track-asset-preparation", () => {
     expect(result).toBeNull();
     expect(getTrackAssetPreparationState("track_corrupt")).toBe("failed");
     expect(getTrackUnavailableReason("track_corrupt")).toBe("asset-corrupt");
-    expect(musicRoomApi.reportTrackAssetUnavailable).toHaveBeenCalledWith("room_1", "track_corrupt", {
+    expect(soqaroApi.reportTrackAssetUnavailable).toHaveBeenCalledWith("room_1", "track_corrupt", {
       trackId: "track_corrupt",
       reason: "asset-corrupt"
     });
@@ -236,12 +236,12 @@ describe("room-track-asset-preparation", () => {
       originalAsset: mockPreparedAssets.originalAsset,
       playbackAsset: mockPreparedAssets.playbackAsset
     };
-    vi.mocked(musicRoomApi.prepareTrackAsset).mockResolvedValue(updatedServerTrack);
+    vi.mocked(soqaroApi.prepareTrackAsset).mockResolvedValue(updatedServerTrack);
 
     const result = await ensureRoomTrackDistributionAsset("room_1", baseTrack);
 
     expect(prepareAudioAssets).toHaveBeenCalledWith({ file: mockFile, signal: undefined });
-    expect(musicRoomApi.prepareTrackAsset).toHaveBeenCalledWith("room_1", "track_1", {
+    expect(soqaroApi.prepareTrackAsset).toHaveBeenCalledWith("room_1", "track_1", {
       trackId: "track_1",
       fileHash: "real-sha256-hash",
       originalAsset: mockPreparedAssets.originalAsset,
@@ -260,13 +260,13 @@ describe("room-track-asset-preparation", () => {
     vi.mocked(getRoomLocalAudioFile).mockResolvedValue(null);
     vi.mocked(getCachedLibraryTrackByProviderTrack).mockResolvedValue(undefined);
     vi.mocked(getCachedLibraryTrack).mockResolvedValue(undefined);
-    vi.mocked(musicRoomApi.downloadNeteaseTrack).mockResolvedValue(null as never);
+    vi.mocked(soqaroApi.downloadNeteaseTrack).mockResolvedValue(null as never);
 
     const result = await ensureRoomTrackDistributionAsset("room_1", baseTrack);
     expect(result).toBeNull();
     expect(getTrackAssetPreparationState("track_1")).toBe("source-missing");
     expect(getTrackUnavailableReason("track_1")).toBe("source-missing");
-    expect(musicRoomApi.reportTrackAssetUnavailable).toHaveBeenCalledWith("room_1", "track_1", {
+    expect(soqaroApi.reportTrackAssetUnavailable).toHaveBeenCalledWith("room_1", "track_1", {
       trackId: "track_1",
       reason: "source-missing"
     });
@@ -287,7 +287,7 @@ describe("room-track-asset-preparation", () => {
     expect(result).toBeNull();
     expect(getTrackAssetPreparationState("track_perm_missing")).toBe("failed");
     expect(getTrackUnavailableReason("track_perm_missing")).toBe("permission-denied");
-    expect(musicRoomApi.reportTrackAssetUnavailable).toHaveBeenCalledWith("room_1", "track_perm_missing", {
+    expect(soqaroApi.reportTrackAssetUnavailable).toHaveBeenCalledWith("room_1", "track_perm_missing", {
       trackId: "track_perm_missing",
       reason: "permission-denied"
     });
@@ -307,7 +307,7 @@ describe("room-track-asset-preparation", () => {
     await expect(ensureRoomTrackDistributionAsset("room_1", track)).rejects.toThrow("The user denied permission");
     expect(getTrackAssetPreparationState("track_transcode_perm")).toBe("failed");
     expect(getTrackUnavailableReason("track_transcode_perm")).toBe("permission-denied");
-    expect(musicRoomApi.reportTrackAssetUnavailable).toHaveBeenCalledWith("room_1", "track_transcode_perm", {
+    expect(soqaroApi.reportTrackAssetUnavailable).toHaveBeenCalledWith("room_1", "track_transcode_perm", {
       trackId: "track_transcode_perm",
       reason: "permission-denied"
     });
@@ -334,7 +334,7 @@ describe("room-track-asset-preparation", () => {
       } as never);
       const mockCount = vi.fn().mockResolvedValue(5);
       const mockEquals = vi.fn().mockReturnValue({ count: mockCount });
-      vi.mocked(musicRoomDatabase.assetUnits.where).mockReturnValue({ equals: mockEquals } as never);
+      vi.mocked(soqaroDatabase.assetUnits.where).mockReturnValue({ equals: mockEquals } as never);
 
       expect(await verifyPlaybackAssetIntegrity("asset-123")).toBe(true);
     });
@@ -346,7 +346,7 @@ describe("room-track-asset-preparation", () => {
       } as never);
       const mockCount = vi.fn().mockResolvedValue(3);
       const mockEquals = vi.fn().mockReturnValue({ count: mockCount });
-      vi.mocked(musicRoomDatabase.assetUnits.where).mockReturnValue({ equals: mockEquals } as never);
+      vi.mocked(soqaroDatabase.assetUnits.where).mockReturnValue({ equals: mockEquals } as never);
 
       expect(await verifyPlaybackAssetIntegrity("asset-123")).toBe(false);
     });
@@ -377,7 +377,7 @@ describe("room-track-asset-preparation", () => {
         originalAsset: mockPreparedAssets.originalAsset,
         playbackAsset: mockPreparedAssets.playbackAsset
       };
-      vi.mocked(musicRoomApi.prepareTrackAsset).mockResolvedValue(recoveredTrack);
+      vi.mocked(soqaroApi.prepareTrackAsset).mockResolvedValue(recoveredTrack);
 
       const trackToRecover: TrackMeta = { ...baseTrack, id: "track_recover" };
       setTrackUnavailableReason("track_recover", "source-missing");
@@ -385,7 +385,7 @@ describe("room-track-asset-preparation", () => {
       const result = await prepareTrackWithLocalFile("room_1", trackToRecover, mockFile);
 
       expect(prepareAudioAssets).toHaveBeenCalledWith({ file: mockFile, signal: undefined });
-      expect(musicRoomApi.prepareTrackAsset).toHaveBeenCalledWith("room_1", "track_recover", {
+      expect(soqaroApi.prepareTrackAsset).toHaveBeenCalledWith("room_1", "track_recover", {
         trackId: "track_recover",
         fileHash: "new-recovered-hash",
         originalAsset: mockPreparedAssets.originalAsset,

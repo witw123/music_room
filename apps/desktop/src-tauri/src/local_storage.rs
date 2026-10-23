@@ -35,10 +35,10 @@ fn resolve(root: &Path, relative: &str) -> Result<PathBuf, String> {
         return Err("Invalid repository path".into());
     }
     let parts: Vec<_> = Path::new(relative).components().collect();
-    if parts.first() != Some(&Component::Normal(".music-room".as_ref()))
+    if parts.first() != Some(&Component::Normal(".soqaro".as_ref()))
         || parts.iter().any(|part| !matches!(part, Component::Normal(_)))
     {
-        return Err("Path must stay inside .music-room".into());
+        return Err("Path must stay inside .soqaro".into());
     }
     let mut path = root.to_path_buf();
     for part in parts {
@@ -111,7 +111,7 @@ fn execute(request: StorageRequest) -> Result<Value, String> {
             fs::rename(&path, resolve(&root, &target)?).map_err(io_error)?;
         }
         "remove" => {
-            if request.path == ".music-room" { return Err("Cannot remove repository root".into()); }
+            if request.path == ".soqaro" { return Err("Cannot remove repository root".into()); }
             if path.is_dir() {
                 if request.recursive == Some(true) { fs::remove_dir_all(&path).map_err(io_error)?; }
                 else { fs::remove_dir(&path).map_err(io_error)?; }
@@ -125,10 +125,10 @@ fn execute(request: StorageRequest) -> Result<Value, String> {
 #[tauri::command]
 pub async fn local_storage(window: tauri::WebviewWindow, request: StorageRequest) -> Result<Value, String> {
     let url = window.url().map_err(|e| e.to_string())?;
-    let trusted = url.scheme() == "https" && url.host_str() == Some("musicroom.witw.top");
+    let trusted = url.scheme() == "https" && url.host_str() == Some("soqaro.witw.top");
     let development = cfg!(debug_assertions) && url.scheme() == "http" && url.host_str() == Some("localhost");
     if window.label() != "main" || !(trusted || development) {
-        return Err("Storage is only available to the main Music Room window".into());
+        return Err("Storage is only available to the main Soqaro window".into());
     }
     tauri::async_runtime::spawn_blocking(move || execute(request)).await.map_err(|e| e.to_string())?
 }
@@ -141,7 +141,7 @@ mod tests {
         let root = std::env::temp_dir();
         assert!(resolve(&root, "../music.mp3").is_err());
         assert!(resolve(&root, "music.mp3").is_err());
-        assert!(resolve(&root, ".music-room/../music.mp3").is_err());
-        assert!(resolve(&root, ".music-room/library/song.mp3").is_ok());
+        assert!(resolve(&root, ".soqaro/../music.mp3").is_err());
+        assert!(resolve(&root, ".soqaro/library/song.mp3").is_ok());
     }
 }

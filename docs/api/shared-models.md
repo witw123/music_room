@@ -1,7 +1,7 @@
-# 共享模型
+﻿# 共享模型
 
 最后更新：`2026-09-13`
-当前版本：`0.3.2`
+当前版本：`1.0.0`
 
 ## 使用原则
 
@@ -117,7 +117,7 @@ etease`
 - `type`: `offer | answer | candidate`
 - `payload`
 
-信令本身通过 Socket.IO 传输；`linkKind` 选择控制连接或媒体连接。`music-room-control` DataChannel 只处理控制/健康协调，媒体音频通过独立 WebRTC Media RTP Track 传输。
+信令本身通过 Socket.IO 传输；`linkKind` 选择控制连接或媒体连接。`soqaro-control` DataChannel 只处理控制/健康协调，媒体音频通过独立 WebRTC Media RTP Track 传输。
 
 ### `RoomSubscribeAckPayload`
 

@@ -1,14 +1,14 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
-import type { ProviderLibrarySnapshot } from "@music-room/shared";
+import type { ProviderLibrarySnapshot } from "@soqaro/shared";
 import { Button } from "@/components/ui/button";
 import {
   localPlaylistTrackId,
   toProviderTrackRecord,
   upsertLocalPlaylistTrack
 } from "@/features/playlist/local-playlist";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 import { useActiveSession } from "@/features/session/use-session-identity";
 import { useProviderAccount } from "@/features/providers/use-provider-account";
 
@@ -72,8 +72,8 @@ function ProviderImporter({ provider }: { provider: Provider }) {
       }
 
       const res = provider === "netease"
-        ? await musicRoomApi.getNeteaseLibrary()
-        : await musicRoomApi.getQqMusicLibrary();
+        ? await soqaroApi.getNeteaseLibrary()
+        : await soqaroApi.getQqMusicLibrary();
 
       setSnapshot(res);
       setMessage(`已读取${providerName}资料：${res.likedTracks.length} 首喜欢、${res.collectedPlaylists.length} 个歌单、${res.collectedAlbums.length} 张专辑、${res.followedArtists.length} 位歌手。`);
@@ -103,7 +103,7 @@ function ProviderImporter({ provider }: { provider: Provider }) {
       if (selected.likedTracks) {
         for (const track of snapshot.likedTracks) {
           try {
-            await musicRoomApi.saveFavoriteTrack(track);
+            await soqaroApi.saveFavoriteTrack(track);
             importedTracks += 1;
           } catch {
             failedItems += 1;
@@ -114,7 +114,7 @@ function ProviderImporter({ provider }: { provider: Provider }) {
       if (selected.collectedAlbums) {
         for (const album of snapshot.collectedAlbums) {
           try {
-            await musicRoomApi.saveFavoriteAlbum(album);
+            await soqaroApi.saveFavoriteAlbum(album);
             importedAlbums += 1;
           } catch {
             failedItems += 1;
@@ -125,7 +125,7 @@ function ProviderImporter({ provider }: { provider: Provider }) {
       if (selected.followedArtists) {
         for (const artist of snapshot.followedArtists) {
           try {
-            await musicRoomApi.saveFavoriteArtist(artist);
+            await soqaroApi.saveFavoriteArtist(artist);
             importedArtists += 1;
           } catch {
             failedItems += 1;
@@ -135,7 +135,7 @@ function ProviderImporter({ provider }: { provider: Provider }) {
 
       if (selected.collectedPlaylists) {
         try {
-          const existing = await musicRoomApi.listMyPlaylists().catch(() => []);
+          const existing = await soqaroApi.listMyPlaylists().catch(() => []);
           const existingKeys = new Set(
             existing.flatMap((playlist) => playlist.tags.filter((tag) => tag.startsWith("network:")))
           );
@@ -146,15 +146,15 @@ function ProviderImporter({ provider }: { provider: Provider }) {
 
             try {
               const detail = summary.provider === "netease"
-                ? await musicRoomApi.getNeteasePlaylist(summary.providerPlaylistId)
-                : await musicRoomApi.getQqMusicPlaylist(summary.providerPlaylistId);
+                ? await soqaroApi.getNeteasePlaylist(summary.providerPlaylistId)
+                : await soqaroApi.getQqMusicPlaylist(summary.providerPlaylistId);
 
               const safeTags = ["network", key, ...(detail.tags ?? [])]
                 .map((t) => t.trim().slice(0, 40))
                 .filter(Boolean)
                 .slice(0, 20);
 
-              await musicRoomApi.createPlaylist({
+              await soqaroApi.createPlaylist({
                 title: (detail.title || "未命名歌单").trim().slice(0, 160),
                 description: detail.description ? detail.description.trim().slice(0, 1000) : null,
                 coverUrl: detail.artworkUrl ?? detail.tracks.find((track) => track.artworkUrl)?.artworkUrl ?? null,

@@ -1,9 +1,9 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ProviderTrackCandidate, ProviderTrackFavorite } from "@music-room/shared";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import type { ProviderTrackCandidate, ProviderTrackFavorite } from "@soqaro/shared";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 import { recordPersonalizationFavoriteCandidate } from "@/features/personalization/use-personalization-reporter";
 
 function trackKey(track: Pick<ProviderTrackCandidate, "provider" | "providerTrackId">) {
@@ -32,7 +32,7 @@ export function useFavoriteTracks(userId: string | null | undefined) {
 
   const query = useQuery<ProviderTrackFavorite[]>({
     queryKey,
-    queryFn: () => musicRoomApi.listFavoriteTracks(),
+    queryFn: () => soqaroApi.listFavoriteTracks(),
     enabled: Boolean(userId),
     staleTime: 60 * 1000
   });
@@ -54,9 +54,9 @@ export function useFavoriteTracks(userId: string | null | undefined) {
       const wasFavorite = currentList.some((item) => trackKey(item) === key);
 
       if (wasFavorite) {
-        await musicRoomApi.deleteFavoriteTrack(track.provider, track.providerTrackId);
+        await soqaroApi.deleteFavoriteTrack(track.provider, track.providerTrackId);
       } else {
-        await musicRoomApi.saveFavoriteTrack(track);
+        await soqaroApi.saveFavoriteTrack(track);
       }
       return { track, wasFavorite };
     },
@@ -90,7 +90,7 @@ export function useFavoriteTracks(userId: string | null | undefined) {
     onSuccess: ({ track, wasFavorite }) => {
       if (typeof window !== "undefined") {
         window.dispatchEvent(
-          new CustomEvent("music-room-favorite-tracks-changed", {
+          new CustomEvent("soqaro-favorite-tracks-changed", {
             detail: {
               userId,
               track,

@@ -1,8 +1,8 @@
-"use client";
+﻿"use client";
 /* eslint-disable @next/next/no-img-element */
 
 import type { CSSProperties } from "react";
-import type { RoomDirectoryItem, RoomType } from "@music-room/shared";
+import type { RoomDirectoryItem, RoomType } from "@soqaro/shared";
 import { ArtisticRoomStageScene } from "./ArtisticRoomStageScene";
 
 import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";

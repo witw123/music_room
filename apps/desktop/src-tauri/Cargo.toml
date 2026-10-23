@@ -1,12 +1,12 @@
 [package]
-name = "music-room-desktop"
-version = "0.3.6"
-description = "Music Room Desktop Shell"
-authors = ["Music Room Team"]
+name = "soqaro-desktop"
+version = "1.0.0"
+description = "Soqaro Desktop Shell"
+authors = ["Soqaro Team"]
 edition = "2021"
 
 [lib]
-name = "music_room_desktop_lib"
+name = "soqaro_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

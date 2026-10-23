@@ -1,4 +1,4 @@
-import type { PeerDiagnosticsSnapshot, RoomMember } from "@music-room/shared";
+﻿import type { PeerDiagnosticsSnapshot, RoomMember } from "@soqaro/shared";
 
 export const realtimeMediaSampleWindowMs = 6_000;
 

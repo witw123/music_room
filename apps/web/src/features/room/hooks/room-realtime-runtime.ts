@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import type {
@@ -12,7 +12,7 @@ import type {
   RoomSnapshotMissingPayload,
   RoomSnapshot,
   RoomChatMessage
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import { createRoomSocket, type RoomSocket } from "@/lib/network/ws-client";
 import { getWebRTCIceServers, P2PMesh } from "@/features/p2p";
 import type { RemoteAudioTrackListener } from "@/features/p2p";
@@ -868,8 +868,8 @@ function notifyMemberPresenceChanges(input: {
     // Server-side account invalidation must stop reconnect loops before the
     // regular auth hook clears localStorage and redirects the user.
     input.activeSessionRef.current = null;
-    window.localStorage.removeItem("music-room-session");
-    window.dispatchEvent(new CustomEvent("music-room-auth-expired", { detail: { reason: "session-revoked" } }));
+    window.localStorage.removeItem("soqaro-session");
+    window.dispatchEvent(new CustomEvent("soqaro-auth-expired", { detail: { reason: "session-revoked" } }));
     input.exitCurrentRoom("登录已被管理员撤销，请重新登录。");
   });
 

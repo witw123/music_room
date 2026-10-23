@@ -1,5 +1,5 @@
-import { errorCodes, type Playlist } from "@music-room/shared";
-import { MusicRoomApiError, musicRoomApi } from "@/lib/network/music-room-api";
+﻿import { errorCodes, type Playlist } from "@soqaro/shared";
+import { SoqaroApiError, soqaroApi } from "@/lib/network/soqaro-api";
 import type { LocalPlaylistRecord } from "@/features/playlist/local-playlist";
 
 export const localPlaylistMirrorTagPrefix = "local-playlist:";
@@ -29,7 +29,7 @@ export async function syncLocalPlaylistToDatabase(
       return existing;
     }
     try {
-      return await musicRoomApi.updatePlaylist(databasePlaylistId, {
+      return await soqaroApi.updatePlaylist(databasePlaylistId, {
         title: playlist.title,
         description: playlist.description,
         trackIds: playlist.trackIds,
@@ -40,7 +40,7 @@ export async function syncLocalPlaylistToDatabase(
       if (!isMissingPlaylistError(error)) throw error;
     }
   }
-  return musicRoomApi.createPlaylist({
+  return soqaroApi.createPlaylist({
     title: playlist.title,
     description: playlist.description,
     trackIds: playlist.trackIds,
@@ -50,7 +50,7 @@ export async function syncLocalPlaylistToDatabase(
 }
 
 function isMissingPlaylistError(error: unknown) {
-  return error instanceof MusicRoomApiError && error.code === errorCodes.roomNotFound;
+  return error instanceof SoqaroApiError && error.code === errorCodes.roomNotFound;
 }
 
 function sameStringArray(left: string[], right: string[]) {

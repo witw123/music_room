@@ -1,4 +1,4 @@
-import {
+﻿import {
   defaultRoomMemberPermissions,
   inactiveRadioAutopilot,
   radioAutopilotSchema,
@@ -7,7 +7,7 @@ import {
   roomSchema,
   roomTypeSchema,
   trackMetaSchema
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import type {
   PlaybackSnapshot,
   QueueItem,
@@ -16,7 +16,7 @@ import type {
   RoomMemberPermissions,
   RoomRequest,
   TrackMeta
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import { z } from "zod";
 
 export type RoomRecord = {

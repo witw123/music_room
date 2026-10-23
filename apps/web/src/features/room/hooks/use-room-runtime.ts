@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import {
   useCallback,
@@ -13,15 +13,15 @@ import type {
   IceConfigResponse,
   RoomSnapshot,
   RoomPlaybackReadinessPayload
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import type { Route } from "next";
 import type { RoomSocket } from "@/lib/network/ws-client";
 import type { P2PMesh, RemoteAudioTrackListener } from "@/features/p2p";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
 import { createRoomSnapshotResyncController, type RoomSnapshotResyncReason } from "@/features/room/room-snapshot-resync";
-import { musicRoomApi } from "@/lib/network/music-room-api";
-import { toUserFacingError } from "@/lib/domain/music-room-ui";
+import { soqaroApi } from "@/lib/network/soqaro-api";
+import { toUserFacingError } from "@/lib/domain/soqaro-ui";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import { clearAwayRoomId } from "@/lib/domain/away-room";
 import { closeDesktopLyricsNative } from "@/features/playback/desktop-lyrics-context";
@@ -295,7 +295,7 @@ export function useRoomRuntime({
         const sinceRevision = canUseIncrementalSync
           ? current.room.roomRevision ?? 0
           : 0;
-        const sync = await musicRoomApi.syncRoom(roomId, sinceRevision);
+        const sync = await soqaroApi.syncRoom(roomId, sinceRevision);
         if (sync.roomDeleted) {
           await deleteRoomTrackArtifactsRef.current(
             sync.deletedTracks.map((track) => track.trackId),
@@ -314,7 +314,7 @@ export function useRoomRuntime({
         if (sync.unchanged && current?.room.id === roomId && current.tracks.length > 0) {
           return current;
         }
-        return sync.snapshot ?? musicRoomApi.getRoom(roomId);
+        return sync.snapshot ?? soqaroApi.getRoom(roomId);
       },
       applySnapshot: (_roomId, snapshot) => {
         if (activeRouteRoomIdRef.current && snapshot.room.id !== activeRouteRoomIdRef.current) {
@@ -372,7 +372,7 @@ export function useRoomRuntime({
       // button that navigates to a room this socket can no longer reach.
       try {
         window.localStorage.removeItem(lastRoomStorageKey);
-        window.sessionStorage.removeItem("music-room-pending-room-snapshot");
+        window.sessionStorage.removeItem("soqaro-pending-room-snapshot");
       } catch {
         // Ignore storage errors in restricted WebView environments
       }

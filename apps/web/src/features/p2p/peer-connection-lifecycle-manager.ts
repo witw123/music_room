@@ -1,6 +1,6 @@
-import type {
+﻿import type {
   IceServerConfig
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import {
   SignalingTransport,
   type PeerLinkKind,
@@ -1356,7 +1356,7 @@ export class PeerConnectionLifecycleManager {
     }
     try {
       if (shouldInitiate && linkKind === "data") {
-        const controlChannel = connection.createDataChannel("music-room-control", {
+        const controlChannel = connection.createDataChannel("soqaro-control", {
           ordered: true
         });
         entry.channel = controlChannel;

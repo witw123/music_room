@@ -9,23 +9,23 @@ COPY apps/server/prisma/schema.prisma apps/server/prisma/schema.prisma
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/config-eslint/package.json packages/config-eslint/package.json
 COPY packages/config-typescript/package.json packages/config-typescript/package.json
-RUN pnpm install --filter @music-room/server... --frozen-lockfile=true
+RUN pnpm install --filter @soqaro/server... --frozen-lockfile=true
 
 FROM base AS prod-deps
 COPY package.json pnpm-workspace.yaml turbo.json pnpm-lock.yaml ./
 COPY apps/server/package.json apps/server/package.json
 COPY apps/server/prisma/schema.prisma apps/server/prisma/schema.prisma
 COPY packages/shared/package.json packages/shared/package.json
-RUN pnpm install --filter @music-room/server... --prod --frozen-lockfile=true
+RUN pnpm install --filter @soqaro/server... --prod --frozen-lockfile=true
 
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/server/node_modules ./apps/server/node_modules
 COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
 COPY . .
-RUN pnpm --filter @music-room/server prisma:generate
-RUN pnpm --filter @music-room/shared build
-RUN pnpm --filter @music-room/server build
+RUN pnpm --filter @soqaro/server prisma:generate
+RUN pnpm --filter @soqaro/shared build
+RUN pnpm --filter @soqaro/server build
 
 FROM node:22-alpine AS runner
 WORKDIR /app

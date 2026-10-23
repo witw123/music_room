@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import type { LocalPlaylistTrackRecord } from "@/features/playlist/local-playlist";
-import { formatDuration } from "@/lib/domain/music-room-ui";
+import { formatDuration } from "@/lib/domain/soqaro-ui";
 import type { AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
 import { getAnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
 import { FavoriteTrackButton } from "@/components/ui/FavoriteTrackButton";

@@ -1,13 +1,13 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useRef } from "react";
-import type { PersonalizationTrackInput, ProviderTrackCandidate, TrackMeta } from "@music-room/shared";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import type { PersonalizationTrackInput, ProviderTrackCandidate, TrackMeta } from "@soqaro/shared";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 import { recordLocalListeningProgress } from "./local-personalization-store";
 
 const heartbeatIntervalMs = 15_000;
 const maxProgressDeltaMs = 60_000;
-export const personalizationChangedEvent = "music-room-personalization-changed";
+export const personalizationChangedEvent = "soqaro-personalization-changed";
 
 type ListeningSession = {
   id: string;
@@ -49,7 +49,7 @@ export function usePersonalizationReporter(input: {
       } catch {
         // Local profile update should not block telemetry
       }
-      await musicRoomApi.recordPersonalizationEvent({
+      await soqaroApi.recordPersonalizationEvent({
         id: session.id,
         type: "playback",
         track: session.track,
@@ -59,11 +59,11 @@ export function usePersonalizationReporter(input: {
       });
       if (session.completed && !session.completionReported) {
         session.completionReported = true;
-        await musicRoomApi.recordPersonalizationEvent({ id: `${session.id}:completion`, type: "completion", track: session.track, occurredAt: new Date().toISOString() });
+        await soqaroApi.recordPersonalizationEvent({ id: `${session.id}:completion`, type: "completion", track: session.track, occurredAt: new Date().toISOString() });
       }
       if (settle && !session.completed && session.listenedMs < 30_000 && !session.quickSkipReported) {
         session.quickSkipReported = true;
-        await musicRoomApi.recordPersonalizationEvent({ id: `${session.id}:quick-skip`, type: "quick-skip", track: session.track, occurredAt: new Date().toISOString() });
+        await soqaroApi.recordPersonalizationEvent({ id: `${session.id}:quick-skip`, type: "quick-skip", track: session.track, occurredAt: new Date().toISOString() });
       }
       window.dispatchEvent(new Event(personalizationChangedEvent));
     } catch {
@@ -114,7 +114,7 @@ export function recordPersonalizationFavoriteCandidate(track: ProviderTrackCandi
 
 function recordFavoriteEvent(track: PersonalizationTrackInput | null, isFavorite: boolean) {
   if (!track) return Promise.resolve();
-  return enrichPersonalizationTrack(track).then((enrichedTrack) => musicRoomApi.recordPersonalizationEvent({ id: `${isFavorite ? "favorite" : "unfavorite"}:${trackKey(enrichedTrack)}:${createSessionId()}`, type: isFavorite ? "favorite" : "unfavorite", track: enrichedTrack, occurredAt: new Date().toISOString() })).then((result) => {
+  return enrichPersonalizationTrack(track).then((enrichedTrack) => soqaroApi.recordPersonalizationEvent({ id: `${isFavorite ? "favorite" : "unfavorite"}:${trackKey(enrichedTrack)}:${createSessionId()}`, type: isFavorite ? "favorite" : "unfavorite", track: enrichedTrack, occurredAt: new Date().toISOString() })).then((result) => {
       window.dispatchEvent(new Event(personalizationChangedEvent));
       return result;
     });
@@ -139,7 +139,7 @@ async function enrichPersonalizationTrack(track: PersonalizationTrackInput) {
   if (cached) return { ...track, providerTags: cached.tags, releaseTime: cached.releaseTime };
   let request = providerTagRequests.get(key);
   if (!request) {
-    request = (track.provider === "netease" ? musicRoomApi.getNeteaseTrack(track.providerTrackId) : musicRoomApi.getQqMusicTrack(track.providerTrackId))
+    request = (track.provider === "netease" ? soqaroApi.getNeteaseTrack(track.providerTrackId) : soqaroApi.getQqMusicTrack(track.providerTrackId))
       .then((candidate) => ({ tags: candidate.tags ?? [], releaseTime: candidate.releaseTime ?? null }))
       .catch((): ProviderTrackTasteDetail => ({ tags: [], releaseTime: null }))
       .then((detail) => {

@@ -6,7 +6,7 @@
 
 ## 1. 目标与边界
 
-Music Room 每个运行环境只有一个活动根目录：桌面端使用可执行文件所在目录，
+Soqaro 每个运行环境只有一个活动根目录：桌面端使用可执行文件所在目录，
 Android 使用系统应用数据目录 `filesDir`，网页端必须显式选择并授权目录。
 不再自动创建 OPFS 根目录；不可写时报告错误，不切换备用路径。
 根目录用于保存歌曲、播放资产、本地歌单和可选的封面/歌词。服务端仍然只保存房间、
@@ -32,16 +32,16 @@ Android 使用系统应用数据目录 `filesDir`，网页端必须显式选择�
 
 | 数据 | 权威位置 | IndexedDB 中的用途 |
 | --- | --- | --- |
-| 原始音频 | `.music-room/library/sources` 或外部相对路径 | 轻量摘要索引，不保存音频 Blob |
-| 原始资产 manifest | `.music-room/assets/original` | 读取时从目录加载 |
-| Opus 播放分片 | `.music-room/assets/playback` | 播放时按分片读取，不回写 Blob |
-| 歌曲元数据 | `.music-room/catalog/tracks` | 轻量摘要索引 |
-| 本地歌单 | `.music-room/catalog/playlists` | 运行时索引，不使用 localStorage |
-| 转码任务 | `.music-room/jobs` | 可恢复任务状态 |
-| Provider 临时文件 | `.music-room/cache` | 可删除缓存 |
+| 原始音频 | `.soqaro/library/sources` 或外部相对路径 | 轻量摘要索引，不保存音频 Blob |
+| 原始资产 manifest | `.soqaro/assets/original` | 读取时从目录加载 |
+| Opus 播放分片 | `.soqaro/assets/playback` | 播放时按分片读取，不回写 Blob |
+| 歌曲元数据 | `.soqaro/catalog/tracks` | 轻量摘要索引 |
+| 本地歌单 | `.soqaro/catalog/playlists` | 运行时索引，不使用 localStorage |
+| 转码任务 | `.soqaro/jobs` | 可恢复任务状态 |
+| Provider 临时文件 | `.soqaro/cache` | 可删除缓存 |
 
 本地上传、网易云音乐和 QQ 音乐导入必须先获得本地仓库写权限，源文件和播放资产直接
-写入 `.music-room/library` 与 `.music-room/assets`。IndexedDB 只保留摘要、目录句柄、
+写入 `.soqaro/library` 与 `.soqaro/assets`。IndexedDB 只保留摘要、目录句柄、
 资产链接和转码状态；播放资产缺少数据库记录时直接从目录读取。IndexedDB 中的音频
 仅用于准备和传输过程中的临时工作数据，不作为另一种可选根目录。
 本次不迁移旧 OPFS 或旧浏览器音频缓存。
@@ -51,12 +51,12 @@ Android 使用系统应用数据目录 `filesDir`，网页端必须显式选择�
 
 ## 3. 目录结构
 
-Music Room 自己的内容全部放在根目录的 `.music-room` 下。
+Soqaro 自己的内容全部放在根目录的 `.soqaro` 下。
 网页根目录下已有的音乐文件继续由用户管理；客户端不会扫描安装文件。
 
 ```text
 <root>/
-├── .music-room/
+├── .soqaro/
 │   ├── repository.json
 │   ├── catalog/
 │   │   ├── tracks/
@@ -106,11 +106,11 @@ Music Room 自己的内容全部放在根目录的 `.music-room` 下。
 
 ## 4. 仓库标识文件
 
-`.music-room/repository.json` 是仓库识别和格式升级的入口：
+`.soqaro/repository.json` 是仓库识别和格式升级的入口：
 
 ```json
 {
-  "format": "music-room-local-repository",
+  "format": "soqaro-local-repository",
   "schemaVersion": 1,
   "repositoryId": "5d3b2c5c-8c0a-4f6f-92c6-000000000000",
   "hashAlgorithm": "sha256",
@@ -130,7 +130,7 @@ Music Room 自己的内容全部放在根目录的 `.music-room` 下。
 
 ## 5. 歌曲记录
 
-`.music-room/catalog/tracks/<fileHash>.json` 保存一份内容记录：
+`.soqaro/catalog/tracks/<fileHash>.json` 保存一份内容记录：
 
 ```json
 {
@@ -146,19 +146,19 @@ Music Room 自己的内容全部放在根目录的 `.music-room` 下。
   "sourceRef": null,
   "source": {
     "kind": "managed",
-    "relativePath": ".music-room/library/sources/01/012345...mp3"
+    "relativePath": ".soqaro/library/sources/01/012345...mp3"
   },
   "originalAsset": {
     "assetId": "abcdef...",
-    "manifestPath": ".music-room/assets/original/abcdef.../manifest.json"
+    "manifestPath": ".soqaro/assets/original/abcdef.../manifest.json"
   },
   "playbackAsset": {
     "assetId": "fedcba...",
     "profileId": "opus-music-v2",
-    "manifestPath": ".music-room/assets/playback/opus-music-v2/fedcba.../manifest.json"
+    "manifestPath": ".soqaro/assets/playback/opus-music-v2/fedcba.../manifest.json"
   },
-  "artworkPath": ".music-room/library/artwork/abcdef....jpg",
-  "lyricsPath": ".music-room/library/lyrics/012345....txt",
+  "artworkPath": ".soqaro/library/artwork/abcdef....jpg",
+  "lyricsPath": ".soqaro/library/lyrics/012345....txt",
   "retention": "library",
   "createdAt": "2026-07-19T00:00:00.000Z",
   "updatedAt": "2026-07-19T00:00:00.000Z"
@@ -168,7 +168,7 @@ Music Room 自己的内容全部放在根目录的 `.music-room` 下。
 `source.kind` 有两种：
 
 ```json
-{ "kind": "managed", "relativePath": ".music-room/library/sources/01/....mp3" }
+{ "kind": "managed", "relativePath": ".soqaro/library/sources/01/....mp3" }
 ```
 
 ```json
@@ -180,7 +180,7 @@ Music Room 自己的内容全部放在根目录的 `.music-room` 下。
 }
 ```
 
-外部文件不复制进仓库，也不由 Music Room 删除。读取时必须校验路径仍位于仓库
+外部文件不复制进仓库，也不由 Soqaro 删除。读取时必须校验路径仍位于仓库
 根目录内；文件不存在时只标记为 `missing`，不能删除曲目元数据。
 
 Provider 字段仍使用共享模型的 `sourceType` 和 `sourceRef`。远程封面 URL 可以
@@ -207,7 +207,7 @@ Provider 字段仍使用共享模型的 `sourceType` 和 `sourceRef`。远程封
     "unitCount": 12,
     "merkleRoot": "..."
   },
-  "sourcePath": ".music-room/library/sources/01/...mp3"
+  "sourcePath": ".soqaro/library/sources/01/...mp3"
 }
 ```
 
@@ -260,7 +260,7 @@ v1 不再保存一份重复的原始 `assetUnits`。恢复 IndexedDB 时从原�
 
 ## 7. 本地歌单
 
-本地歌单持久化在 `.music-room/catalog/playlists/<id>.json`：
+本地歌单持久化在 `.soqaro/catalog/playlists/<id>.json`：
 
 ```json
 {
@@ -312,14 +312,14 @@ collectGarbage(references)
 在启动时清理或重新排队。不能在 manifest 写入前将文件展示为可用。
 
 同一浏览器的多标签页写入需要使用 Web Locks API 的固定锁名，例如
-`music-room-local-repository`。目录权限不足、磁盘空间不足或写入失败时，必须保留
+`soqaro-local-repository`。目录权限不足、磁盘空间不足或写入失败时，必须保留
 旧文件和旧 manifest，不得先删除再写入。
 
 ## 9. IndexedDB 重建
 
 重新选择目录或检测到 IndexedDB 为空时：
 
-1. 校验 `.music-room/repository.json`；
+1. 校验 `.soqaro/repository.json`；
 2. 扫描 `catalog/tracks` 和 `catalog/playlists`；
 3. 验证原始文件路径、大小，必要时校验 SHA-256；
 4. 重建 `cachedTrackLibraryMetadata`、`localPlaylistTracks` 等轻量索引；
@@ -355,9 +355,9 @@ IndexedDB 中的 `Blob`、`assetUnits`、缓存摘要和目录句柄都不能成
 依据 `repositoryId` 清除旧仓库的工作索引并恢复目标仓库；不移动、不删除旧根目录文件。
 索引恢复完成后记录 `indexReady`，普通启动不重复读取全库封面和歌词。
 
-Music Room 不读取、迁移或删除目录中的 `local/`、`cache/`、`saved/` 等旧目录。
+Soqaro 不读取、迁移或删除目录中的 `local/`、`cache/`、`saved/` 等旧目录。
 这些目录和根目录下的其他音频一样，均属于用户文件；目录扫描会按外部文件处理，
-不会把它们当作 Music Room 的存储目录。
+不会把它们当作 Soqaro 的存储目录。
 
 ## 12. 与当前代码的对应关系
 

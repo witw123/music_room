@@ -1,8 +1,8 @@
-import {
+﻿import {
   iceServerConfigSchema,
   type IceConfigResponse,
   type IceServerConfig
-} from "@music-room/shared";
+} from "@soqaro/shared";
 
 export * from "./mesh";
 export * from "./diagnostics";

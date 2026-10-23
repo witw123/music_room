@@ -1,5 +1,5 @@
-import { Injectable } from "@nestjs/common";
-import type { SystemAnnouncement } from "@music-room/shared";
+﻿import { Injectable } from "@nestjs/common";
+import type { SystemAnnouncement } from "@soqaro/shared";
 import { PrismaService } from "../../infra/prisma/prisma.service";
 
 @Injectable()

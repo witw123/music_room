@@ -114,7 +114,7 @@ const verbatimPathPrefix = "\\\\?\\";
 const verbatimUncPathPrefix = "\\\\?\\UNC\\";
 
 /**
- * Windows reports the root in the verbatim form `\\?\E:\game\Music Room`,
+ * Windows reports the root in the verbatim form `\\?\E:\game\Soqaro`,
  * because that is what `canonicalize()` returns. The prefix is a Win32
  * long-path detail the user never typed and it only makes the root unreadable
  * wherever we show it, so the reported name drops it. Paths handed back to the

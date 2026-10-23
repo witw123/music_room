@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+﻿import { Injectable } from "@nestjs/common";
 import type { Server } from "socket.io";
 import type {
   PeerSignalMessage,
@@ -13,7 +13,7 @@ import type {
   RoomTrackDeletedPayload,
   RoomTrackAssetReadyPayload,
   RoomTrackAssetUnavailablePayload
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import {
   peerSignalMessageSchema,
   roomChatDeletedPayloadSchema,
@@ -29,7 +29,7 @@ import {
   roomTrackDeletedPayloadSchema,
   roomTrackAssetReadyPayloadSchema,
   roomTrackAssetUnavailablePayloadSchema
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import { RedisService } from "../../infra/redis/redis.service";
 import { MetricsService } from "../../common/metrics/metrics.service";
 import {
@@ -92,7 +92,7 @@ export class RealtimeRedisSubscriber {
   }
 
   subscribeAll() {
-    void this.redisService.subscribe("music-room:auth:user-invalidated", (payload) => {
+    void this.redisService.subscribe("soqaro:auth:user-invalidated", (payload) => {
       const userId = (payload as { userId?: unknown }).userId;
       if (typeof userId !== "string") return;
       for (const socket of this.server!.sockets.sockets.values()) {

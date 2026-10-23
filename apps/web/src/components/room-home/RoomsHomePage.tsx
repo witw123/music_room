@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -6,11 +6,11 @@ import { Plus, RotateCw, User, LayoutGrid } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { Route } from "next";
-import type { RoomDirectoryItem, RoomType } from "@music-room/shared";
+import type { RoomDirectoryItem, RoomType } from "@soqaro/shared";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildAppEntryHref, buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
-import { musicRoomApi } from "@/lib/network/music-room-api";
-import { toUserFacingError } from "@/lib/domain/music-room-ui";
+import { soqaroApi } from "@/lib/network/soqaro-api";
+import { toUserFacingError } from "@/lib/domain/soqaro-ui";
 import {
   buildRoomJoinBootstrapSnapshot,
   storeRoomSnapshotHandoff
@@ -31,7 +31,7 @@ import {
   requestAwayRoomResume
 } from "@/lib/domain/away-room";
 
-const lastRoomStorageKey = "music-room-last-room";
+const lastRoomStorageKey = "soqaro-last-room";
 const emptyRooms: RoomDirectoryItem[] = [];
 
 type RoomsHomePageProps = {
@@ -59,14 +59,14 @@ export function RoomsHomePage({
     statusMessage,
     setStatusMessage,
   } = useSessionIdentity({
-    sessionStorageKey: "music-room-session",
+    sessionStorageKey: "soqaro-session",
     initialStatusMessage: ""
   });
   const pageActive = useWorkspacePageActive();
   const queryClient = useQueryClient();
   const roomsQuery = useQuery({
     queryKey: ["rooms", activeSession?.userId ?? null],
-    queryFn: ({ signal }) => musicRoomApi.listRooms(signal),
+    queryFn: ({ signal }) => soqaroApi.listRooms(signal),
     enabled: hydrated && pageActive,
     staleTime: 10_000,
     refetchInterval: pageActive ? 10_000 : false
@@ -142,7 +142,7 @@ export function RoomsHomePage({
   async function handleCreateRoom(form: CreateRoomForm) {
     primeRoomAudioFromUserGesture();
     try {
-      const snapshot = await musicRoomApi.createRoom({
+      const snapshot = await soqaroApi.createRoom({
         visibility: form.visibility,
         name: form.name.trim() || undefined,
         description: form.description.trim() || undefined,
@@ -172,7 +172,7 @@ export function RoomsHomePage({
 
     primeRoomAudioFromUserGesture();
     try {
-      const joined = await musicRoomApi.joinRoomByCode(code.trim(), password);
+      const joined = await soqaroApi.joinRoomByCode(code.trim(), password);
       storeRoomSnapshotHandoff(buildRoomJoinBootstrapSnapshot(joined));
       window.localStorage.setItem(lastRoomStorageKey, joined.roomId);
       router.push(buildRoomHref(joined.roomId) as Route);

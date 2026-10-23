@@ -1,6 +1,6 @@
-"use client";
+﻿"use client";
 
-import type { RoomSnapshot } from "@music-room/shared";
+import type { RoomSnapshot } from "@soqaro/shared";
 import { getLocalAudioDirectory } from "@/features/library/indexeddb";
 import { LocalRepository } from "./local-repository";
 import { enqueueLocalRepositoryWrite } from "./local-repository-queue";

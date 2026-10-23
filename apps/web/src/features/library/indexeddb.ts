@@ -1,4 +1,4 @@
-export { musicRoomDatabase } from "./indexeddb/database";
+export { soqaroDatabase } from "./indexeddb/database";
 export * from "./indexeddb/database";
 export * from "./indexeddb/assets";
 export * from "./indexeddb/cached-library";

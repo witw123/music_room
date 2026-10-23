@@ -1,5 +1,5 @@
-import { useEffect, useRef, type MutableRefObject, type SetStateAction, type Dispatch } from "react";
-import type { GuestSession, RoomSnapshot } from "@music-room/shared";
+﻿import { useEffect, useRef, type MutableRefObject, type SetStateAction, type Dispatch } from "react";
+import type { GuestSession, RoomSnapshot } from "@soqaro/shared";
 import {
   getCachedLibraryTrack,
   getCachedLibraryTrackSummary

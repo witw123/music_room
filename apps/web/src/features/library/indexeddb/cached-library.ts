@@ -1,6 +1,6 @@
 import {
   backfillCachedLibraryTrackMetadataIfNeeded,
-  musicRoomDatabase,
+  soqaroDatabase,
   toCachedLibraryTrackSummaryRecord,
   type AssetUnitDescriptor,
   type CachedLibraryTrackRecord,
@@ -47,7 +47,7 @@ export function removeCachedLibrarySourceReferences(
 export async function upsertCachedLibraryTrack(input: Omit<CachedLibraryTrackRecord, "cachedAt"> & {
   cachedAt?: string;
 }) {
-  const existing = await musicRoomDatabase.cachedTrackLibraryMetadata.get(input.fileHash);
+  const existing = await soqaroDatabase.cachedTrackLibraryMetadata.get(input.fileHash);
   const cachedAt = input.cachedAt ?? existing?.cachedAt ?? new Date().toISOString();
   const record: CachedLibraryTrackRecord = {
     ...input,
@@ -58,13 +58,13 @@ export async function upsertCachedLibraryTrack(input: Omit<CachedLibraryTrackRec
     sourceTrackIds: [...new Set([...(existing?.sourceTrackIds ?? []), ...input.sourceTrackIds])],
     sourceRoomIds: [...new Set([...(existing?.sourceRoomIds ?? []), ...input.sourceRoomIds])]
   };
-  await musicRoomDatabase.transaction(
+  await soqaroDatabase.transaction(
     "rw",
-    musicRoomDatabase.cachedTrackLibrary,
-    musicRoomDatabase.cachedTrackLibraryMetadata,
+    soqaroDatabase.cachedTrackLibrary,
+    soqaroDatabase.cachedTrackLibraryMetadata,
     async () => {
-      await musicRoomDatabase.cachedTrackLibrary.put(record);
-      await musicRoomDatabase.cachedTrackLibraryMetadata.put(
+      await soqaroDatabase.cachedTrackLibrary.put(record);
+      await soqaroDatabase.cachedTrackLibraryMetadata.put(
         toCachedLibraryTrackSummaryRecord(record)
       );
     }
@@ -77,13 +77,13 @@ export async function updateCachedLibraryTrackMetadata(
     "artworkUrl" | "lyrics" | "translatedLyrics" | "romanizedLyrics" | "loudness">>
 ) {
   // Patch existing rows only: background enrichment must not recreate released audio.
-  await musicRoomDatabase.transaction(
+  await soqaroDatabase.transaction(
     "rw",
-    musicRoomDatabase.cachedTrackLibrary,
-    musicRoomDatabase.cachedTrackLibraryMetadata,
+    soqaroDatabase.cachedTrackLibrary,
+    soqaroDatabase.cachedTrackLibraryMetadata,
     async () => {
-      await musicRoomDatabase.cachedTrackLibrary.update(fileHash, metadata);
-      await musicRoomDatabase.cachedTrackLibraryMetadata.update(fileHash, metadata);
+      await soqaroDatabase.cachedTrackLibrary.update(fileHash, metadata);
+      await soqaroDatabase.cachedTrackLibraryMetadata.update(fileHash, metadata);
     }
   );
 }
@@ -112,7 +112,7 @@ export async function putPlaybackAssetDraftUnits(input: {
 }) {
   if (input.units.length === 0) return;
   const createdAt = new Date().toISOString();
-  await musicRoomDatabase.playbackAssetDraftUnits.bulkPut(
+  await soqaroDatabase.playbackAssetDraftUnits.bulkPut(
     input.units.map((unit) => ({
       draftUnitId: `${input.draftId}:${unit.unitIndex}`,
       draftId: input.draftId,
@@ -130,7 +130,7 @@ export async function getPlaybackAssetDraftUnitBatch(
   offset: number,
   limit: number
 ) {
-  return musicRoomDatabase.playbackAssetDraftUnits
+  return soqaroDatabase.playbackAssetDraftUnits
     .where("[draftId+unitIndex]")
     .between(
       [draftId, Math.max(0, offset)],
@@ -143,36 +143,36 @@ export async function getPlaybackAssetDraftUnitBatch(
 }
 
 export async function deletePlaybackAssetDraft(draftId: string) {
-  await musicRoomDatabase.playbackAssetDraftUnits.where("draftId").equals(draftId).delete();
+  await soqaroDatabase.playbackAssetDraftUnits.where("draftId").equals(draftId).delete();
 }
 
 export async function releaseAssetUnitsToLocalRepository(assetId: string) {
-  await musicRoomDatabase.assetUnits.where("assetId").equals(assetId).delete();
+  await soqaroDatabase.assetUnits.where("assetId").equals(assetId).delete();
 }
 
 export async function listCachedLibraryTracks() {
-  return musicRoomDatabase.cachedTrackLibrary.orderBy("cachedAt").reverse().toArray();
+  return soqaroDatabase.cachedTrackLibrary.orderBy("cachedAt").reverse().toArray();
 }
 
 export async function listCachedLibraryTrackSummaries() {
   await backfillCachedLibraryTrackMetadataIfNeeded();
-  return musicRoomDatabase.cachedTrackLibraryMetadata.orderBy("cachedAt").reverse().toArray();
+  return soqaroDatabase.cachedTrackLibraryMetadata.orderBy("cachedAt").reverse().toArray();
 }
 
 export async function listCachedLibraryTrackHashes() {
-  const keys = await musicRoomDatabase.cachedTrackLibrary.toCollection().primaryKeys();
+  const keys = await soqaroDatabase.cachedTrackLibrary.toCollection().primaryKeys();
   return keys.filter((key): key is string => typeof key === "string");
 }
 
 export async function getCachedLibraryTrack(fileHash: string) {
-  return musicRoomDatabase.cachedTrackLibrary.get(fileHash);
+  return soqaroDatabase.cachedTrackLibrary.get(fileHash);
 }
 
 export async function getCachedLibraryTrackByProviderTrack(
   provider: string,
   providerTrackId: string
 ) {
-  return musicRoomDatabase.cachedTrackLibrary
+  return soqaroDatabase.cachedTrackLibrary
     .filter((record) =>
       record.provider === provider && record.providerTrackId === providerTrackId
     )
@@ -180,44 +180,44 @@ export async function getCachedLibraryTrackByProviderTrack(
 }
 
 export async function deleteCachedLibraryTrackFile(fileHash: string) {
-  await musicRoomDatabase.cachedTrackLibrary.delete(fileHash);
+  await soqaroDatabase.cachedTrackLibrary.delete(fileHash);
 }
 
 export async function getCachedLibraryTrackSummary(fileHash: string) {
-  const summary = await musicRoomDatabase.cachedTrackLibraryMetadata.get(fileHash);
+  const summary = await soqaroDatabase.cachedTrackLibraryMetadata.get(fileHash);
   if (summary) {
     return summary;
   }
 
-  const record = await musicRoomDatabase.cachedTrackLibrary.get(fileHash);
+  const record = await soqaroDatabase.cachedTrackLibrary.get(fileHash);
   if (!record) {
     return null;
   }
 
   const backfilledSummary = toCachedLibraryTrackSummaryRecord(record);
-  await musicRoomDatabase.cachedTrackLibraryMetadata.put(backfilledSummary);
+  await soqaroDatabase.cachedTrackLibraryMetadata.put(backfilledSummary);
   return backfilledSummary;
 }
 
 export async function getCachedLibraryTrackCount() {
   await backfillCachedLibraryTrackMetadataIfNeeded();
-  return musicRoomDatabase.cachedTrackLibraryMetadata.count();
+  return soqaroDatabase.cachedTrackLibraryMetadata.count();
 }
 
 export async function deleteCachedLibraryTrack(fileHash: string) {
-  const record = await musicRoomDatabase.cachedTrackLibrary.get(fileHash);
+  const record = await soqaroDatabase.cachedTrackLibrary.get(fileHash);
   if (!record) {
-    await musicRoomDatabase.cachedTrackLibraryMetadata.delete(fileHash);
+    await soqaroDatabase.cachedTrackLibraryMetadata.delete(fileHash);
     return null;
   }
 
-  await musicRoomDatabase.transaction(
+  await soqaroDatabase.transaction(
     "rw",
-    musicRoomDatabase.cachedTrackLibrary,
-    musicRoomDatabase.cachedTrackLibraryMetadata,
+    soqaroDatabase.cachedTrackLibrary,
+    soqaroDatabase.cachedTrackLibraryMetadata,
     async () => {
-      await musicRoomDatabase.cachedTrackLibrary.delete(fileHash);
-      await musicRoomDatabase.cachedTrackLibraryMetadata.delete(fileHash);
+      await soqaroDatabase.cachedTrackLibrary.delete(fileHash);
+      await soqaroDatabase.cachedTrackLibraryMetadata.delete(fileHash);
     }
   );
   return record;
@@ -226,8 +226,8 @@ export async function deleteCachedLibraryTrack(fileHash: string) {
 export async function upsertCachedLibraryTrackSummary(
   input: CachedLibraryTrackSummaryRecord
 ) {
-  const existing = await musicRoomDatabase.cachedTrackLibraryMetadata.get(input.fileHash);
-  await musicRoomDatabase.cachedTrackLibraryMetadata.put({
+  const existing = await soqaroDatabase.cachedTrackLibraryMetadata.get(input.fileHash);
+  await soqaroDatabase.cachedTrackLibraryMetadata.put({
     ...existing,
     ...input,
     sourceTrackIds: [...new Set([...(existing?.sourceTrackIds ?? []), ...input.sourceTrackIds])],

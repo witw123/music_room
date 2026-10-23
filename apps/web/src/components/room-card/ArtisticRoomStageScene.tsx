@@ -1,6 +1,6 @@
-"use client";
+﻿"use client";
 
-import type { RoomType } from "@music-room/shared";
+import type { RoomType } from "@soqaro/shared";
 
 type ArtisticRoomStageSceneProps = {
   roomType: RoomType;

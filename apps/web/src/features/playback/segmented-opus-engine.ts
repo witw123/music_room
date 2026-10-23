@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
 import type { AudioAssetUnitRecord } from "@/features/library/indexeddb";
-import type { GaplessTransition, PlaybackAssetManifest, PlaybackSnapshot } from "@music-room/shared";
+import type { GaplessTransition, PlaybackAssetManifest, PlaybackSnapshot } from "@soqaro/shared";
 import { roomAudioOutput } from "./room-audio-output";
 import { playbackUnitIndexAt } from "./playback-segment-scheduler";
 

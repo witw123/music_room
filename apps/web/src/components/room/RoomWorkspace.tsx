@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { memo, type ReactNode } from "react";
 import type {
@@ -14,7 +14,7 @@ import type {
   QqMusicTrackCandidate,
   TrackMeta,
   UpdateRoomRequest
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import type { RoomSocket } from "@/lib/network/ws-client";
 import { EmptyRoomState, RoomTransitionState } from "@/components/room/RoomPageStates";
 import { InteractiveRoomView } from "@/components/room/InteractiveRoomView";

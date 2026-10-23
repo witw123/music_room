@@ -1,7 +1,7 @@
 # 本地开发环境
 
 最后更新：`2026-09-13`
-当前版本：`0.3.2`
+当前版本：`1.0.0`
 
 ## 版本要求
 
@@ -53,7 +53,7 @@ docker compose up -d postgres redis
 4. 初始化本地数据库：
 
 ```bash
-pnpm --filter @music-room/server db:push
+pnpm --filter @soqaro/server db:push
 ```
 
 5. 启动开发环境：

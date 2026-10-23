@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
 import React, { useState } from "react";
-import type { RoomDirectoryItem } from "@music-room/shared";
+import type { RoomDirectoryItem } from "@soqaro/shared";
 import { Button } from "@/components/ui/button";
 import { RoomDialog } from "./RoomDialog";
 import { roomTypeDescription } from "./room-home-types";

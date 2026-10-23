@@ -62,7 +62,7 @@ services:
 
   server:
     logging: *default_logging
-    image: ghcr.io/${GHCR_OWNER}/music-room-server:${RELEASE_TAG}
+    image: ghcr.io/${GHCR_OWNER}/soqaro-server:${RELEASE_TAG}
     restart: unless-stopped
     mem_limit: 1g
     depends_on:
@@ -138,7 +138,7 @@ services:
 
   web:
     logging: *default_logging
-    image: ghcr.io/${GHCR_OWNER}/music-room-web:${RELEASE_TAG}
+    image: ghcr.io/${GHCR_OWNER}/soqaro-web:${RELEASE_TAG}
     restart: unless-stopped
     mem_limit: 512m
     healthcheck:
@@ -188,8 +188,8 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx/music-room.conf:/etc/nginx/templates/default.conf.template:ro
-      - ./nginx/music-room.routes.conf:/etc/nginx/conf.d/music-room.routes.conf:ro
+      - ./nginx/soqaro.conf:/etc/nginx/templates/default.conf.template:ro
+      - ./nginx/soqaro.routes.conf:/etc/nginx/conf.d/soqaro.routes.conf:ro
       - certbot_certs:/etc/letsencrypt:ro
 
   prometheus:

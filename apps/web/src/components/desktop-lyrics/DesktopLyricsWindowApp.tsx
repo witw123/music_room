@@ -30,8 +30,8 @@ type BridgeState = {
   showRomanized?: boolean;
 };
 
-const bridgeChannelName = "music-room-desktop-lyrics";
-const bridgeSnapshotKey = "music-room-desktop-lyrics-snapshot";
+const bridgeChannelName = "soqaro-desktop-lyrics";
+const bridgeSnapshotKey = "soqaro-desktop-lyrics-snapshot";
 const emptyState: BridgeState = {
   track: null,
   progressMs: 0,

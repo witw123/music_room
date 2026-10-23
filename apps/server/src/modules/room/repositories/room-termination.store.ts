@@ -1,4 +1,4 @@
-import type { PrismaService } from "../../../infra/prisma/prisma.service";
+﻿import type { PrismaService } from "../../../infra/prisma/prisma.service";
 import type { RedisService } from "../../../infra/redis/redis.service";
 
 /**
@@ -175,7 +175,7 @@ export class RoomTerminationStore {
 
 
   private terminationKey(roomId: string) {
-    return `music-room:room-terminated:${roomId}`;
+    return `soqaro:room-terminated:${roomId}`;
   }
 
   private getTombstoneModel() {

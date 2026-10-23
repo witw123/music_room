@@ -10,7 +10,7 @@ import {
   normalizeLocalAudioMimeType,
   saveAudioFileToLocalDirectory
 } from "@/features/library/local-audio-storage";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 import { getAppSettings } from "@/features/settings/settings-store";
 import { analyzeAudioBlobLoudness } from "./loudness";
 import { findCachedProviderPlaybackRecord } from "./provider-track-cache";
@@ -87,10 +87,10 @@ export async function downloadProviderTrackToLibrary(input: {
   } else {
     const preferredQuality = getAppSettings().playback.preferredAudioQuality;
     const response = provider === "netease"
-      ? await musicRoomApi.downloadNeteaseTrack(providerTrackId, preferredQuality)
+      ? await soqaroApi.downloadNeteaseTrack(providerTrackId, preferredQuality)
       : provider === "bilibili"
-        ? await musicRoomApi.downloadBilibiliTrack(providerTrackId)
-        : await musicRoomApi.downloadQqMusicTrack(providerTrackId, preferredQuality);
+        ? await soqaroApi.downloadBilibiliTrack(providerTrackId)
+        : await soqaroApi.downloadQqMusicTrack(providerTrackId, preferredQuality);
     blob = response.blob;
     fileHash = await hashAudioBlob(blob);
     mimeType = normalizeLocalAudioMimeType(response.contentType || blob.type);
@@ -98,10 +98,10 @@ export async function downloadProviderTrackToLibrary(input: {
     const lyricPayload = existingRecord?.lyrics
       ? null
       : await (provider === "netease"
-        ? musicRoomApi.getNeteaseLyrics(providerTrackId)
+        ? soqaroApi.getNeteaseLyrics(providerTrackId)
         : provider === "bilibili"
-          ? musicRoomApi.getBilibiliLyrics(providerTrackId)
-          : musicRoomApi.getQqMusicLyrics(providerTrackId)
+          ? soqaroApi.getBilibiliLyrics(providerTrackId)
+          : soqaroApi.getQqMusicLyrics(providerTrackId)
       ).catch(() => null);
     lyrics = existingRecord?.lyrics
       ?? lyricPayload?.wordSyncedLyric
@@ -153,14 +153,14 @@ async function resolveProviderTrackArtwork(track: ProviderTrack): Promise<Provid
   if (track.artworkUrl) return track;
   try {
     if (track.provider === "netease") {
-      return await musicRoomApi.getNeteaseTrack(track.providerTrackId);
+      return await soqaroApi.getNeteaseTrack(track.providerTrackId);
     }
     if (track.provider === "qqmusic") {
-      return await musicRoomApi.getQqMusicTrack(track.providerTrackId);
+      return await soqaroApi.getQqMusicTrack(track.providerTrackId);
     }
     if (track.provider === "bilibili") {
       const bvid = track.bvid ?? track.providerTrackId.split(":")[0]!;
-      const detail = await musicRoomApi.getBilibiliView(bvid);
+      const detail = await soqaroApi.getBilibiliView(bvid);
       return {
         ...track,
         artworkUrl: detail.pic

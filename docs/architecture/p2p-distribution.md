@@ -1,4 +1,4 @@
-# WebRTC 媒体与控制
+﻿# WebRTC 媒体与控制
 
 最后更新：`2026-07-15`
 
@@ -13,7 +13,7 @@ Socket.IO
   -> room.snapshot / playback patch / presence / peer.signal
 
 WebRTC control connection
-  -> music-room-control DataChannel
+  -> soqaro-control DataChannel
   -> 控制和连接健康协调
 
 WebRTC media connection

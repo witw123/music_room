@@ -1,12 +1,12 @@
-import type {
+﻿import type {
   Provider,
   ProviderPlaylistDetail,
   ProviderPlaylistSummary,
   ProviderTrackCandidate
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import type { DiscoverPlaylistRecommendation, ProfileProviderRecommendations } from "@/features/discovery/profile-provider-recommendations";
 import type { AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
-import { MusicRoomApiError } from "@/lib/network/music-room-api";
+import { SoqaroApiError } from "@/lib/network/soqaro-api";
 
 export type { Provider };
 export type Track = ProviderTrackCandidate;
@@ -76,7 +76,7 @@ export function providerPlaylistKey(provider: Provider, playlistId: string) {
 }
 
 export function toErrorMessage(error: unknown) {
-  if (error instanceof MusicRoomApiError) {
+  if (error instanceof SoqaroApiError) {
     if (error.code === "NETEASE_ACCOUNT_REQUIRED" || error.code === "QQMUSIC_ACCOUNT_REQUIRED") return "部分推荐需要先绑定对应音乐平台账号。";
     return error.message;
   }

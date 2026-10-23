@@ -1,8 +1,8 @@
-"use client";
+﻿"use client";
 
 import { useMemo } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
-import type { PeerDiagnosticsSnapshot, PeerSignalMessage, RoomSnapshot } from "@music-room/shared";
+import type { PeerDiagnosticsSnapshot, PeerSignalMessage, RoomSnapshot } from "@soqaro/shared";
 import {
   P2PMesh,
   createPeerConnectionSupervisorState,

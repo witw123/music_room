@@ -1,12 +1,12 @@
-import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+﻿import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import type {
   PlaybackSnapshot,
   Room,
   RoomMember,
   RoomMemberPermissions,
   UserProfile
-} from "@music-room/shared";
-import { defaultRoomMemberPermissions, getRoomMemberPermissions } from "@music-room/shared";
+} from "@soqaro/shared";
+import { defaultRoomMemberPermissions, getRoomMemberPermissions } from "@soqaro/shared";
 import type { RoomRecord } from "./room.types";
 
 // The current browser topology is a peer mesh for control plus one media

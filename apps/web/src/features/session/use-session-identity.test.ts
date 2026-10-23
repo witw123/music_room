@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import type { AuthSession } from "@music-room/shared";
+﻿import { describe, expect, it } from "vitest";
+import type { AuthSession } from "@soqaro/shared";
 import { areAuthSessionsEqual, isStoredAuthSession } from "./use-session-identity";
 
 const baseSession: AuthSession = {

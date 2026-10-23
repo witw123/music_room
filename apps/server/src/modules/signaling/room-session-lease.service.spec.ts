@@ -1,4 +1,4 @@
-import { WsException } from "@nestjs/websockets";
+﻿import { WsException } from "@nestjs/websockets";
 import { RoomSessionLeaseService } from "./room-session-lease.service";
 
 function createRedis() {
@@ -32,7 +32,7 @@ describe("RoomSessionLeaseService", () => {
 
     expect(previous).toEqual({ socketId: "socket-0", fenceToken: "old" });
     expect(redis.claimJsonLease).toHaveBeenCalledWith(
-      "music-room:realtime-session:room-1:session-1",
+      "soqaro:realtime-session:room-1:session-1",
       {
         instanceId: "instance-a",
         roomId: "room-1",
@@ -60,8 +60,8 @@ describe("RoomSessionLeaseService", () => {
     await expect(lease.claim("room-1", "session-1", "peer-1", "socket-1", "fence-1"))
       .resolves.toBeNull();
 
-    expect(redis.acquireLock).toHaveBeenCalledWith("music-room:lock:room:room-1", 30_000);
-    expect(redis.releaseLock).toHaveBeenCalledWith("music-room:lock:room:room-1", "lock-token");
+    expect(redis.acquireLock).toHaveBeenCalledWith("soqaro:lock:room:room-1", 30_000);
+    expect(redis.releaseLock).toHaveBeenCalledWith("soqaro:lock:room:room-1", "lock-token");
   });
 
   it("returns null when Redis is unavailable during claim", async () => {
@@ -167,7 +167,7 @@ describe("RoomSessionLeaseService", () => {
       sessionFenceToken: "fence-1"
     }))).resolves.toBe(true);
     expect(redis.renewJsonLeaseIfValue).toHaveBeenCalledWith(
-      "music-room:realtime-session:room-1:session-1",
+      "soqaro:realtime-session:room-1:session-1",
       {
         instanceId: "instance-a",
         roomId: "room-1",
@@ -208,7 +208,7 @@ describe("RoomSessionLeaseService", () => {
       sessionFenceToken: "fence-1"
     }));
     expect(redis.deleteJsonIfValue).toHaveBeenCalledWith(
-      "music-room:realtime-session:room-1:session-1",
+      "soqaro:realtime-session:room-1:session-1",
       {
         instanceId: "instance-a",
         roomId: "room-1",
@@ -280,7 +280,7 @@ describe("RoomSessionLeaseService", () => {
     ).resolves.toBe(true);
 
     expect(redis.restoreJsonLeaseIfValue).toHaveBeenCalledWith(
-      "music-room:realtime-session:room-1:session-1",
+      "soqaro:realtime-session:room-1:session-1",
       {
         instanceId: "instance-a",
         roomId: "room-1",
@@ -310,7 +310,7 @@ describe("RoomSessionLeaseService", () => {
     ).resolves.toBe(true);
 
     expect(redis.deleteJsonIfValue).toHaveBeenCalledWith(
-      "music-room:realtime-session:room-1:session-1",
+      "soqaro:realtime-session:room-1:session-1",
       {
         instanceId: "instance-a",
         roomId: "room-1",

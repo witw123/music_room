@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useRef, useState, type Dispatch } from "react";
 import type {
@@ -8,7 +8,7 @@ import type {
   NeteaseTrackCandidate,
   RoomSnapshot,
   TrackMeta
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import {
   deleteLocalTrackDataForTracks,
@@ -46,8 +46,8 @@ import {
 import {
   playlistsChangedEventName,
   playlistsChangedStorageKey,
-  musicRoomApi
-} from "@/lib/network/music-room-api";
+  soqaroApi
+} from "@/lib/network/soqaro-api";
 import {
   ensureDefaultLocalPlaylist,
   getDefaultLocalPlaylistTrackIds,
@@ -314,10 +314,10 @@ export function useTrackUploads(options: {
             : "QQ 音乐";
         setStatusMessage(`正在从${providerName}下载《${track.title}》...`);
         const downloaded = track.sourceRef.provider === "netease"
-          ? await musicRoomApi.downloadNeteaseTrack(track.sourceRef.trackId, "exhigh")
+          ? await soqaroApi.downloadNeteaseTrack(track.sourceRef.trackId, "exhigh")
           : track.sourceRef.provider === "bilibili"
-            ? await musicRoomApi.downloadBilibiliTrack(track.sourceRef.trackId)
-            : await musicRoomApi.downloadQqMusicTrack(track.sourceRef.trackId, "exhigh");
+            ? await soqaroApi.downloadBilibiliTrack(track.sourceRef.trackId)
+            : await soqaroApi.downloadQqMusicTrack(track.sourceRef.trackId, "exhigh");
         const downloadedMimeType = normalizeLocalAudioMimeType(downloaded.contentType);
         file = new File(
           [downloaded.blob],
@@ -368,10 +368,10 @@ export function useTrackUploads(options: {
       const mimeType = normalizeLocalAudioMimeType(track.mimeType ?? file.type);
       const providerLyrics = track.sourceRef
         ? await (track.sourceRef.provider === "netease"
-            ? musicRoomApi.getNeteaseLyrics(track.sourceRef.trackId)
+            ? soqaroApi.getNeteaseLyrics(track.sourceRef.trackId)
             : track.sourceRef.provider === "bilibili"
-              ? musicRoomApi.getBilibiliLyrics(track.sourceRef.trackId)
-              : musicRoomApi.getQqMusicLyrics(track.sourceRef.trackId)
+              ? soqaroApi.getBilibiliLyrics(track.sourceRef.trackId)
+              : soqaroApi.getQqMusicLyrics(track.sourceRef.trackId)
           ).catch(() => null)
         : null;
       const lyrics = providerLyrics?.wordSyncedLyric

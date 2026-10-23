@@ -1,4 +1,4 @@
-import type { PlaybackMode } from "@music-room/shared";
+﻿import type { PlaybackMode } from "@soqaro/shared";
 import type { LocalPlaylistTrackRecord } from "@/features/library/indexeddb";
 import {
   hasForegroundPlaybackPreparation,

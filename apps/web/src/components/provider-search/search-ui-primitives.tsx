@@ -1,4 +1,4 @@
-import type { BilibiliTrackCandidate, NeteaseTrackCandidate, QqMusicTrackCandidate } from "@music-room/shared";
+﻿import type { BilibiliTrackCandidate, NeteaseTrackCandidate, QqMusicTrackCandidate } from "@soqaro/shared";
 import {
   Search,
   Heart,
@@ -10,7 +10,7 @@ import {
   ChevronRight,
   Music
 } from "lucide-react";
-import { MusicRoomApiError } from "@/lib/network/music-room-api";
+import { SoqaroApiError } from "@/lib/network/soqaro-api";
 import { MediaArtwork } from "@/components/ui/media-artwork";
 
 export type Provider = "netease" | "qqmusic" | "bilibili";
@@ -121,7 +121,7 @@ export function Icon({
 }
 
 export function toProviderErrorMessage(error: unknown, provider: Provider) {
-  if (error instanceof MusicRoomApiError) {
+  if (error instanceof SoqaroApiError) {
     if (error.code === "NETEASE_ACCOUNT_REQUIRED" || error.code === "QQMUSIC_ACCOUNT_REQUIRED") return "请先在我的页面绑定对应平台账号。";
     if (error.code === "NETEASE_AUTH_EXPIRED" || error.code === "QQMUSIC_AUTH_EXPIRED") return "平台登录已失效，请回我的页面重新绑定。";
     if (error.code === "NETEASE_DISABLED" || error.code === "QQMUSIC_DISABLED") return "该音乐平台当前未启用。";

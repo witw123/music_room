@@ -4,7 +4,7 @@ import type {
   AlistFileItem,
   AlistListResponse,
   AlistTestResponse
-} from "@music-room/shared";
+} from "@soqaro/shared";
 
 const AUDIO_EXTENSIONS = new Set([
   ".flac",
@@ -188,7 +188,7 @@ export class AlistService {
     body: ReadableStream<Uint8Array> | null;
   }> {
     const headers: Record<string, string> = {
-      "User-Agent": "MusicRoom/1.0 (Alist Stream Client)"
+      "User-Agent": "Soqaro/1.0 (Alist Stream Client)"
     };
     if (range) {
       headers.Range = range;

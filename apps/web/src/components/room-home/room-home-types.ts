@@ -1,8 +1,8 @@
-import {
+﻿import {
   defaultRoomMemberPermissions,
   type RoomMemberPermissions,
   type RoomType
-} from "@music-room/shared";
+} from "@soqaro/shared";
 
 export type CreateRoomForm = {
   visibility: "public" | "private";

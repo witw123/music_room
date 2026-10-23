@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
-import type { AdminIncident } from "@music-room/shared";
+import type { AdminIncident } from "@soqaro/shared";
 import { ADMIN_CONFIRM_REASON, adminApi } from "@/lib/network/admin-api";
 import { HealthText, formatTime, translateScope } from "../ui";
 

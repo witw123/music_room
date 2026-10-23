@@ -3,9 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 import { isSegmentedAudioOutputReady, startBestEffortPlaybackAudioUnlock } from "@/features/room/hooks/use-room-playback-actions";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 
-describe("MusicRoomApp segmented playback wiring", () => {
+describe("SoqaroApp segmented playback wiring", () => {
   it("mounts the single segmented playback runtime", () => {
-    const source = readFileSync(new URL("./music-room-app.tsx", import.meta.url), "utf8");
+    const source = readFileSync(new URL("./soqaro-app.tsx", import.meta.url), "utf8");
 
     expect(source).toContain("useRoomSegmentedPlaybackRuntime");
   });

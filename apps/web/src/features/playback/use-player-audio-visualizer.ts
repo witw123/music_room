@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
-import type { PlaybackSnapshot } from "@music-room/shared";
+import type { PlaybackSnapshot } from "@soqaro/shared";
 import { audioVisualizerStore } from "./audio-visualizer-store";
 
 const analyserFftSize = 256;

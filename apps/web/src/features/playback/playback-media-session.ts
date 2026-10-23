@@ -1,4 +1,4 @@
-import type { PlaybackSnapshot, TrackMeta } from "@music-room/shared";
+﻿import type { PlaybackSnapshot, TrackMeta } from "@soqaro/shared";
 import { notifyTrackChange } from "@/features/playback/system-notifications";
 import { capacitorPlugin, isCapacitorRuntime, listenTauri } from "@/lib/desktop/tauri";
 

@@ -94,7 +94,7 @@ describe("system notifications", () => {
     expect(mockConstructor).toHaveBeenCalledWith("晴天", expect.objectContaining({
       body: "周杰伦",
       silent: true,
-      tag: "music-room-now-playing"
+      tag: "soqaro-now-playing"
     }));
   });
 

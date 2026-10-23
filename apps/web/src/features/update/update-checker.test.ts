@@ -62,7 +62,7 @@ describe("update-checker", () => {
       { name: "Music.Room_0.3.2_amd64.AppImage", browser_download_url: "https://example.com/app.AppImage", size: 70000000 },
       { name: "Music.Room_0.3.2_amd64.deb", browser_download_url: "https://example.com/app.deb", size: 68000000 },
       { name: "Music.Room-0.3.2-1.x86_64.rpm", browser_download_url: "https://example.com/app.rpm", size: 69000000 },
-      { name: "MusicRoom-Android-v0.3.2.apk", browser_download_url: "https://example.com/app.apk", size: 15000000 }
+      { name: "Soqaro-Android-v1.0.0.apk", browser_download_url: "https://example.com/app.apk", size: 15000000 }
     ];
 
     it("matches Windows setup exe primarily", () => {
@@ -94,7 +94,7 @@ describe("update-checker", () => {
 
     it("matches Android APK", () => {
       const asset = matchPlatformAsset(mockAssets, "android");
-      expect(asset?.name).toBe("MusicRoom-Android-v0.3.2.apk");
+      expect(asset?.name).toBe("Soqaro-Android-v1.0.0.apk");
     });
 
     it("returns null for web platform", () => {

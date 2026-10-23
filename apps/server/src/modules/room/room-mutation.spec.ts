@@ -1,4 +1,4 @@
-import type { RoomMember, RoomMemberPermissions } from "@music-room/shared";
+﻿import type { RoomMember, RoomMemberPermissions } from "@soqaro/shared";
 import type { RoomRecord } from "./room.types";
 import {
   assertHost,

@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import type { PlaybackSnapshot } from "@music-room/shared";
+﻿import { describe, expect, it } from "vitest";
+import type { PlaybackSnapshot } from "@soqaro/shared";
 import {
   createPlaybackStartRequest,
   doesPlaybackMatchStartRequest,

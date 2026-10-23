@@ -1,4 +1,4 @@
-import type { PersonalizationRecommendationsQuery, ProviderPlaylistSummary, ProviderTrackCandidate } from "@music-room/shared";
+﻿import type { PersonalizationRecommendationsQuery, ProviderPlaylistSummary, ProviderTrackCandidate } from "@soqaro/shared";
 import { extractTasteEvidence } from "./taste-taxonomy";
 
 export type RecommendationCandidateSource = "library" | "related" | "artist" | "playlist" | "explore";

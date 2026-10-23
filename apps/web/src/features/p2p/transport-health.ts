@@ -1,4 +1,4 @@
-import type { PeerDiagnosticsSnapshot } from "@music-room/shared";
+﻿import type { PeerDiagnosticsSnapshot } from "@soqaro/shared";
 
 export function isDataChannelReady(
   snapshot: Pick<PeerDiagnosticsSnapshot, "dataChannelState">

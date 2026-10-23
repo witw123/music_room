@@ -34,28 +34,28 @@ describe("runtime endpoint fallbacks", () => {
 
   it("prefers the current page origin when a stale production API origin is baked into the bundle", async () => {
     vi.resetModules();
-    vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "https://music-room.example.test");
+    vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "https://soqaro.example.test");
     vi.stubGlobal("window", {
       location: {
-        origin: "https://music-room.example.test",
+        origin: "https://soqaro.example.test",
         protocol: "https:",
-        host: "music-room.example.test"
+        host: "soqaro.example.test"
       }
     });
 
     const module = await import("./api-client");
-    expect(module.apiBaseUrl).toBe("https://music-room.example.test");
+    expect(module.apiBaseUrl).toBe("https://soqaro.example.test");
     vi.unstubAllEnvs();
   });
 
   it("prefers the current page websocket origin when a stale production websocket origin is baked into the bundle", async () => {
     vi.resetModules();
-    vi.stubEnv("NEXT_PUBLIC_WS_URL", "wss://music-room.example.test");
+    vi.stubEnv("NEXT_PUBLIC_WS_URL", "wss://soqaro.example.test");
     vi.stubGlobal("window", {
       location: {
-        origin: "https://music-room.example.test",
+        origin: "https://soqaro.example.test",
         protocol: "https:",
-        host: "music-room.example.test"
+        host: "soqaro.example.test"
       },
       localStorage: {
         getItem: vi.fn(() => null)
@@ -63,7 +63,7 @@ describe("runtime endpoint fallbacks", () => {
     });
 
     const module = await import("./ws-client");
-    expect(module.wsBaseUrl).toBe("wss://music-room.example.test");
+    expect(module.wsBaseUrl).toBe("wss://soqaro.example.test");
     vi.unstubAllEnvs();
   });
 });

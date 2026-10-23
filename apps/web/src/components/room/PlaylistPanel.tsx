@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
@@ -9,13 +9,13 @@ import type {
   ProviderTrackCandidate,
   QqMusicTrackCandidate,
   TrackMeta
-} from "@music-room/shared";
+} from "@soqaro/shared";
 import { Button } from "@/components/ui/button";
 import {
   ProviderAlbumTrackTable,
   type ProviderAlbumTrackActions
 } from "@/components/provider-search/ProviderAlbumDetailView";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import { soqaroApi } from "@/lib/network/soqaro-api";
 import {
   listRoomPlaylistTrackIndex,
   providerTrackKey,
@@ -190,10 +190,10 @@ export function PlaylistPanel({
     void Promise.all(requests.map(async ({ playlist, source }) => {
       try {
         const detail = source.provider === "netease"
-          ? await musicRoomApi.getNeteasePlaylist(source.playlistId)
+          ? await soqaroApi.getNeteasePlaylist(source.playlistId)
           : source.provider === "qqmusic"
-            ? await musicRoomApi.getQqMusicPlaylist(source.playlistId)
-            : await musicRoomApi.getBilibiliVideoParts(source.playlistId).then((p) => ({
+            ? await soqaroApi.getQqMusicPlaylist(source.playlistId)
+            : await soqaroApi.getBilibiliVideoParts(source.playlistId).then((p) => ({
                 artworkUrl: p.artworkUrl,
                 tracks: p.parts
               }));
@@ -234,10 +234,10 @@ export function PlaylistPanel({
 
     setRemoteLoading(true);
     const request = selectedProvider === "netease"
-      ? musicRoomApi.getNeteasePlaylist(selectedProviderPlaylistId)
+      ? soqaroApi.getNeteasePlaylist(selectedProviderPlaylistId)
       : selectedProvider === "qqmusic"
-        ? musicRoomApi.getQqMusicPlaylist(selectedProviderPlaylistId)
-        : musicRoomApi.getBilibiliVideoParts(selectedProviderPlaylistId).then((partsDetail) => ({
+        ? soqaroApi.getQqMusicPlaylist(selectedProviderPlaylistId)
+        : soqaroApi.getBilibiliVideoParts(selectedProviderPlaylistId).then((partsDetail) => ({
             provider: "bilibili" as const,
             providerPlaylistId: partsDetail.bvid,
             title: partsDetail.title,
@@ -313,10 +313,10 @@ export function PlaylistPanel({
       if (source) {
         try {
           const detail = source.provider === "netease"
-            ? await musicRoomApi.getNeteasePlaylist(source.playlistId)
+            ? await soqaroApi.getNeteasePlaylist(source.playlistId)
             : source.provider === "qqmusic"
-              ? await musicRoomApi.getQqMusicPlaylist(source.playlistId)
-              : await musicRoomApi.getBilibiliVideoParts(source.playlistId).then((p) => ({
+              ? await soqaroApi.getQqMusicPlaylist(source.playlistId)
+              : await soqaroApi.getBilibiliVideoParts(source.playlistId).then((p) => ({
                   tracks: p.parts
                 }));
           allCandidates = detail.tracks;
@@ -355,7 +355,7 @@ export function PlaylistPanel({
       const trackIds = rawTrackIds
         .filter((id) => typeof id === "string" && id.trim().length > 0);
 
-      await musicRoomApi.createPlaylist({
+      await soqaroApi.createPlaylist({
         title: (playlist.title || "未命名歌单").trim().slice(0, 160),
         description: playlist.description ? playlist.description.trim().slice(0, 4000) : null,
         trackIds,

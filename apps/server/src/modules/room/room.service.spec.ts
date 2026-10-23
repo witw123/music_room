@@ -1,4 +1,4 @@
-import { AuthService } from "../auth/auth.service";
+﻿import { AuthService } from "../auth/auth.service";
 import { createRoomCoreServices } from "./room-graph";
 
 function createPrismaMock() {
@@ -1851,7 +1851,7 @@ describe("RoomService", () => {
     await roomService.rememberRecentRoom(secondRoom.room.id, host.id);
     await roomService.rememberRecentRoom(firstRoom.room.id, member.id);
     await (redis as ReturnType<typeof createRedisMock>).setString(
-      "music-room:session:" + member.id + ":recent-room",
+      "soqaro:session:" + member.id + ":recent-room",
       secondRoom.room.id
     );
 

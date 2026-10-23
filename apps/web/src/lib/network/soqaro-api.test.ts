@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   extractApiErrorMessage,
   resolveDownloadedAudioMimeType
-} from "./music-room-api";
+} from "./soqaro-api";
 
-describe("music-room-api helpers", () => {
+describe("soqaro-api helpers", () => {
   it("extracts a string message from a json error payload", () => {
     expect(
       extractApiErrorMessage('{"statusCode":500,"message":"Internal server error"}')

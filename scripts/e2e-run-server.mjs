@@ -15,8 +15,8 @@ const command = pnpmExecPath && pnpmExecPath.endsWith(".cjs") ? process.execPath
 const baseArgs = pnpmExecPath && pnpmExecPath.endsWith(".cjs") ? [pnpmExecPath] : [];
 const args =
   target === "server"
-    ? [...baseArgs, "--filter", "@music-room/server", "start"]
-    : [...baseArgs, "--filter", "@music-room/web", "dev"];
+    ? [...baseArgs, "--filter", "@soqaro/server", "start"]
+    : [...baseArgs, "--filter", "@soqaro/web", "dev"];
 
 const env =
   target === "server"
@@ -31,7 +31,7 @@ const env =
         RATE_LIMIT_DISABLED: "true",
         DATABASE_URL:
           process.env.DATABASE_URL ??
-          "postgresql://music_room:music_room@127.0.0.1:65432/music_room?schema=public&connect_timeout=1",
+          "postgresql://soqaro:soqaro@127.0.0.1:65432/soqaro?schema=public&connect_timeout=1",
         CORS_ORIGINS: "http://127.0.0.1:3000,http://localhost:3000"
       }
     : {
@@ -46,7 +46,7 @@ const env =
 if (target === "server") {
   const build = spawnSync(
     command,
-    [...baseArgs, "--filter", "@music-room/server", "build"],
+    [...baseArgs, "--filter", "@soqaro/server", "build"],
     {
       cwd: repoRoot,
       env: process.env,

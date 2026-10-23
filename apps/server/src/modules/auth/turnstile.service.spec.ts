@@ -1,4 +1,4 @@
-import { BadRequestException, ServiceUnavailableException } from "@nestjs/common";
+﻿import { BadRequestException, ServiceUnavailableException } from "@nestjs/common";
 import { TurnstileService } from "./turnstile.service";
 
 describe("TurnstileService", () => {
@@ -29,11 +29,11 @@ describe("TurnstileService", () => {
   it("verifies the token, action, hostname and client ip with Cloudflare", async () => {
     process.env.TURNSTILE_ENABLED = "true";
     process.env.TURNSTILE_SECRET_KEY = "secret";
-    process.env.APP_DOMAIN = "music-room.example.com";
+    process.env.APP_DOMAIN = "soqaro.example.com";
     const fetchMock = jest
       .spyOn(globalThis, "fetch")
       .mockResolvedValue(
-        new Response(JSON.stringify({ success: true, action: "auth", hostname: "music-room.example.com" }), {
+        new Response(JSON.stringify({ success: true, action: "auth", hostname: "soqaro.example.com" }), {
           status: 200,
           headers: { "Content-Type": "application/json" }
         })
@@ -52,7 +52,7 @@ describe("TurnstileService", () => {
   it("rejects failed or mismatched Cloudflare responses", async () => {
     process.env.TURNSTILE_ENABLED = "true";
     process.env.TURNSTILE_SECRET_KEY = "secret";
-    process.env.APP_DOMAIN = "music-room.example.com";
+    process.env.APP_DOMAIN = "soqaro.example.com";
     jest.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ success: true, action: "other", hostname: "attacker.example.com" }), {
         status: 200,
