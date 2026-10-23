@@ -2,7 +2,7 @@
 
 <p align="center">
   <b>Multi-client collaborative listening workspace</b><br>
-  Listen to local and multi-source audio together in real time over WebRTC RTP Opus with millisecond-level synchronization.
+  High-fidelity collaborative audio workspace for local files and streamed tracks, powered by WebRTC RTP Opus for millisecond-level synchronization.
 </p>
 
 <p align="center">
@@ -10,52 +10,87 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/witw123/soqaro/releases/latest"><img src="https://img.shields.io/github/v/release/witw123/soqaro?style=flat-square&color=black&label=Release" alt="Release"></a>
-  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-black?style=flat-square" alt="License"></a>
-  <a href="https://github.com/witw123/soqaro/releases/latest"><img src="https://img.shields.io/badge/Platforms-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android%20%7C%20Web-black?style=flat-square" alt="Platforms"></a>
-  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-22.x-black?style=flat-square" alt="Node.js"></a>
-  <a href="https://pnpm.io/"><img src="https://img.shields.io/badge/pnpm-10.x-black?style=flat-square" alt="pnpm"></a>
+  <a href="https://github.com/witw123/soqaro/releases/latest"><img src="https://img.shields.io/github/v/release/witw123/soqaro?style=flat-square&color=24292e&label=Release" alt="Release"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-24292e?style=flat-square" alt="License"></a>
+  <a href="https://github.com/witw123/soqaro/releases/latest"><img src="https://img.shields.io/badge/Platforms-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android%20%7C%20Web-24292e?style=flat-square" alt="Platforms"></a>
+  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-22.x-24292e?style=flat-square" alt="Node.js"></a>
+  <a href="https://pnpm.io/"><img src="https://img.shields.io/badge/pnpm-10.x-24292e?style=flat-square" alt="pnpm"></a>
 </p>
 
 ---
 
-## Client Downloads
+## Downloads
 
-Current version: [v1.0.0](https://github.com/witw123/soqaro/releases/tag/v1.0.0) (Released 2026-10-23, with in-app auto-update support)
+Current stable release: [Soqaro v1.0.0](https://github.com/witw123/soqaro/releases/tag/v1.0.0) (Released 2026-10-23, with in-app auto-update support)
 
-| Platform | Architecture | Package Type | Direct Download Link | Description |
+| OS | Architecture | Package Type | Direct Download Link | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| Windows | x64 | NSIS Setup (`.exe`) | [Soqaro_1.0.0_x64-setup.exe](https://github.com/witw123/soqaro/releases/latest/download/Soqaro_1.0.0_x64-setup.exe) | Floating lyrics overlay and Windows SMTC integration |
+| Windows | x64 | NSIS Installer (`.exe`) | [Soqaro_1.0.0_x64-setup.exe](https://github.com/witw123/soqaro/releases/latest/download/Soqaro_1.0.0_x64-setup.exe) | Floating lyrics overlay and Windows SMTC integration |
 | Windows | x64 | WiX Package (`.msi`) | [Soqaro_1.0.0_x64_en-US.msi](https://github.com/witw123/soqaro/releases/latest/download/Soqaro_1.0.0_x64_en-US.msi) | Enterprise distribution and silent installation |
-| macOS | Universal | DMG Image (`.dmg`) | [Soqaro_1.0.0_universal.dmg](https://github.com/witw123/soqaro/releases/latest/download/Soqaro_1.0.0_universal.dmg) | Native Apple Silicon (M1-M4) and Intel x86_64 bundle |
+| macOS | Universal | DMG Image (`.dmg`) | [Soqaro_1.0.0_universal.dmg](https://github.com/witw123/soqaro/releases/latest/download/Soqaro_1.0.0_universal.dmg) | Native Apple Silicon (M1–M4) and Intel x86_64 bundle |
 | macOS | Universal | Update Archive (`.app.tar.gz`) | [Soqaro_universal.app.tar.gz](https://github.com/witw123/soqaro/releases/latest/download/Soqaro_universal.app.tar.gz) | In-app auto-updater archive |
 | Linux | x86_64 | AppImage | [Soqaro_1.0.0_amd64.AppImage](https://github.com/witw123/soqaro/releases/latest/download/Soqaro_1.0.0_amd64.AppImage) | Portable, standalone executable package |
-| Linux | x86_64 | Debian (`.deb`) | [Soqaro_1.0.0_amd64.deb](https://github.com/witw123/soqaro/releases/latest/download/Soqaro_1.0.0_amd64.deb) | Ubuntu, Debian, Linux Mint, Deepin, etc. |
-| Linux | x86_64 | RPM (`.rpm`) | [Soqaro-1.0.0-1.x86_64.rpm](https://github.com/witw123/soqaro/releases/latest/download/Soqaro-1.0.0-1.x86_64.rpm) | Fedora, RHEL, openSUSE, etc. |
+| Linux | x86_64 | Debian (`.deb`) | [Soqaro_1.0.0_amd64.deb](https://github.com/witw123/soqaro/releases/latest/download/Soqaro_1.0.0_amd64.deb) | For Ubuntu, Debian, Linux Mint, Deepin, etc. |
+| Linux | x86_64 | RPM (`.rpm`) | [Soqaro-1.0.0-1.x86_64.rpm](https://github.com/witw123/soqaro/releases/latest/download/Soqaro-1.0.0-1.x86_64.rpm) | For Fedora, RHEL, openSUSE, etc. |
 | Android | Universal | APK Package (`.apk`) | [Soqaro-Android-v1.0.0.apk](https://github.com/witw123/soqaro/releases/latest/download/Soqaro-Android-v1.0.0.apk) | Native MediaSession, lockscreen controls, and background service |
 | Web | Modern Browsers | PWA Web App | [Launch Web App](https://soqaro.witw.top/app) | Chrome, Edge, Safari, Firefox; installable as a PWA |
 
+> [!NOTE]
 > **Installation Notes**  
-> - **macOS**: If blocked by Gatekeeper on first open, run `sudo xattr -cr /Applications/Soqaro.app` in Terminal.  
-> - **Linux AppImage**: Grant execution permission with `chmod +x Soqaro_1.0.0_amd64.AppImage`.  
+> - **macOS**: If blocked by Gatekeeper on first open, execute `sudo xattr -cr /Applications/Soqaro.app` in Terminal.  
+> - **Linux AppImage**: Grant execution permission before running: `chmod +x Soqaro_1.0.0_amd64.AppImage`.  
 > - **Android**: Release APK is signed; allow installation from your browser or file manager when prompted.
 
 ---
 
-## Core Features
+## Features
 
-- **Multi-Client Architecture**: Next.js 15 Web/PWA, Tauri 2 cross-platform desktop (Windows / macOS / Linux), and Capacitor 7 native Android app.
-- **Low-Latency Sync**: WebRTC RTP Opus audio broadcast paired with a Segmented Opus engine for millisecond-level multi-peer synchronization.
+### Realtime Collaboration & Acoustic Engine
+- **Millisecond-Level Synchronization**: WebRTC RTP Opus audio broadcast paired with a Segmented Opus engine; track owner acts as the single source of truth.
 - **Local-First Audio Storage**: User audio assets remain exclusively on client devices (IndexedDB and local directories); zero audio stored on the server.
-- **Multi-Source Audio**: Import and play local tracks, NetEase Cloud Music, QQ Music, and Bilibili (multi-part media); automatic listener-side offline fallback when the track owner disconnects.
-- **Collaborative Room Modes**: Standard collaborative shared queue, host-moderated request/radio mode, and synchronized live emoji reactions.
-- **Bilingual Verbatim Lyrics**: LRC scrolling and YRC word-by-word synchronized highlighting with translations, romanized pronunciations, and desktop floating lyrics.
-- **Native Media Integrations**: System Media Transport Controls (Windows SMTC), Android MediaSession, notification controls, and system lockscreen widgets.
-- **Anti-AI-Slop Aesthetics**: Restrained, high-information-density UI with clean geometric soundwave visualizers and solid, high-contrast surfaces.
+- **Resilient Fallback**: Integrated support for NetEase, QQ Music, and Bilibili (multi-part media); automatic listener-side offline fallback when the track owner disconnects.
+
+### Native Multi-Platform Integration
+- **Full Client Coverage**: Next.js 15 Web/PWA, Tauri 2 cross-platform desktop (Windows / macOS / Linux), and Capacitor 7 native Android client.
+- **System Media Bridge**: Unified bridge connecting playback state to Windows SMTC, Android MediaSession, notification controls, and lockscreen widgets.
+- **Background Persistence**: Android foreground service with partial wake lock and WLAN lock ensuring uninterrupted playback during screen lock.
+
+### Lyrics & Interaction
+- **High-Precision Bilingual Lyrics**: Synchronized LRC scrolling and YRC verbatim highlighting with translations, romanized pronunciations, and desktop floating lyrics.
+- **Immersive & Overlay Displays**: Mobile immersive fullscreen lyrics and desktop always-on-top transparent floating lyrics window.
+- **Flexible Room Modes**: Collaborative shared queues, host-moderated request/radio mode, and synchronized live emoji reaction channels.
+- **Restrained Visual Aesthetics**: Strict anti-AI-slop design principles, crisp geometric soundwave visualizers, and solid, high-contrast surfaces.
+
+---
+
+## Architecture
+
+```text
+[ Local Tracks / Provider Imports ]
+                │
+                ▼
+[ Client-Side IndexedDB ] (Segmented Opus Cache)
+                │
+                ▼
+[ SegmentedOpusEngine ] (Local Audio Scheduler)
+                │
+                ▼
+[ WebRTC RTP Broadcast ] ─── (Server Signaling) ───► [ Listener Single Audio Bus ]
+```
 
 ---
 
 ## Quick Start
+
+### Prerequisites
+
+| Component | Minimum Version | Purpose |
+| :--- | :--- | :--- |
+| Node.js | 22.x | Runtime environment for web and server |
+| pnpm | 10.x | Monorepo package manager |
+| PostgreSQL | 16.x | User, room, and metadata persistence |
+| Redis | 7.x | Realtime playback state and coordination |
+| Docker | Recommended | Local containerized dependencies |
 
 ### Local Development
 
@@ -87,12 +122,20 @@ pnpm mobile:sync    # Sync Web build artifacts to Android project
 
 ## Monorepo Layout
 
-- `apps/web`: Next.js 15 Web client, PWA, audio preparation engine, and WebRTC core
-- `apps/desktop`: Tauri 2 desktop client (Rust + SMTC + floating lyrics)
-- `apps/mobile`: Capacitor 7 native Android client (MediaSession + background persistence)
-- `apps/server`: NestJS 11 API server and Socket.IO signaling gateway
-- `packages/shared`: Shared contracts, models, and TypeScript type definitions
-- `packages/opus-encode`: Browser-side Ogg Opus encoder package
+```text
+soqaro/
+├── apps/
+│   ├── web/          # Next.js 15 Web client, PWA, audio scheduler, and WebRTC core
+│   ├── desktop/      # Tauri 2 desktop client (Rust + SMTC + floating lyrics)
+│   ├── mobile/       # Capacitor 7 native Android client (MediaSession + background persistence)
+│   └── server/       # NestJS 11 API server and Socket.IO signaling gateway
+├── packages/
+│   ├── shared/       # Shared contracts, models, and TypeScript type definitions
+│   ├── opus-encode/  # Browser-side Ogg Opus encoder package
+│   └── config-*/     # Unified Monorepo TypeScript and ESLint configuration
+├── docs/             # Technical architecture, API specifications, and deployment guides
+└── deploy/           # Production deployment templates (Docker Compose, Nginx, coturn)
+```
 
 ---
 
