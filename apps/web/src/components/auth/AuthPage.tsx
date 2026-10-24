@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import Script from "next/script";
@@ -242,7 +242,7 @@ export function AuthPage() {
           </Link>
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-accent" />
-            <span className="text-xs font-semibold tracking-wider text-foreground-muted uppercase">Soqaro</span>
+            <span className="text-xs font-semibold text-foreground-muted">Soqaro</span>
           </div>
         </div>
 

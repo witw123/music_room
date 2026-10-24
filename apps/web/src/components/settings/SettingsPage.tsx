@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
@@ -479,7 +479,7 @@ export function SettingsPage() {
                 <div className="flex items-center justify-between font-semibold text-amber-100 mb-1.5">
                   <span>📌 浏览器通知已被拦截，解除步骤：</span>
                 </div>
-                <ol className="list-decimal list-inside space-y-1 text-amber-200/90 text-[11px] leading-relaxed">
+                <ol className="list-decimal list-inside space-y-1 text-amber-200/90 text-xs leading-relaxed">
                   <li>点击浏览器地址栏左侧的 <strong>🔒 锁头</strong> 或 <strong>⚙️ 网站设置</strong> 图标</li>
                   <li>在权限列表中找到 <strong>「通知」</strong>，由「禁止」改为 <strong>「允许」</strong></li>
                   <li>修改完成后，点击右上角 <strong>「重新检测」</strong> 按钮即可激活</li>
@@ -893,7 +893,7 @@ export function SettingsPage() {
                       <button
                         type="button"
                         onClick={() => patchSettings({ layout: { uiScale: 1 } })}
-                        className="rounded px-1.5 py-0.5 text-[11px] text-accent hover:bg-accent/10 transition-colors cursor-pointer"
+                        className="rounded px-1.5 py-0.5 text-xs text-accent hover:bg-accent/10 transition-colors cursor-pointer"
                         title="重置为 100%"
                       >
                         重置
@@ -1251,7 +1251,7 @@ export function SettingsPage() {
             type="button"
           >
             <span>全部结果</span>
-            <span className="rounded-full bg-surface-hover px-1.5 py-0.2 text-[10px] tabular-nums font-mono">
+            <span className="rounded-full bg-surface-hover px-1.5 py-0.2 text-xs tabular-nums font-mono">
               {matchingItems.length}
             </span>
           </button>
@@ -1285,7 +1285,7 @@ export function SettingsPage() {
               <cat.icon className="h-3.5 w-3.5" />
               <span>{cat.label}</span>
               {isSearching ? (
-                <span className="rounded-full bg-surface-hover px-1.5 py-0.2 text-[10px] tabular-nums font-mono">
+                <span className="rounded-full bg-surface-hover px-1.5 py-0.2 text-xs tabular-nums font-mono">
                   {matchCount}
                 </span>
               ) : null}
@@ -1317,7 +1317,7 @@ export function SettingsPage() {
                     <Search size={14} className="text-foreground-muted shrink-0" />
                     <span>全部搜索结果</span>
                   </span>
-                  <span className="rounded-full bg-surface-hover px-1.5 py-0.5 text-[10px] font-mono tabular-nums text-foreground-muted">
+                  <span className="rounded-full bg-surface-hover px-1.5 py-0.5 text-xs font-mono tabular-nums text-foreground-muted">
                     {matchingItems.length}
                   </span>
                 </button>
@@ -1353,7 +1353,7 @@ export function SettingsPage() {
                     <span>{cat.label}</span>
                   </span>
                   {isSearching ? (
-                    <span className="rounded-full bg-surface-hover px-1.5 py-0.5 text-[10px] font-mono tabular-nums text-foreground-muted">
+                    <span className="rounded-full bg-surface-hover px-1.5 py-0.5 text-xs font-mono tabular-nums text-foreground-muted">
                       {matchCount}
                     </span>
                   ) : null}
@@ -1423,10 +1423,10 @@ export function SettingsPage() {
                 <div key={`${group.categoryId}-${group.sectionTitle}`}>
                   {isSearching ? (
                     <div className="mb-2 flex items-center gap-2">
-                      <span className="rounded bg-accent/10 px-1.5 py-0.5 text-[10px] font-medium text-accent">
+                      <span className="rounded bg-accent/10 px-1.5 py-0.5 text-xs font-medium text-accent">
                         {SETTINGS_CATEGORIES.find((c) => c.id === group.categoryId)?.label}
                       </span>
-                      <h3 className="text-xs font-semibold uppercase tracking-wider text-foreground-muted">
+                      <h3 className="text-xs font-medium text-foreground-muted">
                         {group.sectionTitle}
                       </h3>
                     </div>

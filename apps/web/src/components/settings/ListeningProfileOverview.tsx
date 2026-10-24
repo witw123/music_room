@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import type { AuthSession, ProviderTrackCandidate } from "@soqaro/shared";
@@ -119,8 +119,8 @@ export function ListeningProfileOverview({
             {activeTasteGroups.map((group) => (
               <div key={group.id} className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
-                  <h4 className="text-xs font-semibold text-foreground-muted uppercase tracking-wider">{group.label}</h4>
-                  <span className="text-[10px] text-foreground-muted/60">{group.tags.length} 项</span>
+                  <h4 className="text-xs font-medium text-foreground-muted">{group.label}</h4>
+                  <span className="text-xs text-foreground-muted/60">{group.tags.length} 项</span>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {group.tags.map((tag) => (
@@ -199,15 +199,15 @@ export function ListeningProfileOverview({
                     <p className="truncate text-xs sm:text-sm font-semibold text-foreground group-hover:text-accent transition-colors" title={item.title}>
                       {item.title}
                     </p>
-                    <p className="truncate text-[10px] sm:text-xs text-foreground-muted" title={`${item.artist}${item.album ? ` · ${item.album}` : ""}`}>
-                      {item.artist}{item.album ? ` · ${item.album}` : ""}
+                    <p className="truncate text-xs text-foreground-muted" title={`${item.artist}${item.album ? ` / ${item.album}` : ""}`}>
+                      {item.artist}{item.album ? ` / ${item.album}` : ""}
                     </p>
                   </div>
                   <div className="text-right shrink-0 whitespace-nowrap">
                     <span className="block text-xs font-semibold tabular-nums text-foreground">
                       {item.playCount} 次
                     </span>
-                    <span className="hidden sm:block text-[10px] tabular-nums text-foreground-muted">
+                    <span className="hidden sm:block text-xs tabular-nums text-foreground-muted">
                       {formatDuration(item.listenedMs)}
                     </span>
                   </div>
@@ -287,7 +287,7 @@ export function ListeningProfileOverview({
           {/* Multi-source Distribution */}
           {profile.sourceDistribution.length > 0 && totalSourceTime > 0 && (
             <section className="rounded-xl border border-surface-border bg-surface/40 p-3.5 sm:p-5 w-full max-w-full overflow-hidden">
-              <h4 className="text-xs font-semibold text-foreground-muted mb-3 uppercase tracking-wider">音源收听分布</h4>
+              <h4 className="text-xs font-medium text-foreground-muted mb-3">音源收听分布</h4>
               <div className="h-2.5 w-full rounded-full bg-surface-elevated flex overflow-hidden p-0.5 gap-0.5 border border-surface-border/40">
                 {profile.sourceDistribution.map((src) => {
                   const cfg = sourceConfig[src.source as keyof typeof sourceConfig] ?? {

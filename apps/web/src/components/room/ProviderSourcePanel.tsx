@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
@@ -357,7 +357,7 @@ function ProviderSourcePanelBase<TrackT extends ProviderTrackCandidate, AccountT
           />
 
           {results.length > 0 ? (
-            <div className="flex items-center justify-between text-[11px] text-foreground-muted">
+            <div className="flex items-center justify-between text-xs text-foreground-muted">
               <span>搜索结果</span>
               <span className="font-mono tabular-nums">{results.length} 首</span>
             </div>
@@ -380,17 +380,17 @@ function ProviderSourcePanelBase<TrackT extends ProviderTrackCandidate, AccountT
                     <div className="min-w-0 flex-1">
                       <h3 className="truncate text-sm font-medium text-foreground">{track.title}</h3>
                       <p className="mt-1 flex min-w-0 items-center gap-2 text-xs text-foreground-muted">
-                        <span className="min-w-0 truncate">{track.artist} · {track.album ?? "未知专辑"}</span>
+                        <span className="min-w-0 truncate">{track.artist}{track.album ? ` / ${track.album}` : ""}</span>
                         <span className="shrink-0 font-mono tabular-nums text-foreground/70">{formatDuration(track.durationMs)}</span>
                       </p>
-                      <p className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] font-medium text-foreground-muted">
+                      <p className="mt-2 flex flex-wrap items-center gap-1.5 text-xs font-medium text-foreground-muted">
                         {accessLabel ? <span className="rounded bg-accent/10 px-1.5 py-0.5 text-accent">{accessLabel}</span> : null}
                         <span className="rounded bg-white/[0.06] px-1.5 py-0.5">{qualityLabel}</span>
                       </p>
                     </div>
                     {onImportTrack ? (
                       <Button
-                        className="shrink-0 self-start sm:self-auto h-7 rounded-md px-2.5 text-[11px] font-medium border border-accent/30 bg-accent/5 text-accent hover:bg-accent/15"
+                        className="shrink-0 self-start sm:self-auto h-7 rounded-md px-2.5 text-xs font-medium border border-accent/30 bg-accent/5 text-accent hover:bg-accent/15"
                         disabled={pendingAction !== null}
                         onClick={() => void importTrack(track)}
                         size="sm"

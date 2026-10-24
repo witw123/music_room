@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -372,7 +372,7 @@ function AnnouncementDialogModal({
                   {selectedAnnouncement.title}
                 </h4>
                 <p className="mt-1 text-xs text-foreground-muted">
-                  发布于 {formatRelativeTime(selectedAnnouncement.createdAt)} · {formatExactTime(selectedAnnouncement.createdAt)}
+                  发布于 {formatRelativeTime(selectedAnnouncement.createdAt)} ({formatExactTime(selectedAnnouncement.createdAt)})
                 </p>
               </div>
 
@@ -462,7 +462,7 @@ function AnnouncementDialogModal({
                             >
                               {item.title}
                             </h4>
-                            <p className="text-[11px] text-foreground-muted mt-0.5">
+                            <p className="text-xs text-foreground-muted mt-0.5">
                               {formatRelativeTime(item.createdAt)}
                             </p>
                           </div>

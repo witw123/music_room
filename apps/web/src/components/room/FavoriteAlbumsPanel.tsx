@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
@@ -220,13 +220,12 @@ export function FavoriteAlbumsPanel({
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <p className="text-xs font-semibold text-foreground">我的收藏</p>
-          <p className="mt-1 truncate text-[10px] text-foreground-muted">收藏的网络音乐专辑与合集</p>
         </div>
         <div className="flex shrink-0 items-center justify-end gap-2">
           {libraryFeedback ? (
             <span className="text-xs text-accent truncate max-w-xs">{libraryFeedback}</span>
           ) : null}
-          <span className="font-mono text-[10px] text-foreground-muted">{albums.length} 张专辑/合集</span>
+          <span className="font-mono text-xs text-foreground-muted">{albums.length} 张专辑/合集</span>
         </div>
       </div>
 
@@ -288,8 +287,8 @@ function FavoriteAlbumCard({
         <Artwork artworkUrl={album.artworkUrl} size="sm" title={album.title} />
         <div className="min-w-0 flex-1 space-y-1">
           <strong className="block truncate text-sm font-semibold text-foreground">{album.title}</strong>
-          <p className="truncate text-[10px] text-foreground-muted">
-            {album.artist} · {providerName(album.provider)} · {album.trackCount} 首歌曲
+          <p className="truncate text-xs text-foreground-muted">
+            {album.artist} / {providerName(album.provider)} / {album.trackCount} 首歌曲
           </p>
         </div>
       </button>
@@ -302,7 +301,7 @@ function FavoriteAlbumCard({
               e.stopPropagation();
               onAddToLibrary?.();
             }}
-            className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition-colors ${
+            className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors ${
               isInLibrary
                 ? "cursor-default border border-emerald-500/20 bg-emerald-500/10 text-emerald-300"
                 : "border border-accent/30 bg-accent/10 text-accent hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
@@ -320,7 +319,7 @@ function FavoriteAlbumCard({
             )}
           </button>
         ) : null}
-        <span className="shrink-0 text-[10px] text-foreground-muted">查看</span>
+        <span className="shrink-0 text-xs text-foreground-muted">查看</span>
       </div>
     </article>
   );
@@ -477,10 +476,12 @@ function FavoriteAlbumDetail({
         <div className="flex items-center gap-3">
           <Artwork artworkUrl={album.artworkUrl} size="lg" title={album.title} />
           <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-accent">Favorite album</p>
-            <h2 className="mt-1 truncate text-xl font-bold text-foreground">{album.title}</h2>
-            <p className="mt-1 truncate text-xs text-foreground-muted">{album.artist} · {providerName(album.provider)}</p>
-            <p className="mt-2 text-[10px] text-foreground-muted">{detailLoading ? "正在加载歌曲…" : `${tracks.length} 首歌曲`}</p>
+            <h2 className="truncate text-xl font-bold text-foreground">{album.title}</h2>
+            <p className="mt-1 flex items-center gap-2 truncate text-xs text-foreground-muted">
+              <span>{album.artist}</span>
+              <span className="text-foreground-muted/60">{providerName(album.provider)}</span>
+            </p>
+            <p className="mt-1.5 text-xs text-foreground-muted">{detailLoading ? "正在加载歌曲…" : `${tracks.length} 首歌曲`}</p>
           </div>
         </div>
         {canAddToLibrary ? (
@@ -515,7 +516,7 @@ function FavoriteAlbumDetail({
       {tracks.length > 0 ? (
         <div className="flex flex-col gap-2 rounded-lg border border-surface-border bg-surface/40 p-2">
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-surface-border bg-surface/40 px-3 py-2">
-            <label className="flex min-w-0 cursor-pointer items-center gap-2 text-[11px] text-foreground-muted">
+            <label className="flex min-w-0 cursor-pointer items-center gap-2 text-xs text-foreground-muted">
               <input
                 type="checkbox"
                 checked={allSelectableSelected}
@@ -526,12 +527,12 @@ function FavoriteAlbumDetail({
               <span>{allSelectableSelected ? "取消全选" : "全选未加入歌曲"}</span>
             </label>
             <div className="flex items-center gap-2">
-              <span className="text-[10px] text-foreground-muted">已选择 {selectedTracks.length} 首</span>
+              <span className="text-xs text-foreground-muted">已选择 {selectedTracks.length} 首</span>
               <button
                 type="button"
                 disabled={!canManageLibrary || selectedTracks.length === 0 || isImportBusy}
                 onClick={() => void importSelectedTracks()}
-                className="rounded-md border border-accent/30 bg-accent/10 px-3 py-1.5 text-[11px] font-semibold text-accent transition-colors hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-md border border-accent/30 bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent transition-colors hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isImportBusy ? "加入中…" : "加入曲库"}
               </button>
@@ -559,13 +560,13 @@ function FavoriteAlbumDetail({
                     <Artwork artworkUrl={track.artworkUrl ?? album.artworkUrl} size="sm" title={track.title} />
                     <div className="min-w-0">
                       <p className="truncate text-xs font-semibold text-foreground">{track.title}</p>
-                      <p className="mt-0.5 truncate text-[10px] text-foreground-muted">
-                        {track.artist} · {track.album || album.title} · {formatDuration(track.durationMs)}
+                      <p className="mt-0.5 truncate text-xs text-foreground-muted">
+                        {track.artist} / {track.album || album.title} / {formatDuration(track.durationMs)}
                       </p>
                     </div>
                   </div>
                   <button
-                    className={`inline-flex shrink-0 items-center justify-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                    className={`inline-flex shrink-0 items-center justify-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
                       isInRoom
                         ? "cursor-default border border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
                         : "border border-accent/30 bg-accent/5 text-accent hover:bg-accent/15 disabled:cursor-not-allowed disabled:opacity-50"

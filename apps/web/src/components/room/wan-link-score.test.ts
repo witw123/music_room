@@ -12,7 +12,7 @@ describe("wan link score helpers", () => {
       candidateType: "prflx",
       protocol: "udp",
       profile: "standard-direct"
-    })).toBe("直连·prflx (prflx/udp)");
+    })).toBe("直连 (prflx/udp)");
     expect(resolveWanPathLabel({
       candidateType: "relay",
       relayProtocol: "udp",

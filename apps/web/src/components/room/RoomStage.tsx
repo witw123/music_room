@@ -1,4 +1,4 @@
-﻿import { memo, useEffect, useState, type ComponentProps, type CSSProperties, type MutableRefObject } from "react";
+import { memo, useEffect, useState, type ComponentProps, type CSSProperties, type MutableRefObject } from "react";
 import type {
   RoomMediaConnectionState,
   RoomMember,
@@ -389,7 +389,7 @@ function RoomStageBase({
                   <>
                     <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2.5">
                       <span
-                        className={`rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${
+                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${
                           isPlaying
                             ? "border border-accent/40 bg-accent/15 text-accent"
                             : "border border-surface-border bg-surface text-foreground-muted"
@@ -398,7 +398,7 @@ function RoomStageBase({
                         {playbackBarrier?.blocked ? "缓存中" : isPlaying ? "正在播放" : "准备就绪"}
                       </span>
                       {currentSourceOwnerNickname ? (
-                        <span className={`flex items-center gap-1 text-foreground-muted ${compactStage ? "text-[9px]" : "text-[10px]"}`}>
+                        <span className="flex items-center gap-1 text-xs text-foreground-muted">
                           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                             <circle cx="12" cy="7" r="4" />
@@ -432,7 +432,7 @@ function RoomStageBase({
                       }`}
                       data-testid="stage-track-artist"
                     >
-                      {`${currentTrack.artist} · ${formatDuration(currentTrackDuration)}`}
+                      {`${currentTrack.artist} / ${formatDuration(currentTrackDuration)}`}
                     </p>
                   </>
                 ) : (
@@ -546,14 +546,14 @@ function MobileRoomStagePlayer({
             <div className="relative z-10 h-[18%] w-[18%] rounded-full border border-white/15 bg-black" style={{ boxShadow: `0 0 0 0.6rem ${artworkPalette.accentSoft}` }} />
           </div>
         )}
-        <span className="absolute -bottom-3 left-1/2 -translate-x-1/2 whitespace-nowrap border px-2.5 py-1 font-mono text-[10px] font-semibold" style={{ borderColor: artworkPalette.border, backgroundColor: artworkPalette.accentSoft, color: artworkPalette.accent }}>{playbackLabel}</span>
+        <span className="absolute -bottom-3 left-1/2 -translate-x-1/2 whitespace-nowrap border px-2.5 py-1 font-mono text-xs font-semibold" style={{ borderColor: artworkPalette.border, backgroundColor: artworkPalette.accentSoft, color: artworkPalette.accent }}>{playbackLabel}</span>
       </div>
 
       <div className="mt-7 min-w-0 w-full">
         <h2 className="mx-auto max-w-[22ch] truncate text-xl font-semibold text-white">{currentTrack?.title ?? "等待节目开始"}</h2>
-        <p className="mx-auto mt-1 max-w-[28ch] truncate text-sm text-white/60">{currentTrack ? `${currentTrack.artist}${currentTrack.album ? ` · ${currentTrack.album}` : ""}` : "主持人准备好节目后会在这里播放"}</p>
+        <p className="mx-auto mt-1 max-w-[28ch] truncate text-sm text-white/60">{currentTrack ? `${currentTrack.artist}${currentTrack.album ? ` / ${currentTrack.album}` : ""}` : "主持人准备好节目后会在这里播放"}</p>
         <div className="mt-5 h-px w-full overflow-hidden bg-white/10"><div className="h-full transition-[width] duration-200" style={{ width: `${progressPercent}%`, backgroundColor: artworkPalette.accent }} /></div>
-        <div className="mt-2 flex justify-between font-mono text-[10px] text-white/45"><span>{formatDuration(boundedProgressMs)}</span><span>{formatDuration(currentTrackDuration)}</span></div>
+        <div className="mt-2 flex justify-between font-mono text-xs text-white/45"><span>{formatDuration(boundedProgressMs)}</span><span>{formatDuration(currentTrackDuration)}</span></div>
       </div>
     </div>
   </div>;

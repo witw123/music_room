@@ -165,7 +165,7 @@ export default function AdminRoomDetailPage() {
           <span>←</span> 返回房间监测
         </button>
         <div className="flex items-center gap-3">
-          <span className="inline-flex items-center gap-1.5 text-[11px] font-mono text-foreground-muted">
+          <span className="inline-flex items-center gap-1.5 text-xs font-mono text-foreground-muted">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
             {refreshing ? "同步中" : "实时数据"}
           </span>
@@ -181,7 +181,7 @@ export default function AdminRoomDetailPage() {
 
       <div className="max-w-6xl mx-auto p-6 space-y-6">
         <div>
-          <span className="text-[11px] font-mono uppercase tracking-wider text-[var(--accent,#3b82f6)]">房间监测 / 治理控制</span>
+          <span className="text-xs font-mono font-medium text-[var(--accent,#3b82f6)]">房间监测 / 治理控制</span>
           <div className="flex items-baseline gap-3 mt-1">
             <h1 className="text-xl font-mono font-semibold tracking-tight text-foreground">{room.joinCode}</h1>
             <span className="text-sm text-foreground-muted">{room.name ?? "未命名房间"}</span>
@@ -248,7 +248,7 @@ export default function AdminRoomDetailPage() {
                   <p className="mt-0.5 text-xs text-foreground-muted">结束后会清理房间状态、播放队列，并通知在线成员断开退出。</p>
                 </div>
                 <div className="text-xs text-foreground-muted">
-                  目标房间：<span className="font-mono font-medium text-foreground">{room.joinCode}</span> · {room.name ?? "未命名房间"}
+                  目标房间：<span className="font-mono font-medium text-foreground">{room.joinCode}</span> / {room.name ?? "未命名房间"}
                 </div>
                 {actionError ? <p className="text-xs text-red-400">{actionError}</p> : null}
                 <div className="flex items-center gap-2">
@@ -297,7 +297,7 @@ export default function AdminRoomDetailPage() {
         <DataPanel title="成员管理与诊断" hint={`${members.length} 位成员`}>
           <table className="w-full text-left text-xs">
             <thead>
-              <tr className="border-b border-surface-border text-foreground-muted font-mono text-[11px]">
+              <tr className="border-b border-surface-border text-foreground-muted font-mono text-xs">
                 <th className="py-2.5 px-3 font-normal">成员</th>
                 <th className="py-2.5 px-3 font-normal">状态</th>
                 <th className="py-2.5 px-3 font-normal">Peer ID</th>
@@ -312,7 +312,7 @@ export default function AdminRoomDetailPage() {
                   <tr key={member.id ?? index} className="hover:bg-surface-border/15 transition-colors">
                     <td className="py-2.5 px-3">
                       <div className="font-medium text-foreground">{member.nickname ?? member.id ?? "未知"}</div>
-                      <div className="text-[11px] font-mono text-foreground-muted">{member.id ?? "-"}</div>
+                      <div className="text-xs font-mono text-foreground-muted">{member.id ?? "-"}</div>
                     </td>
                     <td className="py-2.5 px-3"><State value={member.presenceState ?? "offline"} /></td>
                     <td className="py-2.5 px-3 font-mono text-foreground-muted">{member.peerId ?? "-"}</td>
@@ -349,7 +349,7 @@ export default function AdminRoomDetailPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-foreground">{msg.senderName}</span>
-                      <span className="text-[10px] font-mono text-foreground-muted">
+                      <span className="text-xs font-mono text-foreground-muted">
                         {new Date(msg.timestamp).toLocaleTimeString()}
                       </span>
                     </div>
@@ -377,10 +377,10 @@ export default function AdminRoomDetailPage() {
               empty="当前没有排队曲目。"
               render={(item, index) => (
                 <div className="flex items-center gap-3 py-2 px-3 hover:bg-surface-border/20 text-xs">
-                  <span className="w-5 text-center font-mono text-foreground-muted text-[11px]">{index + 1}</span>
+                  <span className="w-5 text-center font-mono text-foreground-muted text-xs">{index + 1}</span>
                   <div className="min-w-0 flex-1">
                     <div className="font-medium text-foreground truncate">{stringValue(item.title) ?? stringValue(item.trackId) ?? "未知曲目"}</div>
-                    <div className="text-[11px] text-foreground-muted truncate">{stringValue(item.requestedBy) ?? "未知成员"}</div>
+                    <div className="text-xs text-foreground-muted truncate">{stringValue(item.requestedBy) ?? "未知成员"}</div>
                   </div>
                 </div>
               )}
@@ -394,9 +394,9 @@ export default function AdminRoomDetailPage() {
                 <div className="flex items-center justify-between py-2 px-3 hover:bg-surface-border/20 text-xs gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="font-medium text-foreground truncate">{stringValue(item.title) ?? "未命名曲目"}</div>
-                    <div className="text-[11px] text-foreground-muted truncate">{stringValue(item.artist) ?? "未知艺术家"}</div>
+                    <div className="text-xs text-foreground-muted truncate">{stringValue(item.artist) ?? "未知艺术家"}</div>
                   </div>
-                  <span className="font-mono text-[11px] text-foreground-muted flex-shrink-0">{stringValue(item.fileHash)?.slice(0, 8) ?? "-"}</span>
+                  <span className="font-mono text-xs text-foreground-muted flex-shrink-0">{stringValue(item.fileHash)?.slice(0, 8) ?? "-"}</span>
                 </div>
               )}
             />
@@ -410,7 +410,7 @@ export default function AdminRoomDetailPage() {
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-surface-border bg-surface p-3.5">
-      <div className="text-[11px] font-mono text-foreground-muted uppercase tracking-wider">{label}</div>
+      <div className="text-xs font-mono text-foreground-muted">{label}</div>
       <div className="mt-1 text-lg font-semibold text-foreground tracking-tight">{value}</div>
     </div>
   );
@@ -420,7 +420,7 @@ function PanelHeader({ title, hint }: { title: string; hint?: string }) {
   return (
     <div className="flex items-center justify-between border-b border-surface-border pb-3">
       <h2 className="text-xs font-semibold text-foreground tracking-tight">{title}</h2>
-      {hint ? <span className="text-[11px] font-mono text-foreground-muted">{hint}</span> : null}
+      {hint ? <span className="text-xs font-mono text-foreground-muted">{hint}</span> : null}
     </div>
   );
 }

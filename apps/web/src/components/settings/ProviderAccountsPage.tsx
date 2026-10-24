@@ -109,7 +109,7 @@ export function ProviderAccountsPage() {
                 key={id}
                 type="button"
                 onClick={() => setActiveTab(id)}
-                className={`flex sm:inline-flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-3 h-7 rounded-md text-[11px] sm:text-xs font-medium whitespace-nowrap transition-colors duration-150 ${
+                className={`flex sm:inline-flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-3 h-7 rounded-md text-xs font-medium whitespace-nowrap transition-colors duration-150 ${
                   isActive
                     ? "bg-surface-elevated text-foreground font-semibold shadow-2xs"
                     : "text-foreground-muted hover:text-foreground hover:bg-surface-hover"

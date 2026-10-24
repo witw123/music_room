@@ -215,7 +215,7 @@ export function LocalStorageManagementCard() {
           label="播放缓存"
           onClean={() => void cleanCache()}
           pending={pendingAction === "clean-cache"}
-          summary={loadFailed ? "无法读取" : loaded ? `${formatBytes(cacheBytes)} · ${cachedTrackCount} 首音频` : "读取中…"}
+          summary={loadFailed ? "无法读取" : loaded ? `${formatBytes(cacheBytes)} (${cachedTrackCount} 首音频)` : "读取中…"}
           actionLabel="清理缓存"
         />
         <StorageSection
@@ -225,7 +225,7 @@ export function LocalStorageManagementCard() {
           label="本地歌曲"
           onClean={() => void cleanSaved()}
           pending={pendingAction === "clean-saved"}
-          summary={loadFailed ? "无法读取" : loaded ? `${formatBytes(savedBytes)} · ${savedTrackCount} 首歌曲` : "读取中…"}
+          summary={loadFailed ? "无法读取" : loaded ? `${formatBytes(savedBytes)} (${savedTrackCount} 首歌曲)` : "读取中…"}
           actionLabel="清理本地歌曲"
         />
         <StorageSection
@@ -235,7 +235,7 @@ export function LocalStorageManagementCard() {
           label="其他文件"
           onClean={() => void cleanOther()}
           pending={pendingAction === "clean-other"}
-          summary={loadFailed ? "无法读取" : loaded ? `${formatBytes(otherBytes)} · ${otherFileCount} 个文件` : "读取中…"}
+          summary={loadFailed ? "无法读取" : loaded ? `${formatBytes(otherBytes)} (${otherFileCount} 个文件)` : "读取中…"}
           actionLabel="清理其他文件"
         />
       </div>

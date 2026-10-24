@@ -156,8 +156,8 @@ export function RoomReactionToolbar({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-2 py-1 border-b border-surface-border/40 mb-1">
-              <span className="text-[11px] font-semibold text-foreground-muted">选择互动歌曲</span>
-              <span className="text-[10px] text-foreground-muted/60">{targetSongs.length} 首可选</span>
+              <span className="text-xs font-medium text-foreground-muted">选择互动歌曲</span>
+              <span className="text-xs text-foreground-muted/60">{targetSongs.length} 首可选</span>
             </div>
             <div className="space-y-1">
               {targetSongs.map((song) => {
@@ -179,13 +179,13 @@ export function RoomReactionToolbar({
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-medium">《{song.title}》</p>
                       {song.artist && (
-                        <p className={`text-[10px] truncate mt-0.5 ${isSelected ? "text-white/80" : "text-foreground-muted"}`}>
+                        <p className={`text-xs truncate mt-0.5 ${isSelected ? "text-white/80" : "text-foreground-muted"}`}>
                           {song.artist}
                         </p>
                       )}
                     </div>
                     {song.requesterName && (
-                      <span className={`text-[10px] shrink-0 px-1.5 py-0.5 rounded-full ${isSelected ? "bg-white/20 text-white" : "bg-surface-hover text-foreground-muted"}`}>
+                      <span className={`text-xs shrink-0 px-1.5 py-0.5 rounded-full ${isSelected ? "bg-white/20 text-white" : "bg-surface-hover text-foreground-muted"}`}>
                         @{song.requesterName}
                       </span>
                     )}
@@ -255,8 +255,8 @@ export function RoomReactionToolbar({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-2 py-1 border-b border-surface-border/40 mb-1">
-              <span className="text-[11px] font-semibold text-foreground-muted">选择互动成员</span>
-              <span className="text-[10px] text-foreground-muted/60">{targetMembers.length} 人在线</span>
+              <span className="text-xs font-medium text-foreground-muted">选择互动成员</span>
+              <span className="text-xs text-foreground-muted/60">{targetMembers.length} 人在线</span>
             </div>
             <div className="space-y-1">
               {targetMembers.map((member) => {
@@ -276,14 +276,14 @@ export function RoomReactionToolbar({
                     }`}
                   >
                     <div className="flex items-center gap-2 min-w-0">
-                      <span className="flex items-center justify-center w-6 h-6 rounded-full border border-surface-border/60 bg-surface text-[10px] font-bold text-foreground shrink-0">
+                      <span className="flex items-center justify-center w-6 h-6 rounded-full border border-surface-border/60 bg-surface text-xs font-bold text-foreground shrink-0">
                         {member.nickname.slice(0, 1).toUpperCase()}
                       </span>
                       <span className="truncate font-medium">@{member.nickname}</span>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
                       {member.isHost && (
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${isSelected ? "bg-white/20 text-white" : "bg-accent/15 text-accent font-semibold"}`}>
+                        <span className={`text-xs px-1.5 py-0.5 rounded-full ${isSelected ? "bg-white/20 text-white" : "bg-accent/15 text-accent font-semibold"}`}>
                           主理人
                         </span>
                       )}

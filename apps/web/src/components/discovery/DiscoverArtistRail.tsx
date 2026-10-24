@@ -17,7 +17,6 @@ export function DiscoverArtistRail({
   if (!artists.length) return null;
   return (
     <DiscoverSection
-      eyebrow="ARTISTS"
       title="常听艺人"
       subtitle="开启单曲漫游与相关推荐"
     >
@@ -48,7 +47,7 @@ export function DiscoverArtistRail({
               <p className="mt-2 truncate w-full text-xs font-medium text-foreground transition-colors group-hover:text-accent">
                 {item.artistName}
               </p>
-              <p className="mt-0.5 truncate w-full text-[11px] text-foreground-muted">
+              <p className="mt-0.5 truncate w-full text-xs text-foreground-muted">
                 艺人
               </p>
             </button>

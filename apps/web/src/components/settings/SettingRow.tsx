@@ -13,11 +13,11 @@ export function SettingsSection({
     <section className="rounded-xl border border-surface-border bg-surface/40 p-4 sm:p-5 backdrop-blur-xs">
       <div className="mb-2 flex items-center gap-2">
         {badge ? (
-          <span className="rounded bg-accent/10 px-1.5 py-0.5 text-[10px] font-medium text-accent">
+          <span className="rounded bg-accent/10 px-1.5 py-0.5 text-xs font-medium text-accent">
             {badge}
           </span>
         ) : null}
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground-muted">{title}</h2>
+        <h2 className="text-xs font-medium text-foreground-muted">{title}</h2>
       </div>
       <div className="divide-y divide-surface-border/50">{children}</div>
     </section>

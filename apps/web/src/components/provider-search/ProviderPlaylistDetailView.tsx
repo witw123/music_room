@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import type { ProviderPlaylistDetail } from "@soqaro/shared";
@@ -52,13 +52,13 @@ export function ProviderPlaylistDetailView({
         </div>
         <div className="relative z-10 flex min-w-0 flex-col justify-end text-center sm:text-left">
           <div className="flex items-center justify-center sm:justify-start gap-2 mb-1">
-            <span className="inline-flex items-center rounded-md bg-surface border border-surface-border px-2 py-0.5 text-[11px] font-medium text-foreground-muted">
+            <span className="inline-flex items-center rounded-md bg-surface border border-surface-border px-2 py-0.5 text-xs font-medium text-foreground-muted">
               歌单
             </span>
           </div>
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">{playlist.title}</h1>
           <p className="mt-1 text-xs text-foreground-muted font-medium">
-            {playlist.creatorName || "网络歌单"} · {playlist.tracks.length} 首歌曲
+            {playlist.creatorName || "网络歌单"} / {playlist.tracks.length} 首歌曲
           </p>
           <DescriptionDisclosure description={playlist.description} />
           <div className="mt-4 flex flex-wrap items-center justify-center sm:justify-start gap-2.5">

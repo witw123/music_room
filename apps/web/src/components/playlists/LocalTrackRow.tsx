@@ -196,7 +196,7 @@ export function LocalTrackRow({
           </p>
           <p className="truncate text-xs text-foreground-muted mt-0.5">
             {track.artist}
-            {track.album ? ` · ${track.album}` : ""}
+            {track.album ? ` / ${track.album}` : ""}
           </p>
         </div>
       </div>
@@ -396,7 +396,7 @@ export function LocalTrackRow({
             anchor={menuAnchor}
             items={menuItems}
             onClose={() => setMenuAnchor(null)}
-            subtitle={`${track.artist} · ${track.album ?? "未知专辑"}`}
+            subtitle={`${track.artist}${track.album ? ` / ${track.album}` : ""}`}
             title={track.title}
           />
         ) : null}

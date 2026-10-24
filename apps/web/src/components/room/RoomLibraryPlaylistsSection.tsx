@@ -1,4 +1,4 @@
-﻿/* eslint-disable @next/next/no-img-element */
+/* eslint-disable @next/next/no-img-element */
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -380,11 +380,11 @@ export function RoomLibraryPlaylistsSection({
                     <strong className="block truncate text-xs sm:text-sm font-semibold text-foreground group-hover:text-accent transition-colors">
                       {playlist.title}
                     </strong>
-                    <div className="flex items-center gap-2 text-[10px] text-foreground-muted">
+                    <div className="flex items-center gap-2 text-xs text-foreground-muted">
                       <span>{sourceLabel}</span>
-                      <span>·</span>
+                      <span className="text-surface-border">/</span>
                       <span>共 {stats.total} 首</span>
-                      <span>·</span>
+                      <span className="text-surface-border">/</span>
                       <span className={stats.isAllImported ? "text-emerald-400 font-medium" : "text-foreground-muted"}>
                         已导入 {stats.imported} 首
                       </span>
@@ -428,7 +428,7 @@ export function RoomLibraryPlaylistsSection({
         <div className="rounded-xl border border-dashed border-surface-border/60 bg-surface/20 px-4 py-8 text-center">
           <FolderIcon className="mx-auto h-8 w-8 text-foreground-muted/60" />
           <p className="mt-2 text-xs sm:text-sm font-semibold text-foreground">曲库暂无歌单</p>
-          <p className="mt-1 text-[11px] text-foreground-muted">
+          <p className="mt-1 text-xs text-foreground-muted">
             可以在“搜歌添加 -&gt; 我的歌单”中将歌单加入曲库。
           </p>
           {onSwitchToDesk ? (
@@ -798,7 +798,7 @@ function RoomLibraryPlaylistDetail({
           </h3>
           <div className="flex flex-wrap items-center gap-2 text-xs text-foreground-muted">
             <span>共 {displayTracks.length} 首</span>
-            <span>·</span>
+            <span className="text-surface-border">/</span>
             <span className={importedCount >= displayTracks.length ? "text-emerald-400 font-semibold" : "text-accent font-semibold"}>
               已导入 {importedCount} 首
             </span>
@@ -861,7 +861,7 @@ function RoomLibraryPlaylistDetail({
                       type="checkbox"
                     />
                   ) : (
-                    <span className="w-4 shrink-0 text-center font-mono text-[11px] text-foreground-muted/60">
+                    <span className="w-4 shrink-0 text-center font-mono text-xs text-foreground-muted/60">
                       {index + 1}
                     </span>
                   )}
@@ -869,25 +869,25 @@ function RoomLibraryPlaylistDetail({
                     <p className="truncate font-semibold text-foreground" title={item.title}>
                       {item.title}
                     </p>
-                    <p className="truncate text-[11px] text-foreground-muted" title={`${item.artist}${item.album ? ` · ${item.album}` : ""}`}>
+                    <p className="truncate text-xs text-foreground-muted" title={`${item.artist}${item.album ? ` / ${item.album}` : ""}`}>
                       {item.artist}
-                      {item.album ? ` · ${item.album}` : ""}
+                      {item.album ? ` / ${item.album}` : ""}
                     </p>
                   </div>
                 </div>
 
                 <div className="flex shrink-0 items-center gap-2 text-right">
-                  <span className="tabular-nums font-mono text-[10px] text-foreground-muted/70">
+                  <span className="tabular-nums font-mono text-xs text-foreground-muted/70">
                     {formatDuration(item.durationMs)}
                   </span>
                   {item.isInRoom ? (
-                    <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-400">
+                    <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-400">
                       <CheckIcon className="h-3 w-3" />
                       <span>已在曲库</span>
                     </span>
                   ) : canManageLibrary && item.providerTrack ? (
                     <button
-                      className="h-7 rounded-md px-2.5 text-[11px] font-medium border border-accent/30 bg-accent/5 text-accent hover:bg-accent/15 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                      className="h-7 rounded-md px-2.5 text-xs font-medium border border-accent/30 bg-accent/5 text-accent hover:bg-accent/15 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                       disabled={isImporting || isImportBusy}
                       onClick={() => void importSingleTrack(item)}
                       type="button"
@@ -895,7 +895,7 @@ function RoomLibraryPlaylistDetail({
                       {isImporting ? "加入中…" : "加入曲库"}
                     </button>
                   ) : (
-                    <span className="text-[10px] text-foreground-muted/60">未加入</span>
+                    <span className="text-xs text-foreground-muted/60">未加入</span>
                   )}
                 </div>
               </div>

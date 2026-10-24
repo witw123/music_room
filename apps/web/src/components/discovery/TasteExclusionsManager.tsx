@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -153,7 +153,7 @@ export function TasteExclusionsManager({
                           {item.label || item.key}
                         </span>
                         <span
-                          className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium whitespace-nowrap ${
+                          className={`shrink-0 px-1.5 py-0.5 rounded text-xs font-medium whitespace-nowrap ${
                             item.action === "not-interested"
                               ? "bg-red-500/15 text-red-400"
                               : "bg-surface-elevated text-foreground-muted"
@@ -162,8 +162,8 @@ export function TasteExclusionsManager({
                           {item.action === "not-interested" ? "不再推荐" : "不计入画像"}
                         </span>
                       </div>
-                      <p className="text-[10px] sm:text-[11px] text-foreground-muted mt-0.5 truncate">
-                        {item.kind === "artist" ? "艺人" : "单曲"} · 屏蔽于 {new Date(item.createdAt).toLocaleDateString("zh-CN")}
+                      <p className="text-xs text-foreground-muted mt-0.5 truncate">
+                        {item.kind === "artist" ? "艺人" : "单曲"} / 屏蔽于 {new Date(item.createdAt).toLocaleDateString("zh-CN")}
                       </p>
                     </div>
                   </div>

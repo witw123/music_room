@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import { ImmersivePositionProvider, useImmersivePositionMs } from "./ImmersivePositionProvider";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -663,10 +663,7 @@ function DesktopImmersivePlayer({
           <div className="mt-1 flex items-center gap-2 truncate text-xs sm:text-sm text-white/70">
             <span className="truncate">{currentTrack?.artist ?? "从歌单中选择一首歌曲"}</span>
             {currentTrack?.album ? (
-              <>
-                <span className="opacity-40">·</span>
-                <span className="truncate text-white/50">{currentTrack.album}</span>
-              </>
+              <span className="truncate text-white/50">{currentTrack.album}</span>
             ) : null}
           </div>
         </div>
@@ -682,7 +679,7 @@ function DesktopImmersivePlayer({
       </div>
 
       <div className="mt-5 flex items-center gap-3">
-        <span className="w-9 shrink-0 text-[11px] tabular-nums text-white/45">{formatDuration(positionMs)}</span>
+        <span className="w-9 shrink-0 text-xs tabular-nums text-white/45">{formatDuration(positionMs)}</span>
         <Slider
           accentColor={artworkPalette.accent}
           className="[&>div]:h-1"
@@ -694,7 +691,7 @@ function DesktopImmersivePlayer({
           onPointerUp={commitSeek}
           value={positionMs}
         />
-        <span className="w-9 shrink-0 text-right text-[11px] tabular-nums text-white/45">{formatDuration(durationMs)}</span>
+        <span className="w-9 shrink-0 text-right text-xs tabular-nums text-white/45">{formatDuration(durationMs)}</span>
       </div>
 
       <div className="mt-4 flex items-center justify-center gap-2.5 sm:gap-3.5">

@@ -1,4 +1,4 @@
-﻿import React from "react";
+import React from "react";
 import type { ProviderPlaylistDetail, ProviderPlaylistSummary } from "@soqaro/shared";
 import { ProviderPlaylistDetailView } from "./ProviderPlaylistDetailView";
 import type { ProviderAlbumTrackActions } from "./ProviderAlbumDetailView";
@@ -53,8 +53,8 @@ export function PlaylistsContent({
               <span className="mt-2 block truncate text-xs sm:text-sm font-semibold text-white/85 group-hover:text-accent transition-colors" title={item.title}>
                 {item.title}
               </span>
-              <span className="mt-0.5 block truncate text-[11px] text-white/40">
-                {item.creatorName ?? "网络歌单"} · {item.trackCount} 首
+              <span className="mt-0.5 block truncate text-xs text-white/40">
+                {item.creatorName ?? "网络歌单"} / {item.trackCount} 首
               </span>
             </button>
           ))}

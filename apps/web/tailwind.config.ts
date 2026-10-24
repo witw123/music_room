@@ -12,26 +12,77 @@ const config: Config = {
       fontFamily: {
         sans: ["-apple-system", "BlinkMacSystemFont", "Segoe UI", "PingFang SC", "Microsoft YaHei", "sans-serif"]
       },
+      borderWidth: {
+        DEFAULT: '0.5px',
+        '0': '0px',
+        '0.5': '0.5px',
+        'hairline': '0.5px',
+        '1': '1px',
+        '2': '2px',
+      },
+      transitionDuration: {
+        DEFAULT: '250ms',
+        '150': '150ms',
+        '200': '200ms',
+        '250': '250ms',
+      },
+      transitionTimingFunction: {
+        DEFAULT: 'cubic-bezier(0, 0, 0.2, 1)',
+        'ease-out': 'cubic-bezier(0, 0, 0.2, 1)',
+      },
       colors: {
         background: "var(--background)",
         "background-secondary": "var(--background-secondary)",
         foreground: "var(--foreground)",
         "foreground-muted": "var(--foreground-muted)",
         accent: {
-          DEFAULT: "rgb(var(--accent-rgb) / <alpha-value>)",
-          hover: "rgb(var(--accent-hover-rgb) / <alpha-value>)",
+          DEFAULT: "var(--accent)",
+          hover: "var(--accent-hover)",
+          subtle: "var(--accent-subtle)",
+          muted: "var(--accent-muted)",
           glow: "var(--accent-glow)",
         },
         surface: {
           DEFAULT: "var(--surface)",
           hover: "var(--surface-hover)",
+          active: "var(--surface-active)",
           border: "var(--surface-border)",
+        },
+        // Radix UI Colors palette reference
+        radix: {
+          slate: {
+            1: "var(--slate-1)",
+            2: "var(--slate-2)",
+            3: "var(--slate-3)",
+            4: "var(--slate-4)",
+            5: "var(--slate-5)",
+            6: "var(--slate-6)",
+            7: "var(--slate-7)",
+            8: "var(--slate-8)",
+            9: "var(--slate-9)",
+            10: "var(--slate-10)",
+            11: "var(--slate-11)",
+            12: "var(--slate-12)",
+          },
+          blue: {
+            1: "var(--blue-1)",
+            2: "var(--blue-2)",
+            3: "var(--blue-3)",
+            4: "var(--blue-4)",
+            5: "var(--blue-5)",
+            6: "var(--blue-6)",
+            7: "var(--blue-7)",
+            8: "var(--blue-8)",
+            9: "var(--blue-9)",
+            10: "var(--blue-10)",
+            11: "var(--blue-11)",
+            12: "var(--blue-12)",
+          }
         }
       },
       animation: {
-        'spin-slow': 'spin 8s linear infinite',
-        'fade-in': 'fadeIn 0.3s ease-out forwards',
-        'slide-up': 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+        'fade-in': 'fadeIn 250ms cubic-bezier(0, 0, 0.2, 1) forwards',
+        'slide-up': 'slideUp 250ms cubic-bezier(0, 0, 0.2, 1) forwards',
         'music-bar': 'musicBar 1s ease-in-out infinite',
       },
       keyframes: {
@@ -44,7 +95,7 @@ const config: Config = {
           '100%': { opacity: '1' },
         },
         slideUp: {
-          '0%': { opacity: '0', transform: 'translateY(16px)' },
+          '0%': { opacity: '0', transform: 'translateY(8px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
         }
       }

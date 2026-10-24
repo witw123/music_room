@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import type { AuthSession, RoomChatMessage } from "@soqaro/shared";
@@ -186,9 +186,9 @@ export function RoomChatPanel({ roomId, activeSession, isHost, socket, scrollEna
                 {!isCurrentUser ? <ChatAvatar name={message.senderName} /> : null}
                 <div className={`min-w-0 max-w-[min(82%,32rem)] ${isCurrentUser ? "text-right" : "text-left"}`}>
                   <div className={`mb-0.5 flex min-w-0 items-baseline gap-1.5 px-0.5 ${isCurrentUser ? "justify-end" : "justify-start"}`}>
-                    {!isCurrentUser ? <strong className="min-w-0 truncate text-[11px] font-medium text-accent/65">{message.senderName}</strong> : null}
-                    <time className="shrink-0 text-[10px] tabular-nums text-foreground-muted/55" dateTime={new Date(message.timestamp).toISOString()}>{formatChatTime(message.timestamp)}</time>
-                    {isHost ? <button aria-label={`删除 ${message.senderName} 的消息`} className="shrink-0 text-[10px] text-foreground-muted opacity-70 transition-opacity hover:text-danger hover:opacity-100 focus-visible:text-danger focus-visible:opacity-100 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40 sm:opacity-0 sm:group-hover:opacity-100" disabled={deletingMessageId !== null} onClick={() => void deleteMessage(message.id)} type="button">{deletingMessageId === message.id ? "删除中" : "删除"}</button> : null}
+                    {!isCurrentUser ? <strong className="min-w-0 truncate text-xs font-medium text-accent/65">{message.senderName}</strong> : null}
+                    <time className="shrink-0 text-xs tabular-nums text-foreground-muted/55" dateTime={new Date(message.timestamp).toISOString()}>{formatChatTime(message.timestamp)}</time>
+                    {isHost ? <button aria-label={`删除 ${message.senderName} 的消息`} className="shrink-0 text-xs text-foreground-muted opacity-70 transition-opacity hover:text-danger hover:opacity-100 focus-visible:text-danger focus-visible:opacity-100 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40 sm:opacity-0 sm:group-hover:opacity-100" disabled={deletingMessageId !== null} onClick={() => void deleteMessage(message.id)} type="button">{deletingMessageId === message.id ? "删除中" : "删除"}</button> : null}
                   </div>
                   <div className={`inline-block max-w-full rounded-[0.875rem] px-2.5 py-1.5 text-left shadow-xs ${isCurrentUser ? "bg-accent text-white" : "bg-surface border border-surface-border/60 text-foreground"}`}><p className="break-words text-xs leading-relaxed">{message.content}</p></div>
                 </div>

@@ -118,11 +118,11 @@ export default function AdminPage() {
           </div>
           <div className="min-w-0 leading-tight">
             <div className="text-xs font-semibold tracking-tight truncate">音乐房间</div>
-            <div className="text-[10px] text-foreground-muted truncate">管理控制台</div>
+            <div className="text-xs text-foreground-muted truncate">管理控制台</div>
           </div>
         </div>
 
-        <div className="px-3 pt-4 pb-1 text-[10px] font-mono uppercase tracking-wider text-foreground-muted">运维中心</div>
+        <div className="px-3 pt-4 pb-1 text-xs font-mono font-medium text-foreground-muted">运维中心</div>
 
         <nav className="p-2 space-y-1 flex-1" aria-label="管理台导航">
           {tabs.map((item) => {
@@ -140,7 +140,7 @@ export default function AdminPage() {
                 <Icon name={item.icon} size={15} className="shrink-0" />
                 <span className="truncate">{item.label}</span>
                 {item.id === "incidents" && incidentCount > 0 ? (
-                  <span className="ml-auto text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20">
+                  <span className="ml-auto text-xs font-mono px-1.5 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20">
                     {incidentCount}
                   </span>
                 ) : null}
@@ -155,7 +155,7 @@ export default function AdminPage() {
             <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
             <div className="min-w-0 flex-1 leading-tight">
               <div className="text-xs font-medium text-foreground truncate">{session?.nickname ?? "管理员"}</div>
-              <div className="text-[10px] text-foreground-muted truncate">管理员权限</div>
+              <div className="text-xs text-foreground-muted truncate">管理员权限</div>
             </div>
           </div>
         </div>
@@ -172,7 +172,7 @@ export default function AdminPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded text-[11px] text-foreground-muted bg-surface-border/20 border border-surface-border/50">
+            <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs text-foreground-muted bg-surface-border/20 border border-surface-border/50">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
               <span>实时采样</span>
             </div>
@@ -199,7 +199,7 @@ export default function AdminPage() {
           {/* 页面标题 & 搜索栏 */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <div className="text-[11px] font-mono text-foreground-muted uppercase tracking-wider">
+              <div className="text-xs font-mono text-foreground-muted">
                 运维中心 / {activeTab.label}
               </div>
               <h1 className="text-lg font-semibold tracking-tight mt-0.5">{activeTab.label}</h1>

@@ -111,7 +111,7 @@ export function SongsResults({
       {results.length ? (
         <div className="min-w-0 overflow-hidden rounded-2xl border border-surface-border bg-surface/50 backdrop-blur-sm">
           {/* Desktop Table Header */}
-          <div className="hidden grid-cols-[38px_minmax(0,1.4fr)_minmax(120px,0.75fr)_minmax(140px,1fr)_80px_140px] gap-3 border-b border-surface-border px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground-muted/60 md:grid">
+          <div className="hidden grid-cols-[38px_minmax(0,1.4fr)_minmax(120px,0.75fr)_minmax(140px,1fr)_80px_140px] gap-3 border-b border-surface-border px-4 py-2 text-xs font-medium text-foreground-muted md:grid">
             <span className="text-center">#</span>
             <span>单曲</span>
             <span>歌手</span>
@@ -188,21 +188,18 @@ export function SongsResults({
                               e.stopPropagation();
                               onOpenBilibiliParts?.(track);
                             }}
-                            className="shrink-0 inline-flex items-center gap-0.5 rounded border border-pink-500/25 bg-pink-500/15 px-1.5 py-0.5 text-[10px] font-medium text-pink-300 hover:bg-pink-500/25 transition-colors"
+                            className="shrink-0 inline-flex items-center gap-0.5 rounded border border-pink-500/25 bg-pink-500/15 px-1.5 py-0.5 text-xs font-medium text-pink-300 hover:bg-pink-500/25 transition-colors"
                             title="查看分P列表"
                           >
                             <span>{track.pageCount && track.pageCount > 1 ? `共 ${track.pageCount} P` : "分P"}</span>
-                            <span className="text-[9px]">›</span>
+                            <span className="text-xs">›</span>
                           </button>
                         ) : null}
                       </div>
                       <div className="mt-0.5 flex items-center gap-1.5 text-xs text-foreground-muted truncate">
                         <span className="truncate">{track.artist}</span>
                         {track.album ? (
-                          <>
-                            <span className="text-foreground-muted/40 shrink-0">·</span>
-                            <span className="truncate max-w-[120px] text-foreground-muted/70">{track.album}</span>
-                          </>
+                          <span className="truncate max-w-[120px] text-foreground-muted/70">/ {track.album}</span>
                         ) : null}
                       </div>
                     </div>
@@ -331,11 +328,11 @@ export function SongsResults({
                               e.stopPropagation();
                               onOpenBilibiliParts?.(track);
                             }}
-                            className="shrink-0 inline-flex items-center gap-0.5 rounded border border-pink-500/25 bg-pink-500/15 px-1.5 py-0.5 text-[10px] font-medium text-pink-300 hover:bg-pink-500/25 transition-colors"
+                            className="shrink-0 inline-flex items-center gap-0.5 rounded border border-pink-500/25 bg-pink-500/15 px-1.5 py-0.5 text-xs font-medium text-pink-300 hover:bg-pink-500/25 transition-colors"
                             title="查看分P列表"
                           >
                             <span>{track.pageCount && track.pageCount > 1 ? `共 ${track.pageCount} P` : "分P"}</span>
-                            <span className="text-[9px]">›</span>
+                            <span className="text-xs">›</span>
                           </button>
                         ) : null}
                       </div>

@@ -330,10 +330,10 @@ export function useRoomRuntimeLifecycle(input: {
               event: "turn-connectivity-test",
               level,
               summary: result.reachable
-                ? `TURN 中继可达 · ${result.relayCandidates} relay / ${result.totalCandidates} total · ${result.gatherDurationMs}ms`
+                ? `TURN 中继可达 (${result.relayCandidates} relay / ${result.totalCandidates} total, ${result.gatherDurationMs}ms)`
                 : result.error === "no-turn-servers-configured"
                   ? "未配置 TURN 服务器"
-                  : `TURN 中继不可达！${result.error ?? "无法收集 relay 候选"} · ${result.gatherDurationMs}ms · 请检查 coturn 是否运行、防火墙端口是否开放`,
+                  : `TURN 中继不可达！${result.error ?? "无法收集 relay 候选"} (${result.gatherDurationMs}ms)，请检查 coturn 是否运行、防火墙端口是否开放`,
               update: (snapshot) => ({
                 ...snapshot,
                 lastError: result.reachable

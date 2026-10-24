@@ -31,7 +31,7 @@ export function PlaylistPicker({
       loading={loading}
       options={options}
       pending={pending !== null}
-      subjectLabel={`《${track.title}》 · ${track.artist}`}
+      subjectLabel={`《${track.title}》 - ${track.artist}`}
       onClose={onClose}
       onSelect={(option) => void onSelect(option)}
     />

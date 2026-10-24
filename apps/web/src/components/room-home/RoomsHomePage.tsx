@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -353,7 +353,7 @@ export function RoomsHomePage({
         <div className="min-h-[240px]">
           <div className="mb-3 flex items-center justify-between md:hidden">
             <h2 className="text-xs font-semibold text-foreground tracking-tight">房间列表</h2>
-            <span className="text-[11px] text-foreground-muted">{visibleRooms.length} 个</span>
+            <span className="text-xs text-foreground-muted">{visibleRooms.length} 个</span>
           </div>
           {visibleRooms.length ? (
             <div className="grid w-full grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] gap-3 xl:gap-4">

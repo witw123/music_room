@@ -32,7 +32,7 @@ export function System({ overview }: { overview: AdminOverview | null }) {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xs font-semibold text-foreground">系统依赖与服务诊断</h2>
-          <p className="text-[11px] text-foreground-muted">基础设施状态与外部音源连通性</p>
+          <p className="text-xs text-foreground-muted">基础设施状态与外部音源连通性</p>
         </div>
         <button
           className="inline-flex items-center gap-1.5 rounded-md border border-surface-border bg-surface px-2.5 py-1 text-xs hover:bg-surface-border/40 transition-colors disabled:opacity-50"
@@ -99,13 +99,13 @@ export function System({ overview }: { overview: AdminOverview | null }) {
                   />
                   <div>
                     <div className="font-medium text-foreground">{item.name}</div>
-                    <div className="text-[11px] text-foreground-muted mt-0.5">{item.message ?? "就绪"}</div>
+                    <div className="text-xs text-foreground-muted mt-0.5">{item.message ?? "就绪"}</div>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-4 text-right shrink-0">
                   <div>
-                    <div className="text-[11px] text-foreground-muted">凭据状态</div>
+                    <div className="text-xs text-foreground-muted">凭据状态</div>
                     <div className="font-mono text-xs">
                       {item.hasCredentials ? (
                         <span className="text-emerald-400">已配置 Cookie</span>
@@ -116,14 +116,14 @@ export function System({ overview }: { overview: AdminOverview | null }) {
                   </div>
 
                   <div className="min-w-[70px]">
-                    <div className="text-[11px] text-foreground-muted">响应时延</div>
+                    <div className="text-xs text-foreground-muted">响应时延</div>
                     <div className="font-mono text-xs text-foreground">
                       {item.latencyMs !== null ? `${item.latencyMs} ms` : "-"}
                     </div>
                   </div>
 
                   <div className="min-w-[60px]">
-                    <div className="text-[11px] text-foreground-muted">状态</div>
+                    <div className="text-xs text-foreground-muted">状态</div>
                     <HealthText value={item.status} />
                   </div>
                 </div>

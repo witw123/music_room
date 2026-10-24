@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { memo, useState } from "react";
 import { getRoomMemberPermissions, type PeerDiagnosticsSnapshot, type RoomMember, type RoomMemberPermissions } from "@soqaro/shared";
@@ -69,7 +69,7 @@ export function MemberPermissionControls({
                       <div key={permission} className="flex min-h-9 items-center justify-between gap-2.5 rounded-lg border border-surface-border px-2.5 py-1.5">
             <span className="min-w-0">
               <span className="block text-xs font-medium text-foreground">{label}</span>
-              <span className="mt-0.5 block truncate text-[10px] text-foreground-muted">{description}</span>
+              <span className="mt-0.5 block truncate text-xs text-foreground-muted">{description}</span>
             </span>
             <button
               aria-checked={checked}
@@ -439,13 +439,13 @@ function MembersPanelBase({
                     <span className="min-w-0 flex-1">
                       <span className="flex min-w-0 items-center gap-2">
                         <strong className="truncate text-xs sm:text-sm font-semibold text-foreground">{member.nickname}</strong>
-                        {member.id === activeSessionId ? <span className="shrink-0 text-[10px] text-foreground-muted">本机</span> : null}
+                        {member.id === activeSessionId ? <span className="shrink-0 text-xs text-foreground-muted">本机</span> : null}
                       </span>
-                      <span className="block text-[10px] sm:text-[11px] text-foreground-muted">
+                      <span className="block text-xs text-foreground-muted">
                         {member.role === "host" ? "房主" : "成员"}
                       </span>
                     </span>
-                    <span className={`flex shrink-0 items-center gap-1.5 text-[11px] ${presence.text}`}>
+                    <span className={`flex shrink-0 items-center gap-1.5 text-xs ${presence.text}`}>
                       <span className={`h-1.5 w-1.5 rounded-full ${presence.dot}`} />
                       {presence.label}
                     </span>
@@ -459,7 +459,7 @@ function MembersPanelBase({
                     <div className="mb-2 flex items-start justify-between gap-2.5">
                       <div>
                         <span className="block text-xs font-semibold text-foreground">房间权限</span>
-                        <span className="mt-0.5 block text-[10px] tabular-nums text-foreground-muted" data-testid={`member-duration-${member.id}`}>
+                        <span className="mt-0.5 block text-xs tabular-nums text-foreground-muted" data-testid={`member-duration-${member.id}`}>
                           已在房间 {formatMemberDuration(getMemberDurationMs(member, now))}
                         </span>
                       </div>
@@ -476,7 +476,7 @@ function MembersPanelBase({
                           移除成员
                         </Button>
                       ) : (
-                        <span className="pt-0.5 text-[10px] text-foreground-muted">仅房主可修改</span>
+                        <span className="pt-0.5 text-xs text-foreground-muted">仅房主可修改</span>
                       )}
                     </div>
                     <MemberPermissionControls

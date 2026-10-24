@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { Music, ChevronRight, X } from "lucide-react";
@@ -56,7 +56,7 @@ export function ProviderPlaylistPickerDialog({
       ) : null}
       {options.length ? (
         <section className="mt-5 first:mt-6">
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-foreground-muted">歌单</h3>
+          <h3 className="mb-2 text-xs font-semibold text-foreground-muted">歌单</h3>
           <div className="space-y-2">
             {options.map((option) => {
               const item = option.playlist;

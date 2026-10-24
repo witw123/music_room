@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition, type PointerEvent as ReactPointerEvent } from "react";
 import { Check, CheckSquare, GripVertical, ListMusic, Play, Trash2, X } from "lucide-react";
@@ -168,7 +168,7 @@ export function PlayerQueueDrawer({
         <ListMusic size={17} aria-hidden="true" />
         {queue.length > 0 && (
           <span
-            className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 px-1 items-center justify-center rounded-full text-[10px] font-bold text-white transition-[background-color,box-shadow] duration-500 leading-none"
+            className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 px-1 items-center justify-center rounded-full text-xs font-bold text-white transition-[background-color,box-shadow] duration-500 leading-none"
             style={{ backgroundColor: accentColor, boxShadow: `0 0 8px ${accentColor}` }}
           >
             {queue.length}
@@ -218,7 +218,7 @@ export function PlayerQueueDrawer({
             <div className="flex shrink-0 items-center justify-between border-b border-surface-border/70 px-3.5 py-2">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-semibold text-foreground">播放队列</span>
-                <span className="text-[11px] tabular-nums text-foreground-muted">({queue.length} 首)</span>
+                <span className="text-xs tabular-nums text-foreground-muted">({queue.length} 首)</span>
               </div>
               <button
                 type="button"
@@ -525,7 +525,7 @@ export function PlayerQueueList({
   return (
     <div className="flex flex-col flex-1 min-h-0">
       {canRemoveQueue && queue.length > 0 ? (
-        <div className="flex shrink-0 items-center justify-between border-b border-surface-border/40 px-3 py-1.5 text-[11px] text-foreground-muted">
+        <div className="flex shrink-0 items-center justify-between border-b border-surface-border/40 px-3 py-1.5 text-xs text-foreground-muted">
           {isSelectMode ? (
             <>
               <div className="flex items-center gap-2">
@@ -552,7 +552,7 @@ export function PlayerQueueList({
                   </span>
                   <span>{areAllSelected ? "取消全选" : "全选"}</span>
                 </button>
-                <span className="text-[10px] tabular-nums">
+                <span className="text-xs tabular-nums">
                   已选 <strong className="font-mono text-accent">{selectedQueueItemIds.size}</strong> 首
                 </span>
               </div>
@@ -590,7 +590,7 @@ export function PlayerQueueList({
                   setIsSelectMode(true);
                   setSelectedQueueItemIds(new Set());
                 }}
-                className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-foreground-muted hover:bg-surface-hover hover:text-foreground transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-foreground-muted hover:bg-surface-hover hover:text-foreground transition-colors cursor-pointer"
                 title="批量管理队列"
               >
                 <CheckSquare size={12} />
@@ -768,14 +768,12 @@ export function PlayerQueueList({
                        <strong className={`block truncate text-xs sm:text-sm ${isCurrent ? "text-accent font-bold" : "text-foreground font-semibold"}`}>
                          {title}
                        </strong>
-                       <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-foreground-muted">
+                       <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-foreground-muted">
                          <span className="min-w-0 truncate">{artistName}</span>
-                         <span aria-hidden="true" className="shrink-0 opacity-40">·</span>
-                         <span className="min-w-0 truncate">{albumName}</span>
+                         {albumName ? <span className="min-w-0 truncate text-foreground-muted/60">/ {albumName}</span> : null}
                        </p>
-                       <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[10px] text-foreground-muted/70">
+                       <p className="mt-0.5 flex min-w-0 items-center gap-2 text-xs text-foreground-muted/70">
                          <span className="shrink-0 tabular-nums">{formatDuration(track?.durationMs ?? 0)}</span>
-                         <span aria-hidden="true" className="shrink-0 opacity-30">·</span>
                          <span className="min-w-0 truncate">{memberName}上传</span>
                        </p>
                     </div>

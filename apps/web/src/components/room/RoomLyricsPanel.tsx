@@ -232,7 +232,7 @@ export function RoomLyricsPanel({
             <div className="flex flex-col items-center gap-0.5 rounded-xl border border-surface-border bg-surface/50 p-1 backdrop-blur-sm shadow-xs">
               <button
                 aria-label="歌词提前 0.5 秒"
-                className="flex h-5 w-5 items-center justify-center rounded-md text-[11px] font-mono text-foreground-muted hover:bg-surface-hover hover:text-foreground transition-colors"
+                className="flex h-5 w-5 items-center justify-center rounded-md text-xs font-mono text-foreground-muted hover:bg-surface-hover hover:text-foreground transition-colors"
                 onClick={() => onOffsetChange(offsetMs + 500)}
                 title="歌词提前 0.5s"
                 type="button"
@@ -241,7 +241,7 @@ export function RoomLyricsPanel({
               </button>
               <button
                 aria-label="重置歌词时间"
-                className={`px-1 py-0.5 text-[10px] tabular-nums font-mono transition-colors ${
+                className={`px-1 py-0.5 text-xs tabular-nums font-mono transition-colors ${
                   offsetMs !== 0 ? "text-accent font-semibold" : "text-foreground-muted/70 hover:text-foreground"
                 }`}
                 onClick={() => onOffsetChange(0)}
@@ -252,7 +252,7 @@ export function RoomLyricsPanel({
               </button>
               <button
                 aria-label="歌词推迟 0.5 秒"
-                className="flex h-5 w-5 items-center justify-center rounded-md text-[11px] font-mono text-foreground-muted hover:bg-surface-hover hover:text-foreground transition-colors"
+                className="flex h-5 w-5 items-center justify-center rounded-md text-xs font-mono text-foreground-muted hover:bg-surface-hover hover:text-foreground transition-colors"
                 onClick={() => onOffsetChange(offsetMs - 500)}
                 title="歌词推迟 0.5s"
                 type="button"

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useCallback, useEffect, useState } from "react";
 import type { AlistAudioItem, AlistConfig } from "@soqaro/shared";
@@ -383,7 +383,7 @@ export function AlistPlaylistsView() {
       {/* Subdirectories chips */}
       {directories.length > 0 ? (
         <div className="space-y-1.5">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-foreground-muted/60 px-1">
+          <h3 className="text-xs font-medium text-foreground-muted px-1">
             子文件夹 ({directories.length})
           </h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
@@ -404,12 +404,9 @@ export function AlistPlaylistsView() {
       {/* Audio Items List */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between px-1">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-foreground-muted/60">
+          <h3 className="text-xs font-medium text-foreground-muted">
             音频曲目 ({audioItems.length})
           </h3>
-          <span className="text-[11px] text-foreground-muted/50">
-            免下载在线流式点播
-          </span>
         </div>
 
         {audioItems.length === 0 && !loading ? (
@@ -446,18 +443,18 @@ export function AlistPlaylistsView() {
                           {item.title}
                         </span>
                         {item.ext ? (
-                          <span className="uppercase px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-surface border border-surface-border text-foreground-muted shrink-0">
+                          <span className="uppercase px-1.5 py-0.5 rounded text-xs font-mono font-medium bg-surface border border-surface-border text-foreground-muted shrink-0">
                             {item.ext}
                           </span>
                         ) : null}
                         {item.lrcPath ? (
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
+                          <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
                             LRC
                           </span>
                         ) : null}
                       </div>
-                      <div className="text-[11px] text-foreground-muted truncate mt-0.5">
-                        {item.artist} · {formatSize} MB
+                      <div className="text-xs text-foreground-muted truncate mt-0.5">
+                        {item.artist} / {formatSize} MB
                       </div>
                     </div>
                   </div>

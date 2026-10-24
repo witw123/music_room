@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -85,7 +85,7 @@ export function CachePlaybackPromptModal({
                 {requiresBinding ? "需要绑定平台账号" : isSourceOwner ? "歌曲源 OPS 资产缺失提示" : "开启缓存播放提示"}
               </DialogTitle>
               <DialogDescription className="text-xs text-foreground-muted truncate">
-                {track.title} {track.artist ? `· ${track.artist}` : ""}
+                {track.title} {track.artist ? `- ${track.artist}` : ""}
               </DialogDescription>
             </div>
           </div>

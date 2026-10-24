@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -728,7 +728,7 @@ export function ProviderSearchPage({
       type="button"
     >
       <Icon name="arrow-left" />
-      <span className="hidden sm:inline text-[11px]">发现</span>
+      <span className="hidden sm:inline text-xs">发现</span>
     </button>
   ) : !embedded ? (
     onClose ? (
@@ -758,7 +758,7 @@ export function ProviderSearchPage({
       <div className="h-3.5 w-px bg-surface-border mr-1.5" />
       <div className="relative flex items-center">
         <div className="flex items-center gap-1 rounded-full px-2 py-0.5 text-xs text-foreground-muted transition-colors hover:bg-surface-hover hover:text-foreground cursor-pointer select-none">
-          <span className="font-medium text-[11px] sm:text-xs">
+          <span className="font-medium text-xs">
             {provider === "netease" ? "网易云" : provider === "qqmusic" ? "QQ 音乐" : "哔哩哔哩"}
           </span>
           <svg className="h-3 w-3 text-foreground-muted/60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -967,7 +967,7 @@ export function ProviderSearchPage({
                 <section className="mb-6">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="text-xs sm:text-sm font-semibold text-foreground">音乐合集 / 歌单</h3>
-                    <span className="text-[11px] text-foreground-muted">{bilibiliCollections.length} 个合集</span>
+                    <span className="text-xs text-foreground-muted">{bilibiliCollections.length} 个合集</span>
                   </div>
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
                     {bilibiliCollections.map((item) => (
@@ -985,15 +985,15 @@ export function ProviderSearchPage({
                             className="transition duration-300 group-hover:scale-105"
                             fallbackIcon={<span className="text-xs text-foreground-muted">歌单</span>}
                           />
-                          <span className="absolute bottom-1 right-1 rounded bg-black/60 px-1 py-0.5 text-[9px] font-mono text-white/90 backdrop-blur-xs">
+                          <span className="absolute bottom-1 right-1 rounded bg-black/60 px-1 py-0.5 text-xs font-mono text-white/90 backdrop-blur-xs">
                             {item.trackCount} 首
                           </span>
                         </div>
                         <span className="mt-2 block truncate text-xs sm:text-sm font-semibold text-foreground group-hover:text-accent transition-colors" title={item.title}>
                           {item.title}
                         </span>
-                        <span className="mt-0.5 block truncate text-[11px] text-foreground-muted">
-                          {item.creatorName ?? "合集"} · {item.trackCount} 首
+                        <span className="mt-0.5 block truncate text-xs text-foreground-muted">
+                          {item.creatorName ?? "合集"} / {item.trackCount} 首
                         </span>
                       </button>
                     ))}
@@ -1004,7 +1004,7 @@ export function ProviderSearchPage({
               {provider === "bilibili" && bilibiliCollections.length > 0 && results.length > 0 ? (
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-xs sm:text-sm font-semibold text-foreground">单曲列表</h3>
-                  <span className="text-[11px] text-foreground-muted">{results.length} 首单曲</span>
+                  <span className="text-xs text-foreground-muted">{results.length} 首单曲</span>
                 </div>
               ) : null}
 
@@ -1072,7 +1072,7 @@ export function ProviderSearchPage({
       loading={playlistPickerLoading}
       options={playlistPickerOptions}
       pending={pending !== null}
-      subjectLabel={playlistPickerTrack ? `《${playlistPickerTrack.title}》 · ${playlistPickerTrack.artist}` : `专辑《${playlistPickerAlbum?.title ?? ""}》 · ${playlistPickerAlbum?.tracks.length ?? 0} 首歌曲`}
+      subjectLabel={playlistPickerTrack ? `《${playlistPickerTrack.title}》 - ${playlistPickerTrack.artist}` : `专辑《${playlistPickerAlbum?.title ?? ""}》（${playlistPickerAlbum?.tracks.length ?? 0} 首歌曲）`}
       onClose={() => {
         if (!pending) {
           setPlaylistPickerTrack(null);

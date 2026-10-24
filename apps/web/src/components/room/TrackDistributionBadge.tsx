@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useMemo, useRef, useState } from "react";
 import type { RoomMember, RoomTrackDistributionState, TrackMeta } from "@soqaro/shared";
@@ -191,21 +191,21 @@ export function TrackDistributionBadge({
                 <span className={`h-2 w-2 rounded-full ${config.dotClass}`} />
                 <span>{config.title}</span>
               </div>
-              <span className={`rounded px-1.5 py-0.5 text-[10px] font-mono border ${config.tagClass}`}>
+              <span className={`rounded px-1.5 py-0.5 text-xs font-mono border ${config.tagClass}`}>
                 {status.state}
               </span>
             </div>
-            <p className="text-[11px] leading-relaxed text-foreground-muted">
+            <p className="text-xs leading-relaxed text-foreground-muted">
               {config.description}
             </p>
 
             {actionError ? (
-              <p className="rounded bg-rose-500/10 p-1.5 text-[11px] text-rose-400 border border-rose-500/20">
+              <p className="rounded bg-rose-500/10 p-1.5 text-xs text-rose-400 border border-rose-500/20">
                 {actionError}
               </p>
             ) : null}
 
-            <div className="space-y-1 rounded-lg bg-surface/40 p-2 text-[11px] text-foreground-muted">
+            <div className="space-y-1 rounded-lg bg-surface/40 p-2 text-xs text-foreground-muted">
               <div className="flex justify-between">
                 <span>持有人</span>
                 <span className="font-medium text-foreground">{track.ownerNickname || "未知成员"}</span>
@@ -228,7 +228,7 @@ export function TrackDistributionBadge({
                   type="button"
                   disabled={isActionPending}
                   onClick={handleRetry}
-                  className="flex-1 rounded-md border border-surface-border bg-surface/60 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-surface-elevated disabled:opacity-50"
+                  className="flex-1 rounded-md border border-surface-border bg-surface/60 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-surface-elevated disabled:opacity-50"
                 >
                   {isActionPending ? "处理中…" : "重试准备"}
                 </button>
@@ -236,7 +236,7 @@ export function TrackDistributionBadge({
                   type="button"
                   disabled={isActionPending}
                   onClick={() => fileInputRef.current?.click()}
-                  className="flex-1 rounded-md border border-accent/30 bg-accent/10 py-1.5 text-[11px] font-medium text-accent transition-colors hover:bg-accent/20 disabled:opacity-50"
+                  className="flex-1 rounded-md border border-accent/30 bg-accent/10 py-1.5 text-xs font-medium text-accent transition-colors hover:bg-accent/20 disabled:opacity-50"
                 >
                   选择本地文件
                 </button>

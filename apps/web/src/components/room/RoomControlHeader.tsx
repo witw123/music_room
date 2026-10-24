@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, type FormEvent, type Dispatch, type SetStateAction } from "react";
 import { createPortal } from "react-dom";
@@ -209,7 +209,7 @@ export function RoomControlHeader({
                 <button
                   data-testid="mobile-share-room-button"
                   aria-label="分享房间"
-                  className="inline-flex h-7 items-center justify-center gap-1 rounded-full border border-surface-border/70 bg-surface/80 px-2 text-[11px] font-medium text-foreground-muted hover:text-foreground active:scale-95 transition-transform"
+                  className="inline-flex h-7 items-center justify-center gap-1 rounded-full border border-surface-border/70 bg-surface/80 px-2 text-xs font-medium text-foreground-muted hover:text-foreground active:scale-95 transition-transform"
                   disabled={isSharing}
                   onClick={() => void handleShareRoom()}
                   type="button"
@@ -249,7 +249,7 @@ export function RoomControlHeader({
                               <span className="truncate text-xs font-semibold text-foreground">
                                 {roomSnapshot.room.name || "当前房间"}
                               </span>
-                              <span className="text-[10px] text-foreground-muted font-mono">
+                              <span className="text-xs text-foreground-muted font-mono">
                                 #{roomSnapshot.room.joinCode}
                               </span>
                             </div>
@@ -331,7 +331,7 @@ export function RoomControlHeader({
           </div>
 
           {/* Row 2: Metadata (Room Type, Join Code, Member Count, Host) */}
-          <div className="flex w-full items-center gap-1.5 min-w-0 flex-wrap text-[11px]">
+          <div className="flex w-full items-center gap-1.5 min-w-0 flex-wrap text-xs">
             <div className="flex items-center gap-1 rounded-full bg-accent/10 border border-accent/25 px-2 py-0.5 font-semibold text-accent shrink-0">
               <RoomTypeIcon className="w-3 h-3 shrink-0" />
               <span>{roomTypeConfig.label}</span>
@@ -348,18 +348,18 @@ export function RoomControlHeader({
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shrink-0" />
               <span>{roomSnapshot.room.joinCode}</span>
               <CopyIcon className="w-2.5 h-2.5 text-foreground-muted shrink-0" />
-              {isCopying ? <span className="text-[9px] font-sans font-medium text-accent">已复制</span> : null}
+              {isCopying ? <span className="text-xs font-sans font-medium text-accent">已复制</span> : null}
             </button>
 
             <span className="flex items-center gap-0.5 text-foreground-muted shrink-0">
               <UsersIcon className="w-3 h-3" />
               <span data-testid="mobile-online-member-count">{onlineMemberCount}</span>
-              <span className="text-[10px] text-foreground-muted/70">在线</span>
+              <span className="text-xs text-foreground-muted/70">在线</span>
             </span>
 
             {host ? (
-              <span className="text-[10px] text-foreground-muted truncate max-w-[130px]">
-                · 房主 {host.nickname}
+              <span className="text-xs text-foreground-muted truncate max-w-[130px]">
+                房主 {host.nickname}
               </span>
             ) : null}
           </div>
@@ -409,7 +409,7 @@ export function RoomControlHeader({
             <button
               data-testid="room-code-button"
               aria-label="复制房间码"
-              className="group flex items-center gap-2 rounded-full border border-surface-border/70 bg-surface/70 px-2.5 py-1 text-xs font-mono font-bold tracking-[0.16em] text-foreground hover:bg-surface-hover hover:border-surface-border transition-colors cursor-pointer shrink-0 shadow-xs"
+              className="group flex items-center gap-2 rounded-full border border-surface-border/70 bg-surface/70 px-2.5 py-1 text-xs font-mono font-bold tracking-wider text-foreground hover:bg-surface-hover hover:border-surface-border transition-colors cursor-pointer shrink-0 shadow-xs"
               disabled={isCopying || !onCopyJoinCode}
               onClick={() => void handleCopyJoinCode()}
               type="button"
@@ -417,24 +417,24 @@ export function RoomControlHeader({
               <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
               <span>{roomSnapshot.room.joinCode}</span>
               <CopyIcon className="w-3 h-3 text-foreground-muted group-hover:text-foreground shrink-0" />
-              {isCopying ? <span className="text-[10px] font-sans font-medium text-accent">已复制</span> : null}
+              {isCopying ? <span className="text-xs font-sans font-medium text-accent">已复制</span> : null}
             </button>
 
             {/* Separator */}
             <span className="h-3.5 w-px bg-surface-border/60 shrink-0" />
 
             {/* Room Status Metadata */}
-            <div className="flex items-center gap-2 text-xs text-foreground-muted truncate shrink-0">
+            <div className="flex items-center gap-2.5 text-xs text-foreground-muted truncate shrink-0">
               <span className="flex items-center gap-1">
                 <UsersIcon className="w-3.5 h-3.5 shrink-0" />
                 <span data-testid="online-member-count">{onlineMemberCount}</span>
                 <span>人在线</span>
               </span>
-              <span>·</span>
+              <span className="text-surface-border">/</span>
               <span>{roomSnapshot.room.visibility === "public" ? "公开" : "私密"}</span>
               {host ? (
                 <>
-                  <span>·</span>
+                  <span className="text-surface-border">/</span>
                   <span className="truncate max-w-[7.5rem]" title={host.nickname}>房主 {host.nickname}</span>
                 </>
               ) : null}

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import type { ProviderAlbumDetail, ProviderAlbumFavorite, ProviderArtistFavorite, ProviderTrackCandidate } from "@soqaro/shared";
@@ -420,7 +420,7 @@ export function FavoriteAlbumsPage({
                     </div>
                     <div className="min-w-0 px-1 pt-3">
                       <strong className="block truncate text-[15px] font-semibold text-foreground">{item.title}</strong>
-                      <p className="mt-1 truncate text-sm text-foreground-muted">{item.artist} · {item.provider === "netease" ? "网易云音乐" : item.provider === "qqmusic" ? "QQ 音乐" : "哔哩哔哩"}</p>
+                      <p className="mt-1 truncate text-sm text-foreground-muted">{item.artist} / {item.provider === "netease" ? "网易云音乐" : item.provider === "qqmusic" ? "QQ 音乐" : "哔哩哔哩"}</p>
                     </div>
                   </button>
                   <Button aria-label={`取消收藏 ${item.title}`} className="absolute right-2 top-2 h-10 w-10 bg-black/60 text-white/80 opacity-100 backdrop-blur-sm transition-opacity hover:bg-red-500/80 hover:text-white sm:h-8 sm:w-8 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100" disabled={pending !== null} onClick={() => void removeAlbum(item)} size="icon" title="取消收藏" variant="ghost" type="button"><HeartIcon filled /></Button>
@@ -512,7 +512,7 @@ export function FavoriteAlbumsPage({
           loading={playlistPickerLoading}
           options={playlistPickerOptions}
           pending={pending !== null}
-          subjectLabel={`《${playlistPickerTrack.title}》 · ${playlistPickerTrack.artist}`}
+          subjectLabel={`《${playlistPickerTrack.title}》 - ${playlistPickerTrack.artist}`}
           onClose={() => {
             if (!pending) {
               setPlaylistPickerTrack(null);
@@ -575,7 +575,7 @@ function FavoriteTracksSection({
     <section className="mt-4">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-surface-border pb-3">
         <span className="text-xs font-medium text-foreground-muted">
-          {tracks.length} 首歌曲 · 已下载 {downloadedCount} 首
+          {tracks.length} 首歌曲，已下载 {downloadedCount} 首
         </span>
         <div className="flex items-center gap-2">
           {onDownloadAll && downloadableCount > 0 ? (

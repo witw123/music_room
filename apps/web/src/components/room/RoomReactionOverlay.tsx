@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { Socket } from "socket.io-client";
@@ -205,13 +205,13 @@ export function RoomReactionOverlay({
             </div>
 
             {particle.targetLabel ? (
-              <span className="max-w-[120px] truncate text-[10px] sm:text-xs font-medium px-2 py-0.5 rounded-full backdrop-blur-md bg-black/60 text-white/90 border border-white/10 shadow-sm">
+              <span className="max-w-[120px] truncate text-xs font-medium px-2 py-0.5 rounded-full backdrop-blur-md bg-black/60 text-white/90 border border-white/10 shadow-sm">
                 {particle.targetLabel}
               </span>
             ) : null}
 
             {isHighCombo && (
-              <span className="font-extrabold text-[11px] sm:text-xs tabular-nums text-white bg-accent px-1.5 py-0.5 rounded-full shadow-xs animate-pulse">
+              <span className="font-extrabold text-xs tabular-nums text-white bg-accent px-1.5 py-0.5 rounded-full shadow-xs animate-pulse">
                 x{particle.comboCount}
               </span>
             )}

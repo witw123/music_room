@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useRef, useState, type CSSProperties } from "react";
 import { formatDuration } from "@/lib/domain/soqaro-ui";
@@ -423,7 +423,7 @@ export function MobileBottomPlayerLayout({
 
           <div className="min-w-0 flex-1">
             <p className="truncate text-xs font-semibold text-foreground leading-tight">{title}</p>
-            <p className="truncate text-[11px] text-foreground-muted mt-0.5 leading-tight">{artist}</p>
+            <p className="truncate text-xs text-foreground-muted mt-0.5 leading-tight">{artist}</p>
           </div>
         </button>
 
@@ -607,7 +607,7 @@ export function TopEdgeScrubber({
       {/* Floating time tooltip bubble: 00:53 / 05:00 */}
       {(isHovering || isDragging) && hoverData !== null && durationMs > 0 && (
         <div
-          className="pointer-events-none absolute -top-8 -translate-x-1/2 rounded-full border border-surface-border bg-background-secondary px-2.5 py-0.5 text-[11px] font-semibold tabular-nums text-foreground shadow-md animate-fade-in"
+          className="pointer-events-none absolute -top-8 -translate-x-1/2 rounded-full border border-surface-border bg-background-secondary px-2.5 py-0.5 text-xs font-medium tabular-nums text-foreground shadow-sm animate-fade-in"
           style={{
             left: `${Math.max(0.04, Math.min(0.96, hoverData.ratio)) * 100}%`
           }}
@@ -719,8 +719,8 @@ export function QualityBadge({
         sideOffset={8}
         className="light-popover-surface w-48 rounded-xl border border-surface-border bg-background-secondary p-1.5 shadow-lg"
       >
-        <div className="px-2 py-1 text-[10px] font-semibold text-foreground-muted tracking-wider">
-          首选音质偏好
+        <div className="px-2 py-1 text-xs font-medium text-foreground-muted">
+          音质偏好
         </div>
         <div className="space-y-0.5">
           {AUDIO_QUALITY_OPTIONS.map((opt) => {
@@ -732,7 +732,7 @@ export function QualityBadge({
                 onClick={() => handleSelect(opt.value)}
                 className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-xs transition-colors cursor-pointer ${
                   isSelected
-                    ? "font-semibold shadow-sm"
+                    ? "font-semibold shadow-xs"
                     : "text-foreground-secondary hover:bg-surface-hover hover:text-foreground"
                 }`}
                 style={
@@ -746,7 +746,7 @@ export function QualityBadge({
               >
                 <div className="flex items-center gap-1.5">
                   <span>{opt.label}</span>
-                  <span className="text-[10px] text-foreground-muted">({opt.bitrate})</span>
+                  <span className="text-xs text-foreground-muted/70">({opt.bitrate})</span>
                 </div>
                 {isSelected && (
                   <svg
@@ -766,9 +766,6 @@ export function QualityBadge({
               </button>
             );
           })}
-        </div>
-        <div className="mt-1 border-t border-surface-border px-2 pt-1 text-[9px] text-foreground-muted leading-tight">
-          平台无高规格或无权限时平滑降级
         </div>
       </PopoverContent>
     </Popover>

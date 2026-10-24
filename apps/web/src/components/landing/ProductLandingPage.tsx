@@ -130,7 +130,13 @@ export function ProductLandingPage() {
         {/* Eyebrow badge */}
         <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3.5 py-1 text-xs font-medium text-white/80">
           <span className="h-1.5 w-1.5 rounded-full bg-accent" />
-          <span>开源 · 本地优先 · WebRTC 低延迟同步</span>
+          <span className="flex items-center gap-2.5">
+            <span>开源</span>
+            <span className="text-white/30">/</span>
+            <span>本地优先</span>
+            <span className="text-white/30">/</span>
+            <span>WebRTC 低延迟同步</span>
+          </span>
         </div>
 
         {/* Headline */}
@@ -185,10 +191,7 @@ export function ProductLandingPage() {
       {/* Real Architecture & Data Pipeline Section */}
       <section id="architecture" className="mx-auto w-full max-w-5xl px-4 py-12 sm:px-6">
         <div className="mb-8 text-center sm:text-left">
-          <p className="font-mono text-xs font-semibold uppercase tracking-[0.2em] text-accent">
-            Architecture & Pipeline
-          </p>
-          <h2 className="mt-2 text-2xl font-bold tracking-tight text-white sm:text-3xl">
+          <h2 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
             端到端声学架构：本地优先，零云端音频留存
           </h2>
           <p className="mt-2 text-sm text-white/60 max-w-3xl leading-relaxed">
@@ -208,7 +211,7 @@ export function ProductLandingPage() {
                   <span className="font-mono text-xs font-bold text-accent px-2 py-0.5 rounded-md bg-accent/10 border border-accent/20">
                     STAGE {stage.step}
                   </span>
-                  <span className="text-[11px] font-mono text-white/40">{stage.role}</span>
+                  <span className="text-xs font-mono text-white/40">{stage.role}</span>
                 </div>
                 <h3 className="text-base font-semibold text-white tracking-tight">
                   {stage.label}
@@ -221,7 +224,7 @@ export function ProductLandingPage() {
                 {stage.tags.map((tag) => (
                   <span
                     key={tag}
-                    className="inline-block rounded-md bg-white/[0.04] px-2 py-0.5 text-[10px] font-medium text-white/50"
+                    className="inline-block rounded-md bg-white/[0.04] px-2 py-0.5 text-xs font-medium text-white/50"
                   >
                     {tag}
                   </span>
@@ -233,7 +236,7 @@ export function ProductLandingPage() {
 
         {/* Audio Flow Diagram Callout */}
         <div className="mt-4 rounded-xl border border-white/[0.08] bg-white/[0.02] p-4 text-xs font-mono text-white/70 overflow-x-auto hide-scrollbar">
-          <p className="text-[11px] font-bold text-white/50 uppercase tracking-wider mb-2 font-sans">
+          <p className="text-xs font-bold text-white/50 mb-2 font-sans">
             权威音频传输链路（Single-Source Broadcast Path）
           </p>
           <div className="flex items-center gap-2 whitespace-nowrap text-white/80">
@@ -253,10 +256,7 @@ export function ProductLandingPage() {
       {/* Room Modes Section */}
       <section id="room-modes" className="mx-auto w-full max-w-5xl px-4 py-16 sm:px-6">
         <div className="mb-8 text-center sm:text-left">
-          <p className="font-mono text-xs font-semibold uppercase tracking-[0.2em] text-accent">
-            Room Modes
-          </p>
-          <h2 className="mt-2 text-2xl font-bold tracking-tight text-white sm:text-3xl">
+          <h2 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
             为真实音乐社交场景定制的房间形态
           </h2>
           <p className="mt-2 text-sm text-white/60 max-w-2xl leading-relaxed">
@@ -272,10 +272,10 @@ export function ProductLandingPage() {
             >
               <div>
                 <div className="flex items-center justify-between gap-2 mb-3">
-                  <span className={`rounded-md border px-2 py-0.5 text-[11px] font-medium ${mode.badgeTone}`}>
+                  <span className={`rounded-md border px-2 py-0.5 text-xs font-medium ${mode.badgeTone}`}>
                     {mode.badge}
                   </span>
-                  <span className="text-[11px] font-mono text-white/40">{mode.subtitle}</span>
+                  <span className="text-xs font-mono text-white/40">{mode.subtitle}</span>
                 </div>
                 <h3 className="text-lg font-bold text-white tracking-tight">
                   {mode.title}
@@ -301,10 +301,7 @@ export function ProductLandingPage() {
       {/* Core Ecosystem & Capabilities */}
       <section id="features" className="mx-auto w-full max-w-5xl px-4 py-12 sm:px-6">
         <div className="mb-8 text-center sm:text-left">
-          <p className="font-mono text-xs font-semibold uppercase tracking-[0.2em] text-accent">
-            Ecosystem & Capabilities
-          </p>
-          <h2 className="mt-2 text-2xl font-bold tracking-tight text-white sm:text-3xl">
+          <h2 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
             完整的现代数字音乐体验
           </h2>
           <p className="mt-2 text-sm text-white/60 max-w-2xl leading-relaxed">
@@ -340,10 +337,7 @@ export function ProductLandingPage() {
         <div className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-6 sm:p-8">
           <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
             <div className="max-w-xl">
-              <span className="font-mono text-xs font-semibold text-accent uppercase tracking-wider">
-                Open Source & Self-Hosting
-              </span>
-              <h3 className="mt-2 text-xl sm:text-2xl font-bold text-white tracking-tight">
+              <h3 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
                 完全开源，支持自主搭建与私有部署
               </h3>
               <p className="mt-2 text-xs sm:text-sm text-white/60 leading-relaxed">
@@ -382,7 +376,7 @@ export function ProductLandingPage() {
               <MusicIcon className="w-3.5 h-3.5" />
             </div>
             <span className="font-bold text-sm text-white tracking-tight">Soqaro</span>
-            <span className="text-xs text-white/40">· 开源多人协作同步听歌平台</span>
+            <span className="text-xs text-white/40">开源多人协作同步听歌平台</span>
           </div>
 
           <p className="text-xs text-white/40">

@@ -1,4 +1,4 @@
-﻿import type { BilibiliTrackCandidate, NeteaseTrackCandidate, QqMusicTrackCandidate } from "@soqaro/shared";
+import type { BilibiliTrackCandidate, NeteaseTrackCandidate, QqMusicTrackCandidate } from "@soqaro/shared";
 import {
   Search,
   Heart,
@@ -150,7 +150,7 @@ export function PaginationBar({
   return (
     <div className={`mt-6 flex flex-wrap items-center justify-between gap-3 text-xs text-foreground-muted ${className}`}>
       <span className="tabular-nums">
-        共 {total} 项结果 · 第 {page} / {totalPages} 页
+        共 {total} 项结果，第 {page} / {totalPages} 页
       </span>
       <div className="flex items-center gap-1.5">
         <button

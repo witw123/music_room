@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import type { Playlist } from "@soqaro/shared";
 import { AnchoredDialog, type AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
@@ -140,7 +140,7 @@ export function PlaylistMoveDialog({
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <h2 className="text-lg font-semibold text-foreground" id="playlist-move-title">移动到歌单</h2>
-            <p className="mt-1 truncate text-xs text-foreground-muted">《{track.title}》 · {track.artist}</p>
+            <p className="mt-1 truncate text-xs text-foreground-muted">《{track.title}》 - {track.artist}</p>
           </div>
           <Button aria-label="关闭" disabled={pending} onClick={onCancel} size="icon" type="button" variant="ghost">
             <svg aria-hidden="true" fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="16"><path d="m6 6 12 12M18 6 6 18" /></svg>

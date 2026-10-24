@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useRef, useState } from "react";
 import type { BilibiliTrackCandidate } from "@soqaro/shared";
@@ -138,13 +138,13 @@ export function BilibiliImportDialog({
                 {loading ? "解析中..." : "解析"}
               </Button>
             </div>
-            <p className="mt-1.5 text-[11px] text-foreground-muted">
+            <p className="mt-1.5 text-xs text-foreground-muted">
               支持公开收藏夹链接（ml...）或纯 ID，免登录直接读取。
             </p>
           </div>
 
           {error && (
-            <div className="rounded-md border border-destructive/20 bg-destructive/10 p-2.5 text-destructive text-[11px]">
+            <div className="rounded-md border border-destructive/20 bg-destructive/10 p-2.5 text-destructive text-xs">
               {error}
             </div>
           )}
@@ -155,7 +155,7 @@ export function BilibiliImportDialog({
                 <span className="font-medium text-foreground truncate max-w-[280px]">
                   {previewResult.title}
                 </span>
-                <span className="text-foreground-muted text-[11px]">
+                <span className="text-foreground-muted text-xs">
                   共解析 {previewResult.items.length} 首歌曲
                 </span>
               </div>
@@ -165,7 +165,7 @@ export function BilibiliImportDialog({
                 {previewResult.items.map((track, idx) => (
                   <div
                     key={`${track.bvid}:${idx}`}
-                    className="flex items-center justify-between py-1 px-1.5 rounded hover:bg-surface-hover/50 text-[11px]"
+                    className="flex items-center justify-between py-1 px-1.5 rounded hover:bg-surface-hover/50 text-xs"
                   >
                     <span className="truncate flex-1 text-foreground pr-2">
                       <span className="text-foreground-muted mr-1.5 font-mono">{idx + 1}.</span>

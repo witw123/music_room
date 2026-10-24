@@ -47,7 +47,7 @@ export default function AdminLoginPage() {
       <section className="w-full max-w-sm rounded-xl border border-surface-border bg-surface p-6 shadow-sm">
         <form className="flex flex-col gap-4" onSubmit={submit}>
           <div>
-            <span className="text-[11px] font-mono uppercase tracking-wider text-accent">管理员认证</span>
+            <span className="text-xs font-mono font-medium text-accent">管理员认证</span>
             <h1 className="mt-1 text-lg font-semibold tracking-tight text-foreground">登录控制台</h1>
             <p className="mt-0.5 text-xs text-foreground-muted">请使用具备 ADMIN 权限的管理员账号访问。</p>
           </div>

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 /* eslint-disable @next/next/no-img-element */
 
 import { useEffect, useMemo, useState } from "react";
@@ -516,7 +516,7 @@ function RadioAutopilotSection({
         <div className="flex items-center gap-1.5 min-w-0">
           <span className={`h-2 w-2 shrink-0 rounded-full ${isAutopilotEnabled ? "bg-emerald-400 animate-pulse" : "bg-foreground-muted/30"}`} />
           <h3 className="text-xs sm:text-sm font-bold text-foreground truncate">智能续播流</h3>
-          <span className="text-[10px] sm:text-[11px] font-medium text-foreground-muted px-1.5 py-0.5 rounded-full bg-surface border border-surface-border/60 shrink-0">
+          <span className="text-xs font-medium text-foreground-muted px-1.5 py-0.5 rounded-full bg-surface border border-surface-border/60 shrink-0">
             {isAutopilotEnabled ? "已启用个性化推荐" : "已暂停"}
           </span>
         </div>
@@ -550,15 +550,15 @@ function RadioAutopilotSection({
       </div>
 
       {currentProviderTrack ? (
-        <p className="mt-1 truncate text-[11px] text-foreground-muted">
-          当前种子: {currentProviderTrack.title} · {currentProviderTrack.artist}
+        <p className="mt-1 truncate text-xs text-foreground-muted">
+          当前种子: {currentProviderTrack.title} - {currentProviderTrack.artist}
         </p>
       ) : null}
 
       {autopilot.nextTrack ? <RadioAutopilotNextTrackCard track={autopilot.nextTrack} /> : null}
 
       {message || autopilot.state.message ? (
-        <p className={`mt-1.5 text-[11px] leading-relaxed ${autopilot.state.kind === "paused" ? "text-amber-400" : "text-foreground-muted"}`} role="status">
+        <p className={`mt-1.5 text-xs leading-relaxed ${autopilot.state.kind === "paused" ? "text-amber-400" : "text-foreground-muted"}`} role="status">
           {message || autopilot.state.message}
         </p>
       ) : null}
@@ -595,7 +595,7 @@ function HostBroadcastDesk(props: RoomDashboardViewProps) {
           </span>
           <h2 className="text-xs sm:text-sm font-bold text-foreground tracking-tight">电台搜歌与曲目导入</h2>
         </div>
-        <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-bold text-emerald-400">
+        <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-xs font-bold text-emerald-400">
           LIVE ON AIR
         </span>
       </div>
@@ -684,21 +684,27 @@ function HostBroadcastDesk(props: RoomDashboardViewProps) {
 
 function RadioAutopilotNextTrackCard({ track }: { track: RadioAutopilotNextTrack }) {
   return (
-    <article className="mt-1.5 flex min-w-0 items-center gap-2 rounded-lg border border-surface-border/60 bg-surface/60 p-2 shadow-xs" data-testid="radio-autopilot-next-track">
+    <article className="mt-1.5 flex min-w-0 items-center gap-2.5 rounded-lg border border-surface-border bg-surface/60 p-2" data-testid="radio-autopilot-next-track">
       {track.artworkUrl ? (
-        <img loading="lazy" alt="" className="h-9 w-9 shrink-0 rounded-md border border-surface-border/60 object-cover shadow-xs" src={track.artworkUrl} />
+        <img loading="lazy" alt="" className="h-10 w-10 shrink-0 rounded-md border border-surface-border object-cover" src={track.artworkUrl} />
       ) : (
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-surface-border/60 bg-surface text-[10px] text-foreground-muted">音乐</span>
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-surface-border bg-surface text-xs text-foreground-muted">音乐</span>
       )}
       <div className="min-w-0 flex-1">
-        <p className="text-[10px] font-bold text-foreground-muted uppercase tracking-wider">下一首自动续播</p>
-        <p className="mt-0.5 truncate text-xs font-semibold text-foreground" title={track.title}>{track.title}</p>
-        <p className="mt-0.5 truncate text-[11px] text-foreground-muted" title={`${track.artist} · ${track.album ?? "未标注专辑"}`}>
-          {track.artist} · {track.album ?? "未标注专辑"}
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-foreground-muted">自动续播</span>
+          <span className="truncate text-xs font-semibold text-foreground" title={track.title}>{track.title}</span>
+        </div>
+        <p className="mt-0.5 flex items-center gap-2 truncate text-xs text-foreground-muted">
+          <span>{track.artist}</span>
+          <span className="text-foreground-muted/60">{track.album ?? "未标注专辑"}</span>
         </p>
-        <p className="text-[10px] text-foreground-muted/70">{formatDuration(track.durationMs)} · {track.provider === "netease" ? "网易云音乐" : "QQ 音乐"}</p>
+        <p className="mt-0.5 flex items-center gap-2 text-xs text-foreground-muted/80">
+          <span>{formatDuration(track.durationMs)}</span>
+          <span>{track.provider === "netease" ? "网易云音乐" : "QQ 音乐"}</span>
+        </p>
       </div>
-      <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold border ${track.preloadStatus === "ready" ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-400" : "border-surface-border bg-surface text-foreground-muted"}`}>
+      <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium border ${track.preloadStatus === "ready" ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-400" : "border-surface-border bg-surface text-foreground-muted"}`}>
         {track.preloadStatus === "ready" ? "已预加载" : "预加载中"}
       </span>
     </article>

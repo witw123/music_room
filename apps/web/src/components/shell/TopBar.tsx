@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { memo } from "react";
 import type { AuthSession } from "@soqaro/shared";
@@ -26,7 +26,7 @@ function TopBarBase({ activeSession, onLogout, variant = "app" }: TopBarProps) {
           </div>
           <div className="min-w-0 leading-none">
             <span className="block truncate text-sm font-bold tracking-tight text-foreground">Soqaro</span>
-            <span className="hidden text-[11px] text-foreground-muted sm:block">实时协作听歌空间</span>
+            <span className="hidden text-xs text-foreground-muted sm:block">实时协作听歌空间</span>
           </div>
         </div>
 

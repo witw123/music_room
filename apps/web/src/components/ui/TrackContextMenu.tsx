@@ -58,7 +58,7 @@ export function TrackContextMenu({
           <div className="border-b border-surface-border/50 px-2.5 py-1.5 mb-1">
             <p className="truncate text-xs font-semibold text-foreground">{title}</p>
             {subtitle ? (
-              <p className="truncate text-[10px] text-foreground-muted mt-0.5">{subtitle}</p>
+              <p className="truncate text-xs text-foreground-muted mt-0.5">{subtitle}</p>
             ) : null}
           </div>
         ) : null}

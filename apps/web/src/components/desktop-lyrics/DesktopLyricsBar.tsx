@@ -348,7 +348,7 @@ export function DesktopLyricsBar({
           <span className="truncate text-xs md:text-sm font-bold text-white max-w-[8.5rem] md:max-w-[11rem]">
             {title || "等待选择歌曲"}
           </span>
-          <div className="mt-0.5 flex items-center gap-1.5 text-[10px] md:text-[11px] text-white/75 truncate max-w-[8.5rem] md:max-w-[11rem]">
+          <div className="mt-0.5 flex items-center gap-1.5 text-xs text-white/75 truncate max-w-[8.5rem] md:max-w-[11rem]">
             {artist ? <span className="truncate">{artist}</span> : null}
             <span className="shrink-0 tabular-nums text-white/50 font-medium">
               <span>{formatDuration(smoothPositionMs)}</span>
@@ -478,7 +478,7 @@ export function DesktopLyricsBar({
           {translatedLines.length > 0 && onToggleTranslation ? (
             <button
               aria-label="切换翻译"
-              className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-[11px] font-semibold border transition cursor-pointer ${
+              className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-semibold border-[0.5px] transition cursor-pointer ${
                 showTranslation
                   ? "border-white/35 bg-white/20 text-white shadow-xs"
                   : "border-white/10 bg-black/20 text-white/70 hover:bg-white/15 hover:text-white"
@@ -495,7 +495,7 @@ export function DesktopLyricsBar({
           {romanizedLines.length > 0 && onToggleRomanized ? (
             <button
               aria-label="切换罗马音"
-              className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-[11px] font-semibold border transition cursor-pointer ${
+              className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-semibold border-[0.5px] transition cursor-pointer ${
                 showRomanized
                   ? "border-white/35 bg-white/20 text-white shadow-xs"
                   : "border-white/10 bg-black/20 text-white/70 hover:bg-white/15 hover:text-white"

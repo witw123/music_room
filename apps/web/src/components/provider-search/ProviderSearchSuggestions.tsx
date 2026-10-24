@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import type { ProviderSearchSuggestion } from "@soqaro/shared";
 
@@ -47,7 +47,7 @@ export function SearchSuggestions({
         >
           <span className="shrink-0 text-foreground-muted/60"><SearchIcon /></span>
           <span className="min-w-0 flex-1 truncate">{item.label}</span>
-          <span className="flex shrink-0 items-center gap-1.5 text-[10px]">
+          <span className="flex shrink-0 items-center gap-1.5 text-xs">
             {item.provider ? <span className="rounded-full bg-accent/10 px-2 py-0.5 text-accent font-medium">{providerLabel(item.provider)}</span> : null}
             {item.hint ? <span className="text-foreground-muted/80">{item.hint}</span> : null}
           </span>

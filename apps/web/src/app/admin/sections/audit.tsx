@@ -6,9 +6,9 @@ export function Audit({ rows }: { rows: AuditRow[] }) {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xs font-semibold text-foreground">管理审计</h2>
-          <p className="text-[11px] text-foreground-muted">操作历史与执行结果记录</p>
+          <p className="text-xs text-foreground-muted">操作历史与执行结果记录</p>
         </div>
-        <span className="text-[11px] font-mono text-foreground-muted">{rows.length} 条结果</span>
+        <span className="text-xs font-mono text-foreground-muted">{rows.length} 条结果</span>
       </div>
 
       <div className="overflow-x-auto rounded-lg border border-surface-border bg-surface">

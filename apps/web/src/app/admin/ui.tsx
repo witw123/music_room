@@ -53,10 +53,10 @@ export function Icon({ name, size = 16, className = "" }: { name: IconName; size
 export function Metric({ label, value, meta, color, width }: { label: string; value: number; meta: string; color: string; width: string }) {
   return (
     <div className="rounded-lg border border-surface-border bg-surface p-3.5 flex flex-col gap-1.5">
-      <div className="text-[11px] font-mono uppercase text-foreground-muted">{label}</div>
+      <div className="text-xs font-mono text-foreground-muted">{label}</div>
       <div className="flex items-baseline justify-between">
         <strong className="text-lg font-semibold tracking-tight">{value}</strong>
-        <span className="text-[11px] text-foreground-muted">{meta}</span>
+        <span className="text-xs text-foreground-muted">{meta}</span>
       </div>
       <div className="h-1 w-full bg-surface-border/40 rounded-full overflow-hidden mt-1">
         <div className="h-full rounded-full transition-all duration-300" style={{ width, backgroundColor: color }} />
@@ -70,7 +70,7 @@ export function PanelHeader({ title, hint, action }: { title: string; hint?: str
     <div className="p-3.5 border-b border-surface-border flex items-center justify-between">
       <div className="flex items-baseline gap-2">
         <div className="text-xs font-semibold text-foreground tracking-tight">{title}</div>
-        {hint ? <div className="text-[11px] text-foreground-muted">{hint}</div> : null}
+        {hint ? <div className="text-xs text-foreground-muted">{hint}</div> : null}
       </div>
       {action}
     </div>
@@ -143,7 +143,7 @@ export function SystemHealth({ overview }: { overview: AdminOverview | null }) {
           color="#3b82f6"
         />
       </div>
-      <p className="px-3.5 pb-3 text-[11px] text-foreground-muted border-t border-surface-border/40 pt-2.5">
+      <p className="px-3.5 pb-3 text-xs text-foreground-muted border-t border-surface-border/40 pt-2.5">
         数据来自控制台心跳与最近一次 Redis 在线状态采样。
       </p>
     </div>
@@ -180,12 +180,12 @@ export function IncidentPanel({ rows }: { rows: AdminIncident[] }) {
                 />
                 <div className="truncate">
                   <div className="font-medium text-foreground truncate">{row.type}</div>
-                  <div className="text-[11px] text-foreground-muted truncate">
+                  <div className="text-xs text-foreground-muted truncate">
                     {translateScope(row.scopeType)}：{row.scopeId ?? "全局"}
                   </div>
                 </div>
               </div>
-              <span className="font-mono text-[11px] text-foreground-muted shrink-0">
+              <span className="font-mono text-xs text-foreground-muted shrink-0">
                 {formatTime(row.lastSeenAt)}
               </span>
             </div>
@@ -208,11 +208,11 @@ export function AuditPanel({ rows }: { rows: AuditRow[] }) {
             <div key={row.id} className="p-3 flex items-center justify-between gap-3 text-xs">
               <div className="truncate">
                 <div className="font-medium text-foreground">{translateAction(row.action)}</div>
-                <div className="text-[11px] text-foreground-muted truncate">
-                  {translateScope(row.targetType)}：{row.targetId ?? "-"} · {translateResult(row.result)}
+                <div className="text-xs text-foreground-muted truncate">
+                  {translateScope(row.targetType)}：{row.targetId ?? "-"} / {translateResult(row.result)}
                 </div>
               </div>
-              <span className="font-mono text-[11px] text-foreground-muted shrink-0">
+              <span className="font-mono text-xs text-foreground-muted shrink-0">
                 {formatTime(row.createdAt)}
               </span>
             </div>
@@ -228,12 +228,12 @@ export function AuditPanel({ rows }: { rows: AuditRow[] }) {
 export function UserCell({ user }: { user: AdminUserSummary }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="w-6 h-6 rounded-full bg-surface-border/50 text-foreground text-[10px] font-medium flex items-center justify-center shrink-0">
+      <span className="w-6 h-6 rounded-full bg-surface-border/50 text-foreground text-xs font-medium flex items-center justify-center shrink-0">
         {user.nickname.slice(0, 1).toUpperCase()}
       </span>
       <div>
         <div className="font-medium text-foreground">{user.nickname}</div>
-        <div className="text-[11px] font-mono text-foreground-muted">{user.username}</div>
+        <div className="text-xs font-mono text-foreground-muted">{user.username}</div>
       </div>
     </div>
   );

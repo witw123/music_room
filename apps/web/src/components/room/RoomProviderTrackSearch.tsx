@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 /* eslint-disable @next/next/no-img-element */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -457,18 +457,18 @@ export function RoomProviderTrackSearch({
           })}
         </div>
         {provider === "bilibili" ? (
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-pink-500/20 bg-pink-500/10 px-2 py-0.5 text-[10px] font-medium text-pink-300">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-pink-500/20 bg-pink-500/10 px-2 py-0.5 text-xs font-medium text-pink-300">
             <span className="h-1.5 w-1.5 rounded-full bg-pink-400" />
-            <span>免登录 · 公开检索</span>
+            <span>免登录公开检索</span>
           </span>
         ) : isConnected ? (
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-300">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span>已连接{account?.nickname ? ` · ${account.nickname}` : ""}</span>
+            <span>已连接{account?.nickname ? ` (${account.nickname})` : ""}</span>
           </span>
         ) : (
-          <Link className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-400/90 hover:underline hover:text-amber-300" href="/app/profile">
-            <span>访客检索 · 绑定解锁完整曲库</span>
+          <Link className="inline-flex items-center gap-1 text-xs font-medium text-amber-400/90 hover:underline hover:text-amber-300" href="/app/profile">
+            <span>访客检索 / 绑定解锁曲库</span>
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
           </Link>
         )}
@@ -529,7 +529,7 @@ export function RoomProviderTrackSearch({
 
       {!keywords.trim() && hotPills.length > 0 && results.length === 0 && !bilibiliPartDetail ? (
         <div className="flex flex-wrap items-center gap-1.5 pt-1">
-          <span className="text-[11px] text-foreground-muted/60">热门搜索:</span>
+          <span className="text-xs text-foreground-muted/60">热门搜索:</span>
           {hotPills.map((pill) => (
             <button
               key={pill.label}
@@ -540,7 +540,7 @@ export function RoomProviderTrackSearch({
                 setSearchSuggestionsOpen(false);
                 void searchTracks(pill.label);
               }}
-              className="rounded-full border border-surface-border/60 bg-surface/60 px-2.5 py-0.5 text-[11px] text-foreground-muted transition-colors hover:border-accent/40 hover:bg-accent/10 hover:text-accent"
+              className="rounded-full border border-surface-border/60 bg-surface/60 px-2.5 py-0.5 text-xs text-foreground-muted transition-colors hover:border-accent/40 hover:bg-accent/10 hover:text-accent"
             >
               {pill.label}
             </button>
@@ -566,7 +566,7 @@ export function RoomProviderTrackSearch({
               <span className="truncate text-xs font-medium text-foreground" title={bilibiliPartDetail.title}>
                 {bilibiliPartDetail.title}
               </span>
-              <span className="shrink-0 rounded bg-pink-500/15 px-1.5 py-0.5 text-[10px] font-medium text-pink-400">
+              <span className="shrink-0 rounded bg-pink-500/15 px-1.5 py-0.5 text-xs font-medium text-pink-400">
                 共 {bilibiliPartDetail.parts.length} P
               </span>
               {isManagedImport && canManageLibrary && (onImportBilibiliTracks || onImportBilibiliTrack) && bilibiliPartDetail.parts.length > 1 ? (
@@ -600,9 +600,8 @@ export function RoomProviderTrackSearch({
                     <p className="truncate text-xs font-medium text-foreground" title={part.title}>
                       {part.title}
                     </p>
-                    <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-foreground-muted/70">
+                    <div className="mt-0.5 flex items-center gap-2 text-xs text-foreground-muted/70">
                       <span className="font-mono">{formatDuration(part.durationMs)}</span>
-                      <span>·</span>
                       <span className="truncate">{part.artist || bilibiliPartDetail.artist}</span>
                     </div>
                   </div>
@@ -631,7 +630,7 @@ export function RoomProviderTrackSearch({
             <div className="flex flex-col gap-2 rounded-lg border border-surface-border/60 bg-surface/40 p-2.5">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-foreground">音乐合集 / 歌单</span>
-                <span className="text-[10px] text-foreground-muted">{bilibiliCollections.length} 个合集</span>
+                <span className="text-xs text-foreground-muted">{bilibiliCollections.length} 个合集</span>
               </div>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {bilibiliCollections.map((item) => {
@@ -658,14 +657,14 @@ export function RoomProviderTrackSearch({
                           ) : (
                             <div className="flex h-full w-full items-center justify-center text-xs text-foreground-muted">歌单</div>
                           )}
-                          <span className="absolute bottom-1 right-1 rounded bg-black/60 px-1 py-0.5 text-[9px] font-mono text-white/90 backdrop-blur-xs">
+                          <span className="absolute bottom-1 right-1 rounded bg-black/60 px-1 py-0.5 text-xs font-mono text-white/90 backdrop-blur-xs">
                             {item.trackCount} 首
                           </span>
                         </div>
                         <p className="mt-1.5 line-clamp-1 text-xs font-medium text-foreground group-hover:text-accent transition-colors" title={item.title}>
                           {item.title}
                         </p>
-                        <p className="truncate text-[10px] text-foreground-muted">
+                        <p className="truncate text-xs text-foreground-muted">
                           {item.creatorName ?? "合集"}
                         </p>
                       </button>
@@ -674,7 +673,7 @@ export function RoomProviderTrackSearch({
                           type="button"
                           disabled={isCollPending}
                           onClick={() => void handleOpenCollection(item)}
-                          className="text-[10px] text-foreground-muted hover:text-accent font-medium transition-colors"
+                          className="text-xs text-foreground-muted hover:text-accent font-medium transition-colors"
                         >
                           {pending === `coll:${item.providerPlaylistId}` ? "加载中…" : "查看单曲"}
                         </button>
@@ -683,7 +682,7 @@ export function RoomProviderTrackSearch({
                             type="button"
                             disabled={isCollPending}
                             onClick={() => void handleImportCollectionDirectly(item)}
-                            className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-accent bg-accent/10 hover:bg-accent hover:text-white transition-colors disabled:opacity-50"
+                            className="rounded px-1.5 py-0.5 text-xs font-semibold text-accent bg-accent/10 hover:bg-accent hover:text-white transition-colors disabled:opacity-50"
                           >
                             {isCollImporting ? "导入中…" : "加入曲库"}
                           </button>
@@ -701,7 +700,7 @@ export function RoomProviderTrackSearch({
               {provider === "bilibili" && bilibiliCollections.length > 0 ? (
                 <div className="flex items-center justify-between pt-1">
                   <span className="text-xs font-semibold text-foreground">单曲列表</span>
-                  <span className="text-[10px] text-foreground-muted">{results.length} 首单曲</span>
+                  <span className="text-xs text-foreground-muted">{results.length} 首单曲</span>
                 </div>
               ) : null}
               <div className="divide-y divide-surface-border/40 overflow-hidden rounded-lg border border-surface-border/60 bg-surface/50">
@@ -729,7 +728,7 @@ export function RoomProviderTrackSearch({
                   }}
                 />
               ) : (
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-surface-border/60 bg-surface text-[10px] text-foreground-muted">音乐</span>
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-surface-border/60 bg-surface text-xs text-foreground-muted">音乐</span>
               )}
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5 min-w-0">
@@ -743,7 +742,7 @@ export function RoomProviderTrackSearch({
                         void handleOpenBilibiliParts(track);
                       }}
                       title="点击展开分P列表"
-                      className="inline-flex shrink-0 items-center gap-1 rounded bg-pink-500/15 px-1.5 py-0.5 text-[10px] font-medium text-pink-400 hover:bg-pink-500/25 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+                      className="inline-flex shrink-0 items-center gap-1 rounded bg-pink-500/15 px-1.5 py-0.5 text-xs font-medium text-pink-400 hover:bg-pink-500/25 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
                     >
                       <span>
                         {typeof bilibiliTrack.pageCount === "number" && bilibiliTrack.pageCount > 1
@@ -754,12 +753,11 @@ export function RoomProviderTrackSearch({
                     </button>
                   ) : null}
                 </div>
-                <p className="mt-0.5 truncate text-[11px] text-foreground-muted" title={`${track.artist}${track.album ? ` · ${track.album}` : ""}`}>
-                  {track.artist}{track.album ? ` · ${track.album}` : ""}
+                <p className="mt-0.5 truncate text-xs text-foreground-muted" title={`${track.artist}${track.album ? ` / ${track.album}` : ""}`}>
+                  {track.artist}{track.album ? ` / ${track.album}` : ""}
                 </p>
-                <div className="mt-0.5 flex items-center gap-2 text-[10px] text-foreground-muted/70">
+                <div className="mt-0.5 flex items-center gap-2 text-xs text-foreground-muted/70">
                   <span className="font-mono">{formatDuration(track.durationMs)}</span>
-                  <span>·</span>
                   <span className="capitalize">{track.provider === "netease" ? "网易云" : track.provider === "qqmusic" ? "QQ 音乐" : "哔哩哔哩"}</span>
                 </div>
               </div>

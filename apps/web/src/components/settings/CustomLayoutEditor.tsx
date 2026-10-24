@@ -228,7 +228,7 @@ export function CustomLayoutEditor({ value, onApply, onReset, onClose }: CustomL
           </span>
           <div className="min-w-0">
             <h2 className="truncate text-sm font-semibold">自定义界面</h2>
-            <p className="truncate text-[11px] text-foreground-muted">编辑 {customLayoutPageLabels[pageId]} 的桌面布局</p>
+            <p className="truncate text-xs text-foreground-muted">编辑 {customLayoutPageLabels[pageId]} 的桌面布局</p>
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -256,7 +256,7 @@ export function CustomLayoutEditor({ value, onApply, onReset, onClose }: CustomL
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
         <aside className="flex shrink-0 gap-1 overflow-x-auto border-b border-surface-border px-3 py-2 lg:w-44 lg:flex-col lg:overflow-y-auto lg:border-b-0 lg:border-r lg:px-2 lg:py-4">
-          <p className="hidden px-2 pb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground-muted lg:block">页面</p>
+          <p className="hidden px-2 pb-2 text-xs font-medium text-foreground-muted lg:block">页面</p>
           {customLayoutPageIds.map((item) => (
             <button
               aria-current={pageId === item ? "page" : undefined}
@@ -273,9 +273,9 @@ export function CustomLayoutEditor({ value, onApply, onReset, onClose }: CustomL
         <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto px-3 py-4 sm:px-6 sm:py-6">
           <div className="mx-auto flex w-full max-w-[1120px] min-w-[720px] flex-1 flex-col justify-center gap-4">
             <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-[11px] text-foreground-muted">
+              <div className="flex items-center gap-2 text-xs text-foreground-muted">
                 <GridIcon />
-                <span>网格吸附 · 1440 × 900</span>
+                <span>网格吸附 / 1440 × 900</span>
               </div>
             </div>
             <div
@@ -312,9 +312,9 @@ export function CustomLayoutEditor({ value, onApply, onReset, onClose }: CustomL
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
               <h3 className="text-xs font-semibold">组件</h3>
-              <p className="mt-1 text-[11px] text-foreground-muted">当前页布局</p>
+              <p className="mt-1 text-xs text-foreground-muted">当前页布局</p>
             </div>
-            <span className="text-[10px] tabular-nums text-foreground-muted">{availableItemIds.length}</span>
+            <span className="text-xs tabular-nums text-foreground-muted">{availableItemIds.length}</span>
           </div>
           <div className="space-y-2">
             {availableItemIds.map((itemId) => {
@@ -324,7 +324,7 @@ export function CustomLayoutEditor({ value, onApply, onReset, onClose }: CustomL
                 <button className="flex w-full min-w-0 items-center gap-2 text-left" onClick={() => setSelectedItemId(itemId)} type="button">
                   <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: itemColors[itemId] }} />
                   <span className={`min-w-0 flex-1 truncate text-xs font-medium ${item.visible ? "text-foreground" : "text-foreground-muted line-through"}`}>{customLayoutItemLabels[itemId]}</span>
-                  <span className="text-[10px] tabular-nums text-foreground-muted">{item.width} × {item.height}</span>
+                  <span className="text-xs tabular-nums text-foreground-muted">{item.width} × {item.height}</span>
                 </button>
                 <div className="mt-2 flex items-center justify-end gap-1">
                   <button aria-label={`${item.visible ? "隐藏" : "显示"}${customLayoutItemLabels[itemId]}`} className="flex h-8 w-8 items-center justify-center rounded-lg text-foreground-muted transition hover:bg-surface-hover hover:text-foreground" onClick={() => updateSelectedItem(itemId, { visible: !item.visible })} title={item.visible ? "隐藏" : "显示"} type="button">
@@ -344,13 +344,13 @@ export function CustomLayoutEditor({ value, onApply, onReset, onClose }: CustomL
                 <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: itemColors[selectedItemId] }} />
                 <h3 className="text-xs font-semibold">{customLayoutItemLabels[selectedItemId]}</h3>
               </div>
-              <div className="grid grid-cols-2 gap-2 text-[11px] text-foreground-muted">
+              <div className="grid grid-cols-2 gap-2 text-xs text-foreground-muted">
                 <Metric label="横坐标" value={selectedItem.x} />
                 <Metric label="纵坐标" value={selectedItem.y} />
                 <Metric label="宽度" value={selectedItem.width} />
                 <Metric label="高度" value={selectedItem.height} />
               </div>
-              <p className="mt-3 text-[10px] leading-4 text-foreground-muted">{selectedItem.locked ? "组件已锁定" : "组件可编辑"}</p>
+              <p className="mt-3 text-xs leading-4 text-foreground-muted">{selectedItem.locked ? "组件已锁定" : "组件可编辑"}</p>
             </div>
           ) : null}
         </aside>
@@ -376,7 +376,7 @@ function LayoutCanvasItem({
   return (
     <div
       aria-label={customLayoutItemLabels[itemId]}
-      className={`absolute select-none overflow-visible rounded-lg border text-[10px] font-semibold shadow-lg transition-[box-shadow,opacity] ${selected ? "z-20 shadow-[0_0_0_2px_var(--accent),0_12px_30px_rgba(0,0,0,0.25)]" : "z-10"} ${item.visible ? "opacity-100" : "opacity-35"}`}
+      className={`absolute select-none overflow-visible rounded-lg border text-xs font-semibold shadow-lg transition-[box-shadow,opacity] ${selected ? "z-20 shadow-[0_0_0_2px_var(--accent),0_12px_30px_rgba(0,0,0,0.25)]" : "z-10"} ${item.visible ? "opacity-100" : "opacity-35"}`}
       onPointerDown={(event) => onPointerDown(event, itemId, "move")}
       style={{
         backgroundColor: `color-mix(in srgb, ${color} 18%, var(--background-secondary))`,
@@ -416,7 +416,7 @@ function LayoutCanvasItem({
 function Metric({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-lg border border-surface-border bg-background-secondary/55 px-2.5 py-2">
-      <span className="block text-[10px]">{label}</span>
+      <span className="block text-xs">{label}</span>
       <span className="mt-1 block tabular-nums text-foreground">{value}</span>
     </div>
   );

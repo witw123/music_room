@@ -279,7 +279,7 @@ export const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(function S
               handleSubmit();
             }}
             className={`inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-accent/40 bg-accent px-3.5 text-xs font-semibold text-white shadow-sm transition-all hover:bg-accent-hover hover:border-accent active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40 ${
-              size === "sm" ? "h-8 text-[11px]" : "h-9 sm:h-10 text-xs"
+              size === "sm" ? "h-8 text-xs" : "h-9 sm:h-10 text-xs"
             } ${!hasContent ? "opacity-50" : ""}`}
           >
             {loading ? (

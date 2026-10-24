@@ -1,4 +1,4 @@
-﻿import React from "react";
+import React from "react";
 import type { ProviderAlbumDetail, ProviderAlbumSummary } from "@soqaro/shared";
 import { ProviderAlbumDetailView, type ProviderAlbumTrackActions } from "./ProviderAlbumDetailView";
 import type { AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
@@ -62,7 +62,7 @@ export function AlbumsContent({
                   <span className="mt-2 block truncate text-xs sm:text-sm font-semibold text-white/85 group-hover:text-accent transition-colors" title={item.title}>
                     {item.title}
                   </span>
-                  <span className="mt-0.5 block truncate text-[11px] text-white/40">{item.artist}</span>
+                  <span className="mt-0.5 block truncate text-xs text-white/40">{item.artist}</span>
                 </button>
                 <button
                   aria-label={favoriteAlbumIds.has(favoriteId) ? `取消收藏${item.title}` : `收藏${item.title}`}

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -557,10 +557,7 @@ export function DiscoverPage() {
         {!isSearchActive ? (
           <header className="mb-3 hidden md:flex items-end justify-between">
             <div>
-              <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground-muted/70">
-                Discover
-              </span>
-              <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-foreground mt-0.5">
+              <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-foreground">
                 发现
               </h1>
             </div>
@@ -571,9 +568,6 @@ export function DiscoverPage() {
         {!isSearchActive ? (
           <header className="mb-2.5 flex items-center justify-between md:hidden">
             <div>
-              <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground-muted/70">
-                Discover
-              </span>
               <h1 className="text-lg font-semibold tracking-tight text-foreground">
                 发现
               </h1>
@@ -612,7 +606,7 @@ export function DiscoverPage() {
                     key={pill.id}
                     type="button"
                     onClick={() => setActiveFilterId(pill.id)}
-                    className={`inline-flex items-center h-7 px-3 rounded-full text-[11px] font-medium whitespace-nowrap transition-all duration-150 cursor-pointer select-none ${
+                    className={`inline-flex items-center h-7 px-3 rounded-full text-xs font-medium whitespace-nowrap transition-all duration-150 cursor-pointer select-none ${
                       active
                         ? "bg-accent/15 text-accent border border-accent/35 font-semibold"
                         : "bg-surface/80 border border-surface-border text-foreground-muted hover:text-foreground hover:bg-surface-hover/80"
@@ -625,7 +619,7 @@ export function DiscoverPage() {
               <button
                 type="button"
                 onClick={() => setShowColdStartDialog(true)}
-                className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[11px] font-medium text-foreground-muted hover:text-foreground bg-surface/80 hover:bg-surface-hover/80 border border-surface-border ml-auto shrink-0 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-xs font-medium text-foreground-muted hover:text-foreground bg-surface/80 hover:bg-surface-hover/80 border border-surface-border ml-auto shrink-0 transition-colors cursor-pointer"
                 title="偏好设置"
               >
                 <SlidersIcon className="w-3.5 h-3.5 text-foreground-muted" />
@@ -693,7 +687,6 @@ export function DiscoverPage() {
             {/* Section 1: Daily Mix */}
             {dailyMixCards.length && activeFilterId === "all" ? (
               <DiscoverSection
-                eyebrow="FOR YOU"
                 title="专为你推荐"
                 subtitle="根据近期聆听生成"
               >
@@ -718,7 +711,6 @@ export function DiscoverPage() {
             {/* Section 4: Contextual Attribution - Inspired By Top Artist */}
             {inspiredTracks.length > 0 && topArtist && activeFilterId === "all" ? (
               <DiscoverSection
-                eyebrow="INSPIRATION"
                 title={`来自 ${topArtist} 的相关推荐`}
               >
                 <div className="rounded-xl">
@@ -734,7 +726,6 @@ export function DiscoverPage() {
             {/* Section 5: Deep Cuts */}
             {deepCutTracks.length > 0 && activeFilterId === "all" ? (
               <DiscoverSection
-                eyebrow="DISCOVERY"
                 title="单曲精选"
                 subtitle="值得细品的小众与慢热佳作"
               >
@@ -751,7 +742,6 @@ export function DiscoverPage() {
             {/* Section 6: Playlists */}
             {otherPlaylists.length ? (
               <DiscoverSection
-                eyebrow="PLAYLISTS"
                 title={activeFilterId === "all" ? "精选歌单" : `${activeFilter?.label ?? ""}歌单`}
               >
                 <DiscoverPlaylistRail items={otherPlaylists} loadingKey={detailLoading} onOpen={openPlaylist} onPlay={playPlaylistCard} />

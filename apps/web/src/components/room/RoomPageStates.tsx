@@ -16,9 +16,6 @@ export function RoomTransitionState({
       <div className="mb-6 h-16 w-16 rounded-full border border-surface-border bg-surface flex items-center justify-center text-accent">
         <div className="h-7 w-7 animate-spin rounded-full border-2 border-accent border-t-transparent" />
       </div>
-      <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-foreground-muted">
-        Room transition
-      </p>
       <h2 className="mb-3 text-2xl font-bold text-foreground">
         {isNavigatingRoomExit ? "正在离开房间" : "正在连接房间"}
       </h2>
@@ -52,9 +49,6 @@ export function EmptyRoomState({
           <polyline points="9 22 9 12 15 12 15 22" />
         </svg>
       </div>
-      <p className="text-[10px] uppercase font-bold tracking-[0.2em] text-foreground-muted mb-3">
-        Room page
-      </p>
       <h2 className="text-2xl font-bold text-foreground mb-4">当前没有可用的房间</h2>
       <p className="text-sm text-foreground-muted max-w-sm mb-8 leading-relaxed">
         {activeSession

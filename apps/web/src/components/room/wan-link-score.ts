@@ -1,4 +1,4 @@
-﻿import type { PeerDiagnosticsSnapshot } from "@soqaro/shared";
+import type { PeerDiagnosticsSnapshot } from "@soqaro/shared";
 import {
   resolvePeerLinkProfile,
   type PeerLinkProfile,
@@ -87,13 +87,7 @@ export function resolveWanPathLabel(input: {
   const kind =
     input.profile === "relay-udp" || candidate === "relay"
       ? "中继"
-      : candidate === "host"
-        ? "直连·host"
-        : candidate === "srflx"
-          ? "直连·srflx"
-          : candidate === "prflx"
-            ? "直连·prflx"
-            : "直连";
+      : "直连";
   return `${kind} (${candidate}/${protocol})`;
 }
 

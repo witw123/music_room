@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useRef, useState } from "react";
 import type { ColdStartTasteDimension } from "@soqaro/shared";
@@ -176,8 +176,8 @@ export function TasteColdStartDialog({
               <div key={group.id}>
                 <div className="flex items-baseline gap-2 mb-2">
                   <GroupIcon className="w-3.5 h-3.5 text-accent shrink-0 self-center" />
-                  <span className="text-xs font-semibold text-foreground uppercase tracking-wider">{group.label}</span>
-                  <span className="text-[11px] text-foreground-muted/70 truncate">{group.description}</span>
+                  <span className="text-xs font-semibold text-foreground">{group.label}</span>
+                  <span className="text-xs text-foreground-muted/70 truncate">{group.description}</span>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {group.options.map((option) => {
@@ -189,7 +189,7 @@ export function TasteColdStartDialog({
                         type="button"
                         onClick={() => toggleLabel(option.label)}
                         disabled={!selectable}
-                        title={option.hint ? `${option.label} · ${option.hint}` : option.label}
+                        title={option.hint ? `${option.label} (${option.hint})` : option.label}
                         className={`inline-flex items-center gap-1 whitespace-nowrap h-7 px-2.5 rounded-md text-xs font-medium transition-colors ${
                           active
                             ? "bg-accent text-white shadow-xs font-semibold border border-transparent"
@@ -212,8 +212,8 @@ export function TasteColdStartDialog({
           <div>
             <div className="flex items-baseline gap-2 mb-2.5">
               <LandmarkIcon className="w-4 h-4 text-accent shrink-0 self-center" />
-              <span className="text-xs font-semibold text-foreground uppercase tracking-wider">常听艺人</span>
-              <span className="text-[11px] text-foreground-muted/70">可选，最多 {TASTE_ARTIST_LIMIT} 位</span>
+              <span className="text-xs font-semibold text-foreground">常听艺人</span>
+              <span className="text-xs text-foreground-muted/70">可选，最多 {TASTE_ARTIST_LIMIT} 位</span>
             </div>
             <div className="flex flex-wrap gap-2">
               {TASTE_POPULAR_ARTISTS.map((artist) => {
@@ -240,7 +240,7 @@ export function TasteColdStartDialog({
 
         {/* Footer actions */}
         <div className="shrink-0 flex flex-col-reverse items-stretch gap-2 border-t border-surface-border pt-4 mt-5 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:pt-5 sm:mt-5">
-          <div className="flex items-center gap-3 text-[11px] text-foreground-muted">
+          <div className="flex items-center gap-3 text-xs text-foreground-muted">
             <span className={atSelectionCap ? "text-amber-400" : ""}>已选 {selectedLabels.length}/{TASTE_SELECTION_LIMIT}</span>
             {hydrationNotice ? <span className="truncate">{hydrationNotice}</span> : <span className="hidden sm:inline">每个分类都对应可搜索的曲库，必然有歌曲</span>}
           </div>

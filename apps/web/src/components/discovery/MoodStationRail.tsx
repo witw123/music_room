@@ -14,42 +14,42 @@ export const moodStations = [
   {
     id: "night",
     title: "深夜",
-    subtitle: "R&B · 治愈慢调",
+    subtitle: "R&B 治愈慢调",
     keywords: ["夜听", "深夜", "治愈", "r&b", "soul", "放空"],
     icon: MoonIcon
   },
   {
     id: "focus",
     title: "专注",
-    subtitle: "器乐 · 沉浸思考",
+    subtitle: "器乐 沉浸思考",
     keywords: ["专注", "学习", "工作", "轻音乐", "纯音乐", "lo-fi", "chill", "钢琴"],
     icon: LaptopIcon
   },
   {
     id: "energy",
     title: "律动",
-    subtitle: "电子 · 节拍律动",
+    subtitle: "电子 节拍律动",
     keywords: ["电子", "edm", "摇滚", "rock", "舞曲", "能量"],
     icon: ZapIcon
   },
   {
     id: "morning",
     title: "清晨",
-    subtitle: "民谣 · 清新苏醒",
+    subtitle: "民谣 清新苏醒",
     keywords: ["民谣", "清新", "吉他", "流行", "晨光"],
     icon: MicIcon
   },
   {
     id: "acg",
     title: "ACG",
-    subtitle: "原声 · 日系流行",
+    subtitle: "原声 日系流行",
     keywords: ["acg", "anime", "二次元", "动漫", "游戏", "j-pop"],
     icon: SakuraIcon
   },
   {
     id: "guofeng",
     title: "国风",
-    subtitle: "民乐 · 古韵戏腔",
+    subtitle: "民乐 古韵戏腔",
     keywords: ["国风", "古风", "仙侠", "华语", "戏腔", "新中式"],
     icon: LandmarkIcon
   }
@@ -64,7 +64,6 @@ export function MoodStationRail({
 }) {
   return (
     <DiscoverSection
-      eyebrow="STATIONS"
       title="场景电台"
       subtitle="随时切入适合当前状态的流式旋律"
     >
@@ -93,10 +92,10 @@ export function MoodStationRail({
                 </span>
               </div>
               <div className="mt-1.5">
-                <p className="text-xs sm:text-[13px] font-semibold tracking-tight text-foreground transition-colors group-hover:text-accent">
+                <p className="text-xs sm:text-sm font-semibold tracking-tight text-foreground transition-colors group-hover:text-accent">
                   {station.title}
                 </p>
-                <p className="mt-0.5 text-[10px] sm:text-[11px] text-foreground-muted truncate">
+                <p className="mt-0.5 text-xs text-foreground-muted truncate">
                   {station.subtitle}
                 </p>
               </div>

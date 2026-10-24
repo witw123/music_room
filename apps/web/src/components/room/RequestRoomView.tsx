@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 /* eslint-disable @next/next/no-img-element */
 
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
@@ -739,7 +739,7 @@ function RequestInbox({
         <div className="flex items-center gap-1.5">
           <h2 className="font-bold text-foreground text-xs sm:text-sm">待审核点歌</h2>
           {pendingRequests.length > 0 ? (
-            <span className="rounded-full bg-amber-400/15 border border-amber-400/30 px-2 py-0.2 text-[10px] font-bold text-amber-400">
+            <span className="rounded-full bg-amber-400/15 border border-amber-400/30 px-2 py-0.2 text-xs font-bold text-amber-400">
               {pendingRequests.length}
             </span>
           ) : null}
@@ -772,7 +772,7 @@ function RequestInbox({
       )}
       {handledRequests.length ? (
         <div className="border-t border-surface-border/40 px-3 py-2 sm:px-3.5">
-          <p className="text-[10px] font-bold text-foreground-muted uppercase tracking-wider">最近处理记录</p>
+          <p className="text-xs font-medium text-foreground-muted">最近处理记录</p>
           <div className="mt-1.5 divide-y divide-surface-border/30">
             {handledRequests.slice(0, 4).map((request) => (
               <RequestHistoryRow key={request.id} request={request} />
@@ -798,14 +798,12 @@ function RequestTicket({
       <Artwork artworkUrl={request.artworkUrl} title={request.title} />
       <div className="min-w-0 flex-1">
         <p className="truncate text-xs sm:text-sm font-semibold text-foreground" title={request.title}>{request.title}</p>
-        <p className="mt-0.5 truncate text-[11px] text-foreground-muted" title={`${request.artist}${request.album ? ` · ${request.album}` : ""}`}>
-          {request.artist}{request.album ? ` · ${request.album}` : ""}
+        <p className="mt-0.5 truncate text-xs text-foreground-muted" title={`${request.artist}${request.album ? ` / ${request.album}` : ""}`}>
+          {request.artist}{request.album ? ` / ${request.album}` : ""}
         </p>
-        <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-foreground-muted/70">
+        <div className="mt-0.5 flex items-center gap-2 text-xs text-foreground-muted/70">
           <span className="font-medium text-accent">@{request.requesterName}</span>
-          <span>·</span>
           <span className="font-mono">{formatDuration(request.durationMs)}</span>
-          <span>·</span>
           <span className="capitalize">{request.provider === "netease" ? "网易云" : request.provider === "qqmusic" ? "QQ 音乐" : "Bilibili"}</span>
         </div>
       </div>
@@ -860,7 +858,7 @@ function RequestHistory({
     <section className="overflow-hidden rounded-xl border border-surface-border/60 bg-surface/50 backdrop-blur-xl shadow-xs">
       <div className="flex items-center justify-between px-3 py-2 sm:px-3.5">
         <h2 className="font-bold text-foreground text-xs sm:text-sm">{title}</h2>
-        <span className="text-[11px] font-mono text-foreground-muted">{requests.length} 次点歌记录</span>
+        <span className="text-xs font-mono text-foreground-muted">{requests.length} 次点歌记录</span>
       </div>
       {requests.length ? (
         <div className="divide-y divide-surface-border/40">
@@ -908,9 +906,9 @@ function RequestHistoryRow({
     <div className="flex min-w-0 items-center justify-between gap-2.5 px-3 py-2 sm:px-3.5">
       <div className="min-w-0 flex-1">
         <p className="truncate text-xs sm:text-sm font-semibold text-foreground">{request.title}</p>
-        <p className="truncate text-[11px] text-foreground-muted">{request.artist}</p>
+        <p className="truncate text-xs text-foreground-muted">{request.artist}</p>
       </div>
-      <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium border ${statusClass}`}>
+      <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium border ${statusClass}`}>
         {statusLabel}
       </span>
     </div>

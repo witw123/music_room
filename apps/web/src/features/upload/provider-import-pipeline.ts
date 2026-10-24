@@ -480,7 +480,7 @@ export async function importProviderTracks(input: {
           expectedDurationMs: candidate.durationMs,
           onProgress: ({ stage, completed, total }) => {
             const { stageLabel, percent } = mapAssetPreparationProgress(stage, completed, total);
-            input.setStatusMessage(`${index + 1} / ${pendingCandidates.length}《${candidate.title}》· ${stageLabel} ${percent}%`);
+            input.setStatusMessage(`${index + 1} / ${pendingCandidates.length} 《${candidate.title}》 ${stageLabel} ${percent}%`);
             importTaskStore.updateTaskProgress(taskId, {
               currentTitle: candidate.title,
               currentStage: stageLabel,

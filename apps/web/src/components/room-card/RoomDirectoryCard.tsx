@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 /* eslint-disable @next/next/no-img-element */
 
 import type { CSSProperties } from "react";
@@ -86,13 +86,13 @@ export function RoomDirectoryCard({ room: directoryItem, onOpen }: RoomDirectory
       >
         {/* Seamless Badges Over Cover: Room Type (Left) & Online Count (Right) with high contrast in both themes */}
         <div className="pointer-events-none absolute top-2 left-2.5 right-2.5 z-20 flex items-center justify-between gap-2">
-          <span className="inline-flex items-center gap-1.5 rounded-md bg-white/90 dark:bg-black/60 border border-black/5 dark:border-white/10 px-2 py-0.5 text-[11px] font-medium text-slate-800 dark:text-white/90 shadow-xs backdrop-blur-md">
+          <span className="inline-flex items-center gap-1.5 rounded-md bg-white/90 dark:bg-black/60 border border-black/5 dark:border-white/10 px-2 py-0.5 text-xs font-medium text-slate-800 dark:text-white/90 shadow-xs backdrop-blur-md">
             <span className="opacity-80">
               <RoomTypeGlyph roomType={room.roomType} />
             </span>
             {theme.label}
           </span>
-          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-white/90 dark:bg-black/60 border border-black/5 dark:border-white/10 px-2 py-0.5 text-[11px] font-mono tabular-nums text-slate-700 dark:text-white/90 shadow-xs backdrop-blur-md">
+          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-white/90 dark:bg-black/60 border border-black/5 dark:border-white/10 px-2 py-0.5 text-xs font-mono tabular-nums text-slate-700 dark:text-white/90 shadow-xs backdrop-blur-md">
             <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
             {room.directoryOnlineMemberCount} 人在线
           </span>
@@ -119,7 +119,7 @@ export function RoomDirectoryCard({ room: directoryItem, onOpen }: RoomDirectory
           <div className="flex items-center gap-1.5 min-w-0 flex-1 truncate text-xs">
             <span className="font-medium text-foreground truncate">{nowPlaying.title}</span>
             {nowPlaying.artist ? (
-              <span className="text-foreground-muted truncate shrink-0">· {nowPlaying.artist}</span>
+              <span className="text-foreground-muted truncate shrink-0">/ {nowPlaying.artist}</span>
             ) : null}
           </div>
         </div>

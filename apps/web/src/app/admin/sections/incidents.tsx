@@ -46,10 +46,10 @@ export function Incidents({ rows, onRefresh }: { rows: AdminIncident[]; onRefres
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xs font-semibold text-foreground">异常队列</h2>
-          <p className="text-[11px] text-foreground-muted">系统监测与故障闭环处置</p>
+          <p className="text-xs text-foreground-muted">系统监测与故障闭环处置</p>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-mono text-foreground-muted">{rows.length} 条结果（未处理 {openCount}）</span>
+          <span className="text-xs font-mono text-foreground-muted">{rows.length} 条结果（未处理 {openCount}）</span>
           {openCount > 0 ? (
             <button
               className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs text-emerald-400 hover:bg-emerald-500/20 transition-colors disabled:opacity-50"
@@ -107,7 +107,7 @@ export function Incidents({ rows, onRefresh }: { rows: AdminIncident[]; onRefres
                         {busyId === row.id ? "处理中..." : "标为已解决"}
                       </button>
                     ) : (
-                      <span className="text-[11px] text-foreground-muted">已闭环</span>
+                      <span className="text-xs text-foreground-muted">已闭环</span>
                     )}
                   </td>
                 </tr>

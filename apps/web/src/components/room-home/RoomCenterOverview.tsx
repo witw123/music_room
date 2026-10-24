@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import Link from "next/link";
@@ -158,7 +158,7 @@ function OwnedRoomCard({ snapshot }: { snapshot: RoomSnapshot }) {
         <span className="min-w-0 truncate font-semibold text-sm text-foreground group-hover:text-accent transition-colors">
           {room.name ?? "未命名房间"}
         </span>
-        <span className="shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full bg-surface-elevated text-foreground-muted">
+        <span className="shrink-0 text-xs font-medium px-2 py-0.5 rounded-full bg-surface-elevated text-foreground-muted">
           {roomTypeLabel(room.roomType)}
         </span>
       </div>
@@ -167,7 +167,7 @@ function OwnedRoomCard({ snapshot }: { snapshot: RoomSnapshot }) {
           <UsersIcon className="w-3 h-3 text-accent" />
           <span>{onlineCount} 人在线</span>
         </span>
-        <span className="text-foreground-muted font-mono text-[11px]">
+        <span className="text-foreground-muted font-mono text-xs">
           {room.playback.status === "playing" ? "▶ 播放中" : "已暂停"}
         </span>
       </div>
@@ -185,13 +185,13 @@ function RecentRoomCard({ room }: { room: RoomActivitySummary }) {
         <span className="min-w-0 truncate font-semibold text-sm text-foreground group-hover:text-accent transition-colors">
           {room.roomName}
         </span>
-        <span className="shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full bg-surface-elevated text-foreground-muted">
+        <span className="shrink-0 text-xs font-medium px-2 py-0.5 rounded-full bg-surface-elevated text-foreground-muted">
           {roomTypeLabel(room.roomType)}
         </span>
       </div>
       <div className="mt-3 flex items-center justify-between gap-3 text-xs text-foreground-muted">
         <span>{room.isActive ? "正在房间中" : "最近参与"}</span>
-        <span className="shrink-0 font-mono text-[11px] text-foreground-muted">{formatDuration(room.durationMs)}</span>
+        <span className="shrink-0 font-mono text-xs text-foreground-muted">{formatDuration(room.durationMs)}</span>
       </div>
     </Link>
   );

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { memo, useEffect, useRef, useState } from "react";
 import { Check, CheckSquare, Copy, GripVertical, Play, Plus, Save, Trash2 } from "lucide-react";
@@ -509,7 +509,7 @@ function TrackListSectionBase({
                 key={option.value}
                 aria-pressed={trackFilter === option.value}
                 data-testid={`library-filter-${option.value}`}
-                className={`flex min-w-0 whitespace-nowrap items-center justify-center gap-1 rounded-md px-1.5 py-1 text-[11px] font-medium transition-colors sm:px-2.5 cursor-pointer ${
+                className={`flex min-w-0 whitespace-nowrap items-center justify-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium transition-colors sm:px-2.5 cursor-pointer ${
                   trackFilter === option.value
                     ? "bg-surface-elevated text-foreground font-semibold shadow-2xs"
                     : "text-foreground-muted hover:bg-surface-hover/50 hover:text-foreground"
@@ -519,7 +519,7 @@ function TrackListSectionBase({
               >
                 <span className="truncate">{option.label}</span>
                 <span
-                  className={`font-mono text-[10px] ${
+                  className={`font-mono text-xs ${
                     trackFilter === option.value ? "text-accent font-semibold" : "text-foreground-muted/70"
                   }`}
                 >
@@ -534,7 +534,7 @@ function TrackListSectionBase({
               type="button"
               data-testid="library-batch-mode-toggle"
               aria-pressed={isSelectMode}
-              className={`flex shrink-0 items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-medium transition-colors cursor-pointer ${
+              className={`flex shrink-0 items-center gap-1 rounded-lg border px-2 py-1 text-xs font-medium transition-colors cursor-pointer ${
                 isSelectMode
                   ? "border-accent/40 bg-accent/10 text-accent font-semibold"
                   : "border-surface-border/60 bg-surface/60 text-foreground-muted hover:bg-surface-hover/50 hover:text-foreground"
@@ -561,7 +561,7 @@ function TrackListSectionBase({
                 type="button"
                 data-testid="library-batch-select-all"
                 onClick={toggleSelectAll}
-                className="flex items-center gap-1.5 text-[11px] font-medium text-foreground hover:text-accent transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 text-xs font-medium text-foreground hover:text-accent transition-colors cursor-pointer"
               >
                 <span
                   className={`inline-flex h-3.5 w-3.5 items-center justify-center rounded border transition-colors ${
@@ -580,7 +580,7 @@ function TrackListSectionBase({
                 </span>
                 <span>{areAllVisibleSelected ? "取消全选" : "全选当前"}</span>
               </button>
-              <span className="text-[11px] text-foreground-muted">
+              <span className="text-xs text-foreground-muted">
                 已选 <strong className="font-mono text-accent">{selectedTrackIds.size}</strong> 首
               </span>
             </div>
@@ -592,7 +592,7 @@ function TrackListSectionBase({
                 data-testid="library-batch-queue-button"
                 disabled={selectedTrackIds.size === 0 || !canAddToQueue || pendingAction !== null}
                 onClick={() => void handleBatchAddToQueue()}
-                className="h-6.5 px-2 text-[11px] text-foreground-muted hover:text-foreground hover:bg-surface-hover/80"
+                className="h-6.5 px-2 text-xs text-foreground-muted hover:text-foreground hover:bg-surface-hover/80"
                 title="将选中的歌曲加入播放队列"
               >
                 <Plus size={12} className="mr-1" />
@@ -606,7 +606,7 @@ function TrackListSectionBase({
                   data-testid="library-batch-save-button"
                   disabled={selectedTrackIds.size === 0 || pendingAction !== null}
                   onClick={() => void handleBatchSaveToLocal()}
-                  className="h-6.5 px-2 text-[11px] text-foreground-muted hover:text-foreground hover:bg-surface-hover/80"
+                  className="h-6.5 px-2 text-xs text-foreground-muted hover:text-foreground hover:bg-surface-hover/80"
                   title="将选中的歌曲保存到本地目录"
                 >
                   <Save size={12} className="mr-1" />
@@ -621,7 +621,7 @@ function TrackListSectionBase({
                   data-testid="library-batch-delete-button"
                   disabled={deletableSelectedTracks.length === 0 || pendingAction !== null}
                   onClick={() => void handleBatchDelete()}
-                  className="h-6.5 px-2 text-[11px] text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  className="h-6.5 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
                   title="将选中有权限的歌曲从曲库删除"
                 >
                   <Trash2 size={12} className="mr-1" />
@@ -871,14 +871,14 @@ function TrackListSectionBase({
                   </div>
 
                   <div className="col-start-2 col-end-3 min-w-0 space-y-0.5">
-                    <p className="flex min-w-0 items-center gap-1 text-xs text-foreground-muted">
+                    <p className="flex min-w-0 items-center gap-1.5 text-xs text-foreground-muted">
                       <span className="min-w-0 max-w-[40%] truncate">{track.artist}</span>
-                      <span aria-hidden="true">·</span>
+                      <span className="text-surface-border">/</span>
                       <span className="min-w-0 max-w-[45%] truncate">{track.album ?? "未知专辑"}</span>
-                      <span aria-hidden="true">·</span>
+                      <span className="text-surface-border">/</span>
                       <span className="shrink-0 tabular-nums">{formatDuration(track.durationMs)}</span>
                     </p>
-                    <p className="truncate text-[10px] text-foreground-muted/60">
+                    <p className="truncate text-xs text-foreground-muted/60">
                       <span
                         className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full ${
                           isUploadedLocally
@@ -902,7 +902,7 @@ function TrackListSectionBase({
                 </p>
                 {onRefreshRoom ? (
                   <Button
-                    className="h-7 rounded-md px-2.5 text-[11px] font-medium border border-surface-border/80 bg-surface/60 text-foreground-muted hover:text-foreground hover:bg-surface-hover/60"
+                    className="h-7 rounded-md px-2.5 text-xs font-medium border border-surface-border/80 bg-surface/60 text-foreground-muted hover:text-foreground hover:bg-surface-hover/60"
                     disabled={isRefreshing}
                     onClick={async () => {
                       setIsRefreshing(true);

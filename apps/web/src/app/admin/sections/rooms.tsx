@@ -56,9 +56,9 @@ export function Rooms({ rooms, onRefresh }: { rooms: AdminRoomSummary[]; onRefre
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xs font-semibold text-foreground">房间目录</h2>
-          <p className="text-[11px] text-foreground-muted">点击任意一行进入详情，查看状态并执行控制</p>
+          <p className="text-xs text-foreground-muted">点击任意一行进入详情，查看状态并执行控制</p>
         </div>
-        <span className="text-[11px] font-mono text-foreground-muted">{rooms.length} 条结果</span>
+        <span className="text-xs font-mono text-foreground-muted">{rooms.length} 条结果</span>
       </div>
 
       {selected.size ? (
@@ -85,7 +85,7 @@ export function Rooms({ rooms, onRefresh }: { rooms: AdminRoomSummary[]; onRefre
         <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3.5 flex items-center justify-between gap-4 text-xs">
           <div>
             <strong className="text-red-400">确认结束选中的 {selected.size} 个房间</strong>
-            <p className="text-[11px] text-red-400/80 mt-0.5">操作会永久清理房间状态、队列和在线成员的房间资产。</p>
+            <p className="text-xs text-red-400/80 mt-0.5">操作会永久清理房间状态、队列和在线成员的房间资产。</p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <button
@@ -173,8 +173,8 @@ export function Rooms({ rooms, onRefresh }: { rooms: AdminRoomSummary[]; onRefre
                       <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${signalColor}`} />
                       <div>
                         <div className="font-mono font-medium text-foreground">{room.joinCode}</div>
-                        <div className="text-[11px] text-foreground-muted">
-                          {room.name || "未命名房间"} · 房主 {room.hostNickname || room.hostId}
+                        <div className="text-xs text-foreground-muted">
+                          {room.name || "未命名房间"} / 房主 {room.hostNickname || room.hostId}
                         </div>
                       </div>
                     </div>
@@ -187,7 +187,7 @@ export function Rooms({ rooms, onRefresh }: { rooms: AdminRoomSummary[]; onRefre
                   </td>
                   <td className="py-2 px-3">
                     <div className="text-foreground">{translatePlayback(room.playbackStatus)}</div>
-                    <div className="text-[11px] text-foreground-muted truncate max-w-[140px]">
+                    <div className="text-xs text-foreground-muted truncate max-w-[140px]">
                       {room.currentTrackTitle || "未播放"}
                     </div>
                   </td>

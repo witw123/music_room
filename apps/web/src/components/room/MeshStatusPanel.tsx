@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type {
@@ -173,7 +173,7 @@ function getEventClass(level: PeerRecentEvent["level"]) {
 
 function DiagnosticGrid({ children }: { children: React.ReactNode }) {
   return (
-    <div className="grid grid-cols-1 gap-x-4 gap-y-0.5 text-[10px] leading-4 text-foreground-muted sm:grid-cols-2 [&_span]:min-w-0 [&_span]:break-words">
+    <div className="grid grid-cols-1 gap-x-4 gap-y-0.5 text-xs leading-4 text-foreground-muted sm:grid-cols-2 [&_span]:min-w-0 [&_span]:break-words">
       {children}
     </div>
   );
@@ -182,7 +182,7 @@ function DiagnosticGrid({ children }: { children: React.ReactNode }) {
 function DiagnosticSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="border-t border-surface-border pt-2">
-      <h3 className="mb-1 text-[10px] font-semibold text-foreground-muted">{title}</h3>
+      <h3 className="mb-1 text-xs font-semibold text-foreground-muted">{title}</h3>
       {children}
     </section>
   );
@@ -210,7 +210,7 @@ function formatTrackStatus(peer: PeerDiagnosticsSnapshot | undefined, now = Date
   const track = peer?.remoteTrackStatus;
   if (!track) return "暂无";
   if (track.trackReadyState === "live") {
-    return track.trackMuted ? "已建立 · 静音" : "已建立";
+    return track.trackMuted ? "已建立 (静音)" : "已建立";
   }
   if (track.trackReadyState === "ended") return "已结束";
   if (
@@ -223,7 +223,7 @@ function formatTrackStatus(peer: PeerDiagnosticsSnapshot | undefined, now = Date
 function DiagnosticMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex min-h-[2.85rem] min-w-0 flex-col justify-center px-3 py-1.5 first:border-r first:border-surface-border sm:px-3.5">
-      <span className="text-[10px] text-foreground-muted">{label}</span>
+      <span className="text-xs text-foreground-muted">{label}</span>
       <strong className="mt-1 truncate text-xs font-semibold text-foreground">{value}</strong>
     </div>
   );
@@ -288,7 +288,7 @@ function MemberDiagnosticCard({
   const playbackPath = isLocal
     ? formatPlaybackPath(localMemberState?.playbackPath)
     : formatPlaybackTransport(peer?.playbackTransport ?? null);
-  const memberLabel = `${member.nickname} · ${member.role === "host" ? "房主" : "成员"}`;
+  const memberLabel = `${member.nickname} (${member.role === "host" ? "房主" : "成员"})`;
   const linkJitter = peer?.jitterMs ?? peer?.receiverJitterTargetMs;
   const hasConnectionDetails = Boolean(
     peer && (
@@ -333,14 +333,14 @@ function MemberDiagnosticCard({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <strong className="block truncate text-xs text-foreground">{memberLabel}</strong>
-            <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px]">
+            <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
               <span className={getPlaybackClass(audibleStatus.tone)}>播放：{memberPlaybackStatus}</span>
               <span className="text-foreground-muted">在线：{formatPresence(member)}</span>
               <span className="text-foreground-muted">连接：{connectionState}</span>
             </p>
           </div>
           {peer?.transportHealth ? (
-            <span className={`min-w-[3.5rem] shrink-0 rounded-full border px-2 py-0.5 text-center text-[10px] ${getHealthClass(peer)}`}>
+            <span className={`min-w-[3.5rem] shrink-0 rounded-full border px-2 py-0.5 text-center text-xs ${getHealthClass(peer)}`}>
               {formatHealth(peer.transportHealth)}
             </span>
           ) : null}
@@ -351,7 +351,7 @@ function MemberDiagnosticCard({
           <DiagnosticMetric label="成员下行" value={formatMetric(mediaRates.receiveRateKbps, " kbps")} />
         </div>
         {peer?.lastError ? (
-          <p className="mt-1 text-[10px] text-red-300">{peer.lastError}</p>
+          <p className="mt-1 text-xs text-red-300">{peer.lastError}</p>
         ) : null}
       </summary>
       {hasConnectionDetails || hasAudioMetrics || hasPlaybackDetails ? (
@@ -493,8 +493,8 @@ function MeshStatusPanelBase({
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-sm font-bold text-foreground">连接诊断</h2>
-          <p className="mt-1 text-[10px] text-foreground-muted">
-            {normalizedMembers.length} 位成员 · {visibleDiagnostics.length} 条唯一诊断样本
+          <p className="mt-1 text-xs text-foreground-muted">
+            {normalizedMembers.length} 位成员 / {visibleDiagnostics.length} 条唯一诊断样本
           </p>
         </div>
         <Button
@@ -543,7 +543,7 @@ function MeshStatusPanelBase({
               <summary className="cursor-pointer list-none text-xs font-semibold text-foreground">最近事件</summary>
               <div className="mt-3 flex flex-col gap-2">
                 {visibleEvents.map((event) => (
-                  <div key={event.id} className={`rounded-lg border px-3 py-2 text-[10px] ${getEventClass(event.level)}`}>
+                  <div key={event.id} className={`rounded-lg border px-3 py-2 text-xs ${getEventClass(event.level)}`}>
                     <span className="text-foreground-muted">{formatTimestamp(event.timestamp)}</span>
                     <p className="mt-1 text-foreground">{formatEventLabel(event)}</p>
                   </div>

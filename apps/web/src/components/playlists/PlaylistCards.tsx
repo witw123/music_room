@@ -1,4 +1,4 @@
-﻿import React from "react";
+import React from "react";
 import type { Playlist } from "@soqaro/shared";
 import type { LocalPlaylistRecord, LocalPlaylistTrackRecord } from "@/features/playlist/local-playlist";
 import { Button } from "@/components/ui/button";
@@ -32,7 +32,7 @@ export function LocalPlaylistCard({
       >
         <div className="relative aspect-square overflow-hidden rounded-xl bg-surface border border-surface-border shadow-xs transition-transform duration-200 group-hover:-translate-y-0.5">
           <Artwork artworkUrls={artworkUrls} size="cover" title={playlist.title} />
-          <span className="absolute bottom-2 left-2 rounded-md bg-background/80 border border-surface-border/60 px-1.5 py-0.5 text-[10px] font-medium text-foreground-muted backdrop-blur-md">
+          <span className="absolute bottom-2 left-2 rounded-md bg-background/80 border border-surface-border/60 px-1.5 py-0.5 text-xs font-medium text-foreground-muted backdrop-blur-md">
             本地
           </span>
         </div>
@@ -40,8 +40,8 @@ export function LocalPlaylistCard({
           <strong className="block truncate text-xs sm:text-sm font-medium text-foreground">
             {playlist.title}
           </strong>
-          <p className="mt-0.5 truncate text-[11px] text-foreground-muted">
-            {playlist.sourceDirectoryName ? `目录：${playlist.sourceDirectoryName}` : "项目根目录"} · {tracks.length} 首歌曲 · 已下载 {downloadedCount}
+          <p className="mt-0.5 truncate text-xs text-foreground-muted">
+            {tracks.length} 首歌曲，已下载 {downloadedCount} 首
           </p>
         </div>
       </button>
@@ -108,8 +108,8 @@ export function NetworkPlaylistCard({
           <strong className="block truncate text-xs sm:text-sm font-medium text-foreground">
             {playlist.title}
           </strong>
-          <p className="mt-0.5 truncate text-[11px] text-foreground-muted">
-            {providerName} · {playlist.trackIds.length} 首歌曲
+          <p className="mt-0.5 truncate text-xs text-foreground-muted">
+            {providerName} / {playlist.trackIds.length} 首歌曲
           </p>
         </div>
       </button>

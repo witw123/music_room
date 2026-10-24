@@ -268,7 +268,7 @@ export function Announcements({
                   </td>
                   <td className="py-3 px-3">
                     <span
-                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
                         item.isActive
                           ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
                           : "bg-surface-border/40 text-foreground-muted border border-surface-border"
@@ -278,13 +278,13 @@ export function Announcements({
                       {item.isActive ? "已启用" : "已停用"}
                     </span>
                   </td>
-                  <td className="py-3 px-3 font-mono text-[11px] text-foreground-muted whitespace-nowrap">
+                  <td className="py-3 px-3 font-mono text-xs text-foreground-muted whitespace-nowrap">
                     {formatDateTime(item.createdAt)}
                   </td>
                   <td className="py-3 px-3 text-right whitespace-nowrap space-x-1.5">
                     <button
                       onClick={() => void toggleActive(item)}
-                      className={`px-2 py-1 rounded text-[11px] font-medium transition-colors ${
+                      className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
                         item.isActive
                           ? "text-amber-400 hover:bg-amber-400/10"
                           : "text-emerald-400 hover:bg-emerald-400/10"
@@ -294,13 +294,13 @@ export function Announcements({
                     </button>
                     <button
                       onClick={() => openEdit(item)}
-                      className="px-2 py-1 rounded text-[11px] text-foreground-muted hover:text-foreground hover:bg-surface-border/40 transition-colors"
+                      className="px-2 py-1 rounded text-xs text-foreground-muted hover:text-foreground hover:bg-surface-border/40 transition-colors"
                     >
                       编辑
                     </button>
                     <button
                       onClick={() => setDeleteConfirmId(item.id)}
-                      className="px-2 py-1 rounded text-[11px] text-red-400 hover:bg-red-500/10 transition-colors"
+                      className="px-2 py-1 rounded text-xs text-red-400 hover:bg-red-500/10 transition-colors"
                     >
                       删除
                     </button>

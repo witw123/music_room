@@ -28,13 +28,13 @@ function RoomImportProgressBarBase() {
   if (isRunning) {
     if (total > 1) {
       const itemTitle = activeTask.currentTitle ? `《${activeTask.currentTitle}》` : "";
-      const stageText = activeTask.currentStage ? ` · ${activeTask.currentStage}` : "";
+      const stageText = activeTask.currentStage ? ` (${activeTask.currentStage})` : "";
       label = `正在导入 (${current}/${total})：${itemTitle}${stageText}`;
     } else {
       let rawTitle = activeTask.currentTitle || activeTask.title;
       rawTitle = rawTitle.replace(/^导入/, "").replace(/^《|》$/g, "").trim();
       const itemTitle = rawTitle ? `《${rawTitle}》` : "";
-      const stageText = activeTask.currentStage ? ` · ${activeTask.currentStage}` : "";
+      const stageText = activeTask.currentStage ? ` (${activeTask.currentStage})` : "";
       label = `正在导入：${itemTitle}${stageText}`;
     }
   } else if (isCompleted) {
@@ -87,7 +87,7 @@ function RoomImportProgressBarBase() {
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5">
-          <span className="font-mono text-[11px] font-semibold text-accent tabular-nums">
+          <span className="font-mono text-xs font-semibold text-accent tabular-nums">
             {isCompleted ? "100%" : `${Math.min(99, activeTask.overallPercent)}%`}
           </span>
           {isFailed ? (

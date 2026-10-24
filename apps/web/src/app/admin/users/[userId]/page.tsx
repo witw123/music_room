@@ -117,7 +117,7 @@ export default function AdminUserDetailPage() {
           <span>←</span> 返回用户目录
         </button>
         <div className="flex items-center gap-3">
-          <span className="inline-flex items-center gap-1.5 text-[11px] font-mono text-foreground-muted">
+          <span className="inline-flex items-center gap-1.5 text-xs font-mono text-foreground-muted">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
             {refreshing ? "同步中" : "实时数据"}
           </span>
@@ -133,7 +133,7 @@ export default function AdminUserDetailPage() {
 
       <div className="max-w-6xl mx-auto p-6 space-y-6">
         <div>
-          <span className="text-[11px] font-mono uppercase tracking-wider text-[var(--accent,#3b82f6)]">用户治理 / 账户档案</span>
+          <span className="text-xs font-mono font-medium text-[var(--accent,#3b82f6)]">用户治理 / 账户档案</span>
           <div className="flex items-baseline gap-3 mt-1">
             <h1 className="text-xl font-semibold tracking-tight text-foreground">{user.nickname}</h1>
             <span className="text-sm font-mono text-foreground-muted">{user.username}</span>
@@ -318,7 +318,7 @@ export default function AdminUserDetailPage() {
                     {room.joinCode}
                   </a>
                   <span className="text-foreground-muted">
-                    {room.name || "未命名房间"} · {room.role === "host" ? "房主" : "成员"}
+                    {room.name || "未命名房间"} ({room.role === "host" ? "房主" : "成员"})
                   </span>
                 </div>
               )}
@@ -329,7 +329,7 @@ export default function AdminUserDetailPage() {
         <DataPanel title="有效会话" hint={`${user.sessions.length} 个`}>
           <table className="w-full text-left text-xs">
             <thead>
-              <tr className="border-b border-surface-border text-foreground-muted font-mono text-[11px]">
+              <tr className="border-b border-surface-border text-foreground-muted font-mono text-xs">
                 <th className="py-2.5 px-3 font-normal">会话 ID</th>
                 <th className="py-2.5 px-3 font-normal">创建时间</th>
                 <th className="py-2.5 px-3 font-normal">过期时间</th>
@@ -356,7 +356,7 @@ export default function AdminUserDetailPage() {
         <DataPanel title="相关审计" hint={`${user.audits.length} 条`}>
           <table className="w-full text-left text-xs">
             <thead>
-              <tr className="border-b border-surface-border text-foreground-muted font-mono text-[11px]">
+              <tr className="border-b border-surface-border text-foreground-muted font-mono text-xs">
                 <th className="py-2.5 px-3 font-normal">时间</th>
                 <th className="py-2.5 px-3 font-normal">操作</th>
                 <th className="py-2.5 px-3 font-normal">原因说明</th>
@@ -389,7 +389,7 @@ export default function AdminUserDetailPage() {
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-surface-border bg-surface p-3.5">
-      <div className="text-[11px] font-mono text-foreground-muted uppercase tracking-wider">{label}</div>
+      <div className="text-xs font-mono text-foreground-muted">{label}</div>
       <div className="mt-1 text-lg font-semibold text-foreground tracking-tight">{value}</div>
     </div>
   );
@@ -399,7 +399,7 @@ function PanelHeader({ title, hint }: { title: string; hint?: string }) {
   return (
     <div className="flex items-center justify-between border-b border-surface-border pb-3">
       <h2 className="text-xs font-semibold text-foreground tracking-tight">{title}</h2>
-      {hint ? <span className="text-[11px] font-mono text-foreground-muted">{hint}</span> : null}
+      {hint ? <span className="text-xs font-mono text-foreground-muted">{hint}</span> : null}
     </div>
   );
 }

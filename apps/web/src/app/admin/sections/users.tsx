@@ -75,9 +75,9 @@ export function Users({ users, onRefresh }: { users: AdminUserSummary[]; onRefre
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xs font-semibold text-foreground">用户目录</h2>
-          <p className="text-[11px] text-foreground-muted">点击任意一行进入详情，管理员账号不可批量修改</p>
+          <p className="text-xs text-foreground-muted">点击任意一行进入详情，管理员账号不可批量修改</p>
         </div>
-        <span className="text-[11px] font-mono text-foreground-muted">{users.length} 条结果</span>
+        <span className="text-xs font-mono text-foreground-muted">{users.length} 条结果</span>
       </div>
 
       {selectedUsers.length ? (
@@ -121,7 +121,7 @@ export function Users({ users, onRefresh }: { users: AdminUserSummary[]; onRefre
               确认{batchAction === "disable" ? "禁用" : batchAction === "enable" ? "启用" : "撤销会话"}选中的{" "}
               {selectedUsers.length} 个用户
             </strong>
-            <p className="text-[11px] text-foreground-muted mt-0.5">
+            <p className="text-xs text-foreground-muted mt-0.5">
               {batchAction === "disable"
                 ? "禁用会立即撤销普通会话并断开实时连接。"
                 : batchAction === "enable"

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import type { BilibiliTrackCandidate } from "@soqaro/shared";
 import { Button } from "@/components/ui/button";
@@ -79,8 +79,8 @@ export function BilibiliPartDetailView({
 
         <div className="relative z-10 flex min-w-0 flex-col justify-end text-center sm:text-left">
           <div className="inline-flex items-center justify-center sm:justify-start gap-2 mb-1.5">
-            <span className="rounded-md bg-accent/10 text-accent border border-accent/20 px-2 py-0.5 text-[11px] font-semibold tracking-wide">
-              哔哩哔哩 · 视频分P合集
+            <span className="rounded-md bg-accent/10 text-accent border border-accent/20 px-2 py-0.5 text-xs font-medium">
+              哔哩哔哩 视频分P合集
             </span>
             <span className="text-xs font-mono text-foreground-muted">BV号: {detail.bvid}</span>
           </div>
@@ -89,15 +89,11 @@ export function BilibiliPartDetailView({
             {detail.title}
           </h1>
 
-          <p className="mt-1.5 text-xs text-foreground-muted flex items-center justify-center sm:justify-start gap-2">
+          <p className="mt-1.5 text-xs text-foreground-muted flex flex-wrap items-center justify-center sm:justify-start gap-x-3 gap-y-1">
             <span>UP主: <strong className="text-foreground font-medium">{detail.artist}</strong></span>
-            <span>·</span>
             <span>共 {detail.parts.length} 首分P单曲</span>
             {totalDurationMs > 0 && (
-              <>
-                <span>·</span>
-                <span>总时长 {formatDuration(totalDurationMs)}</span>
-              </>
+              <span>总时长 {formatDuration(totalDurationMs)}</span>
             )}
           </p>
 
@@ -155,12 +151,9 @@ export function BilibiliPartDetailView({
       {/* Part Tracks List */}
       <div className="mt-5 rounded-xl border border-surface-border bg-surface/40 backdrop-blur-sm overflow-hidden">
         <div className="px-4 py-2.5 border-b border-surface-border flex items-center justify-between">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground-muted">
+          <h2 className="text-xs font-medium text-foreground-muted">
             分P列表 ({detail.parts.length})
           </h2>
-          <span className="text-[11px] text-foreground-muted/70">
-            点击单曲播放对应分P音频
-          </span>
         </div>
 
         <div className="divide-y divide-surface-border/40">

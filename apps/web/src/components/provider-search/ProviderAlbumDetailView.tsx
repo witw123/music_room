@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import type {
@@ -77,13 +77,13 @@ export function ProviderAlbumDetailView({
         </div>
         <div className="relative z-10 flex min-w-0 flex-col justify-end text-center sm:text-left">
           <div className="flex items-center justify-center sm:justify-start gap-2 mb-1">
-            <span className="inline-flex items-center rounded-md bg-surface border border-surface-border px-2 py-0.5 text-[11px] font-medium text-foreground-muted">
+            <span className="inline-flex items-center rounded-md bg-surface border border-surface-border px-2 py-0.5 text-xs font-medium text-foreground-muted">
               专辑
             </span>
           </div>
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">{album.title}</h1>
           <p className="mt-1 text-xs text-foreground-muted font-medium">
-            {album.artist} · {album.releaseTime || "发行时间未知"} · {album.tracks.length} 首歌曲
+            {album.artist} / {album.releaseTime || "发行时间未知"} / {album.tracks.length} 首歌曲
           </p>
           <DescriptionDisclosure description={album.description} />
           <div className="mt-4 flex flex-wrap items-center justify-center sm:justify-start gap-2.5">
@@ -270,7 +270,7 @@ export function ProviderAlbumTrackTable({
                     </p>
                     <p className="truncate text-xs text-foreground-muted mt-0.5">
                       {track.artist}
-                      {track.album ? ` · ${track.album}` : ""}
+                      {track.album ? ` / ${track.album}` : ""}
                     </p>
                   </div>
                 </div>
@@ -324,14 +324,14 @@ function TrackActions({ track, actions }: { track: Track; actions: ProviderAlbum
       <div className="hidden items-center gap-1 sm:flex opacity-90 sm:opacity-0 group-hover:opacity-100 transition-opacity">
         {actions.onImport ? (
           inRoom ? (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20">
               <CheckIcon className="h-3 w-3" />
               <span>已在曲库</span>
             </span>
           ) : (
             <Button
               aria-label={`将《${track.title}》加入曲库`}
-              className="h-7 rounded-md px-2.5 text-[11px] font-medium border border-accent/30 bg-accent/5 text-accent hover:bg-accent/15 transition-colors"
+              className="h-7 rounded-md px-2.5 text-xs font-medium border border-accent/30 bg-accent/5 text-accent hover:bg-accent/15 transition-colors"
               disabled={disabled || importing}
               onClick={() => actions.onImport?.(track)}
               size="sm"
@@ -444,7 +444,7 @@ function TrackActions({ track, actions }: { track: Track; actions: ProviderAlbum
           anchor={menuAnchor}
           items={menuItems}
           onClose={() => setMenuAnchor(null)}
-          subtitle={`${track.artist} · ${track.album ?? "未知专辑"}`}
+          subtitle={`${track.artist}${track.album ? ` / ${track.album}` : ""}`}
           title={track.title}
         />
       ) : null}

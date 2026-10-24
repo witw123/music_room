@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -179,7 +179,7 @@ export function AppSidebar({
           </span>
           <span className={`min-w-0 leading-none ${collapsed ? "md:hidden" : ""}`}>
             <span className="block truncate text-sm font-bold text-foreground tracking-tight">Soqaro</span>
-            <span className="mt-1 block truncate text-[10px] text-foreground-muted">实时协作听歌空间</span>
+            <span className="mt-1 block truncate text-xs text-foreground-muted">实时协作听歌空间</span>
           </span>
         </Link>
       </div>
@@ -187,7 +187,7 @@ export function AppSidebar({
       <div className={`hide-scrollbar flex min-h-0 flex-1 items-center overflow-hidden md:flex-col md:items-stretch md:gap-2.5 md:p-2 ${compactMobile ? "gap-2 p-1.5" : "gap-3 p-2.5"}`}>
         <nav className="hide-scrollbar flex min-w-0 flex-1 flex-wrap items-center gap-1 overflow-x-hidden md:min-h-0 md:flex-col md:items-stretch md:overflow-y-auto md:overflow-x-hidden" aria-label="工作区">
           {!collapsed && (
-            <div className="hidden px-3 pt-1 pb-1 text-[10px] font-semibold tracking-wider text-foreground-muted/50 uppercase select-none md:block">
+            <div className="hidden px-3 pt-2 pb-1 text-xs font-medium text-foreground-muted/70 select-none md:block">
               探索
             </div>
           )}
@@ -203,7 +203,7 @@ export function AppSidebar({
                   onClick={handleNavigateAway}
                   onPointerDown={() => setPendingItemId(item.id)}
                   title={collapsed ? item.label : undefined}
-                  className={`app-sidebar__nav-item group relative flex min-h-10 min-w-0 flex-1 flex-col items-center justify-center rounded-xl font-medium transition-all duration-150 sm:flex-row sm:gap-2.5 sm:px-3 sm:py-2 sm:text-xs md:flex-none md:justify-start md:gap-3 md:px-3 md:py-2 md:text-sm ${compactMobile ? "gap-0.5 px-0.5 py-1.5 text-[9px]" : "gap-1 px-1 py-2 text-[10px]"} ${
+                  className={`app-sidebar__nav-item group relative flex min-h-10 min-w-0 flex-1 flex-col items-center justify-center rounded-xl font-medium transition-all duration-150 sm:flex-row sm:gap-2.5 sm:px-3 sm:py-2 sm:text-xs md:flex-none md:justify-start md:gap-3 md:px-3 md:py-2 md:text-sm ${compactMobile ? "gap-0.5 px-0.5 py-1.5 text-xs" : "gap-1 px-1 py-2 text-xs"} ${
                     isActive
                       ? "text-accent bg-accent/10 font-semibold"
                       : "text-foreground-muted hover:text-foreground hover:bg-surface"
@@ -216,7 +216,7 @@ export function AppSidebar({
             })}
 
           {!collapsed && (
-            <div className="hidden px-3 pt-3 pb-1 text-[10px] font-semibold tracking-wider text-foreground-muted/50 uppercase select-none md:block">
+            <div className="hidden px-3 pt-3 pb-1 text-xs font-medium text-foreground-muted/70 select-none md:block">
               音乐空间
             </div>
           )}
@@ -232,7 +232,7 @@ export function AppSidebar({
                   onClick={handleNavigateAway}
                   onPointerDown={() => setPendingItemId(item.id)}
                   title={collapsed ? item.label : undefined}
-                  className={`app-sidebar__nav-item group relative flex min-h-10 min-w-0 flex-1 flex-col items-center justify-center rounded-xl font-medium transition-all duration-150 sm:flex-row sm:gap-2.5 sm:px-3 sm:py-2 sm:text-xs md:flex-none md:justify-start md:gap-3 md:px-3 md:py-2 md:text-sm ${compactMobile ? "gap-0.5 px-0.5 py-1.5 text-[9px]" : "gap-1 px-1 py-2 text-[10px]"} ${
+                  className={`app-sidebar__nav-item group relative flex min-h-10 min-w-0 flex-1 flex-col items-center justify-center rounded-xl font-medium transition-all duration-150 sm:flex-row sm:gap-2.5 sm:px-3 sm:py-2 sm:text-xs md:flex-none md:justify-start md:gap-3 md:px-3 md:py-2 md:text-sm ${compactMobile ? "gap-0.5 px-0.5 py-1.5 text-xs" : "gap-1 px-1 py-2 text-xs"} ${
                     isActive
                       ? "text-accent bg-accent/10 font-semibold"
                       : "text-foreground-muted hover:text-foreground hover:bg-surface"

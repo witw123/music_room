@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import type { AuthSession } from "@soqaro/shared";
@@ -58,16 +58,16 @@ export function PersonalOverview({
             </h1>
             {tasteLabels.length > 0 ? (
               <p className="mt-0.5 truncate text-xs text-foreground-muted">
-                常听 <span className="text-foreground">{tasteLabels.join(" · ")}</span>
+                常听 <span className="text-foreground">{tasteLabels.join("、")}</span>
               </p>
             ) : null}
-            <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-foreground-muted tabular-nums">
-              <span className="font-mono text-[11px] truncate max-w-[130px] sm:max-w-none" title={`@${activeSession.username}`}>
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-foreground-muted tabular-nums">
+              <span className="font-mono text-xs truncate max-w-[130px] sm:max-w-none" title={`@${activeSession.username}`}>
                 @{activeSession.username}
               </span>
               {profile ? (
                 <>
-                  <span className="text-foreground-muted/40">·</span>
+                  <span className="text-surface-border">/</span>
                   <span title="累计收听时长与探索曲目">{formatListeningSummary(profile.totalListenedMs, profile.trackCount)}</span>
                 </>
               ) : null}
@@ -111,9 +111,9 @@ export function PersonalOverview({
             </span>
             <p className="min-w-0 flex-1 truncate text-xs">
               <span className="font-semibold text-accent">正在听</span>
-              <span className="text-foreground-muted"> · </span>
+              <span className="text-surface-border"> / </span>
               <span className="font-medium text-foreground">{nowPlaying.title}</span>
-              {nowPlaying.artist ? <span className="text-foreground-muted"> · {nowPlaying.artist}</span> : null}
+              {nowPlaying.artist ? <span className="text-foreground-muted"> / {nowPlaying.artist}</span> : null}
             </p>
           </div>
         ) : null}
@@ -136,5 +136,5 @@ function formatListeningSummary(totalListenedMs: number, trackCount: number) {
   const duration = totalMinutes >= 60
     ? `${Math.floor(totalMinutes / 60)} 小时${totalMinutes % 60 > 0 ? ` ${totalMinutes % 60} 分` : ""}`
     : `${totalMinutes} 分钟`;
-  return `${duration} · ${trackCount} 首`;
+  return `${duration} / ${trackCount} 首`;
 }

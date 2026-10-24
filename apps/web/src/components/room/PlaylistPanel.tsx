@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
@@ -422,13 +422,12 @@ export function PlaylistPanel({
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <p className="text-xs font-semibold text-foreground">网络歌单</p>
-          <p className="mt-1 truncate text-[10px] text-foreground-muted">保存的网易云音乐与 QQ 音乐歌单</p>
         </div>
         <div className="flex shrink-0 items-center justify-end gap-2">
           {libraryFeedback ? (
             <span className="text-xs text-accent truncate max-w-xs">{libraryFeedback}</span>
           ) : null}
-          <span className="font-mono text-[10px] text-foreground-muted">{displayPlaylists.length} 个歌单</span>
+          <span className="font-mono text-xs text-foreground-muted">{displayPlaylists.length} 个歌单</span>
         </div>
       </div>
 
@@ -493,7 +492,7 @@ function PlaylistCard({
           <strong className="block truncate text-sm font-semibold text-foreground group-hover:text-accent transition-colors">
             {playlist.title}
           </strong>
-          <p className="truncate text-[10px] text-foreground-muted">{providerName} · {playlist.trackIds.length} 首歌曲</p>
+          <p className="truncate text-xs text-foreground-muted">{providerName} / {playlist.trackIds.length} 首歌曲</p>
         </div>
       </button>
       <div className="flex shrink-0 items-center gap-2">
@@ -505,7 +504,7 @@ function PlaylistCard({
               e.stopPropagation();
               onAddToLibrary?.();
             }}
-            className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition-colors ${
+            className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors ${
               isInLibrary
                 ? "cursor-default border border-emerald-500/20 bg-emerald-500/10 text-emerald-300"
                 : "border border-accent/30 bg-accent/10 text-accent hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
@@ -523,7 +522,7 @@ function PlaylistCard({
             )}
           </button>
         ) : null}
-        <span className="shrink-0 text-[10px] text-foreground-muted">查看</span>
+        <span className="shrink-0 text-xs text-foreground-muted">查看</span>
       </div>
     </article>
   );
