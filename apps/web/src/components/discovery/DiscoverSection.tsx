@@ -4,13 +4,11 @@ export function DiscoverSection({
   title,
   subtitle,
   icon,
-  eyebrow,
   children
 }: {
   title: string;
   subtitle?: string;
   icon?: React.ReactNode;
-  eyebrow?: string;
   children: React.ReactNode;
 }) {
   return (
