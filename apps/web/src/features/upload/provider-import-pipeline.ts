@@ -52,81 +52,97 @@ export type PrefetchedProviderAudioResult =
   | { ok: true; audio: PrefetchedProviderAudio }
   | { ok: false; error: unknown };
 
+const TRACK_DOWNLOAD_TIMEOUT_MS = 60_000;
+
 export async function prefetchProviderAudio(
   candidate: ProviderTrackCandidate,
   sourceType: Exclude<TrackSourceType, "local_upload">,
-  onProgress?: (progress: { loaded: number; total: number | null; percent?: number }) => void
+  onProgress?: (progress: { loaded: number; total: number | null; percent?: number }) => void,
+  outerSignal?: AbortSignal
 ): Promise<PrefetchedProviderAudio> {
-  const localRepository = await getConfiguredLocalRepository().catch(() => null);
-  if (localRepository) {
-    const tracks = await localRepository.listTracks().catch(() => []);
-    const matchingTrack = tracks.find((t) =>
-      t.sourceRef?.provider === sourceType &&
-      t.sourceRef?.trackId === candidate.providerTrackId
-    );
-    if (matchingTrack?.source?.relativePath) {
-      const file = await localRepository.readPath(matchingTrack.source.relativePath).catch(() => null);
-      if (file) {
-        const assets = await getReusableAudioAssets({
-          fileHash: matchingTrack.fileHash,
-          sizeBytes: matchingTrack.sizeBytes
-        }).catch(() => null);
-        onProgress?.({ loaded: 1, total: 1, percent: 100 });
-        return {
-          cachedTrack: null,
-          file,
-          assets
-        };
+  const timeoutCtrl = new AbortController();
+  const timer = setTimeout(
+    () => timeoutCtrl.abort(new Error(`下载《${candidate.title}》超时，请稍后重试`)),
+    TRACK_DOWNLOAD_TIMEOUT_MS
+  );
+  const abortHandler = () => timeoutCtrl.abort();
+  outerSignal?.addEventListener("abort", abortHandler, { once: true });
+
+  try {
+    const localRepository = await getConfiguredLocalRepository().catch(() => null);
+    if (localRepository) {
+      const tracks = await localRepository.listTracks().catch(() => []);
+      const matchingTrack = tracks.find((t) =>
+        t.sourceRef?.provider === sourceType &&
+        t.sourceRef?.trackId === candidate.providerTrackId
+      );
+      if (matchingTrack?.source?.relativePath) {
+        const file = await localRepository.readPath(matchingTrack.source.relativePath).catch(() => null);
+        if (file) {
+          const assets = await getReusableAudioAssets({
+            fileHash: matchingTrack.fileHash,
+            sizeBytes: matchingTrack.sizeBytes
+          }).catch(() => null);
+          onProgress?.({ loaded: 1, total: 1, percent: 100 });
+          return {
+            cachedTrack: null,
+            file,
+            assets
+          };
+        }
       }
     }
-  }
 
-  const cachedTrack: Awaited<ReturnType<typeof getCachedLibraryTrackByProviderTrack>> | null = (
-    await getCachedLibraryTrackByProviderTrack(sourceType, candidate.providerTrackId)
-  ) ?? null;
-  if (cachedTrack) {
-    const cachedFile = toCachedLibraryFile({
-      file: cachedTrack.file,
-      title: candidate.title,
-      mimeType: cachedTrack.mimeType,
-      fileHash: cachedTrack.fileHash
-    });
-    try {
-      const file = new File([cachedFile], cachedFile.name, {
-        type: await resolveImportedAudioMimeType(cachedFile)
+    const cachedTrack: Awaited<ReturnType<typeof getCachedLibraryTrackByProviderTrack>> | null = (
+      await getCachedLibraryTrackByProviderTrack(sourceType, candidate.providerTrackId)
+    ) ?? null;
+    if (cachedTrack) {
+      const cachedFile = toCachedLibraryFile({
+        file: cachedTrack.file,
+        title: candidate.title,
+        mimeType: cachedTrack.mimeType,
+        fileHash: cachedTrack.fileHash
       });
-      const assets = await getReusableAudioAssets({
-        fileHash: cachedTrack.fileHash,
-        sizeBytes: cachedTrack.sizeBytes
-      });
-      onProgress?.({ loaded: 1, total: 1, percent: 100 });
-      return { cachedTrack, file, assets };
-    } catch {
-      // Ignore an unreadable cache entry and download a fresh provider copy.
+      try {
+        const file = new File([cachedFile], cachedFile.name, {
+          type: await resolveImportedAudioMimeType(cachedFile)
+        });
+        const assets = await getReusableAudioAssets({
+          fileHash: cachedTrack.fileHash,
+          sizeBytes: cachedTrack.sizeBytes
+        });
+        onProgress?.({ loaded: 1, total: 1, percent: 100 });
+        return { cachedTrack, file, assets };
+      } catch {
+        // Ignore an unreadable cache entry and download a fresh provider copy.
+      }
     }
+
+    const handleDownloadProgress = (loaded: number, total: number | null) => {
+      const percent = total && total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : undefined;
+      onProgress?.({ loaded, total, percent });
+    };
+
+    const source = sourceType === "netease"
+      ? await soqaroApi.downloadNeteaseTrack(candidate.providerTrackId, "exhigh", timeoutCtrl.signal, handleDownloadProgress)
+      : sourceType === "bilibili"
+        ? await soqaroApi.downloadBilibiliTrack(candidate.providerTrackId, timeoutCtrl.signal, handleDownloadProgress)
+        : await soqaroApi.downloadQqMusicTrack(candidate.providerTrackId, "exhigh", timeoutCtrl.signal, handleDownloadProgress);
+    const extension = extensionForImportedMimeType(source.contentType);
+    onProgress?.({ loaded: source.blob.size, total: source.blob.size, percent: 100 });
+    return {
+      cachedTrack: null,
+      file: new File(
+        [source.blob],
+        `${sanitizeFileName(candidate.title, sourceType)}.${extension}`,
+        { type: source.contentType }
+      ),
+      assets: null
+    };
+  } finally {
+    clearTimeout(timer);
+    outerSignal?.removeEventListener("abort", abortHandler);
   }
-
-  const handleDownloadProgress = (loaded: number, total: number | null) => {
-    const percent = total && total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : undefined;
-    onProgress?.({ loaded, total, percent });
-  };
-
-  const source = sourceType === "netease"
-    ? await soqaroApi.downloadNeteaseTrack(candidate.providerTrackId, "exhigh", undefined, handleDownloadProgress)
-    : sourceType === "bilibili"
-      ? await soqaroApi.downloadBilibiliTrack(candidate.providerTrackId, undefined, handleDownloadProgress)
-      : await soqaroApi.downloadQqMusicTrack(candidate.providerTrackId, "exhigh", undefined, handleDownloadProgress);
-  const extension = extensionForImportedMimeType(source.contentType);
-  onProgress?.({ loaded: source.blob.size, total: source.blob.size, percent: 100 });
-  return {
-    cachedTrack: null,
-    file: new File(
-      [source.blob],
-      `${sanitizeFileName(candidate.title, sourceType)}.${extension}`,
-      { type: source.contentType }
-    ),
-    assets: null
-  };
 }
 
 export async function importProviderTracks(input: {
@@ -421,11 +437,21 @@ export async function importProviderTracks(input: {
         }, 150);
 
         let prefetchResult: PrefetchedProviderAudioResult;
+        let safetyTimer: ReturnType<typeof setTimeout> | undefined;
         try {
           const prefetchPromise = prefetchedAudio.get(index);
           if (!prefetchPromise) throw new Error(`歌曲预取任务不存在：${candidate.title}`);
-          prefetchResult = await prefetchPromise;
+          const safetyTimeoutPromise = new Promise<PrefetchedProviderAudioResult>((resolve) => {
+            safetyTimer = setTimeout(() => {
+              resolve({
+                ok: false,
+                error: new Error(`连接音频服务器超时：${candidate.title}`)
+              });
+            }, 60_000);
+          });
+          prefetchResult = await Promise.race([prefetchPromise, safetyTimeoutPromise]);
         } finally {
+          clearTimeout(safetyTimer);
           clearInterval(downloadTimer);
         }
         prefetchedAudio.delete(index);

@@ -123,20 +123,37 @@ export function extractApiError(rawBody: string): ApiErrorResponse | null {
   return null;
 }
 
+const DEFAULT_API_TIMEOUT_MS = 30_000;
+
 export async function request<T>(
   path: string,
   init?: RequestInit,
   options?: { notifyAuthExpired?: boolean }
 ): Promise<T> {
-  const response = await fetch(`${apiBaseUrl}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {})
-    },
-    credentials: "include",
-    cache: "no-store"
-  });
+  const timeoutCtrl = new AbortController();
+  const timer = setTimeout(
+    () => timeoutCtrl.abort(new Error(`API request timed out: ${path}`)),
+    DEFAULT_API_TIMEOUT_MS
+  );
+  const abortHandler = () => timeoutCtrl.abort();
+  init?.signal?.addEventListener("abort", abortHandler, { once: true });
+
+  let response: Response;
+  try {
+    response = await fetch(`${apiBaseUrl}${path}`, {
+      ...init,
+      signal: timeoutCtrl.signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...(init?.headers ?? {})
+      },
+      credentials: "include",
+      cache: "no-store"
+    });
+  } finally {
+    clearTimeout(timer);
+    init?.signal?.removeEventListener("abort", abortHandler);
+  }
 
   if (!response.ok) {
     const rawErrorBody = await response.text();
@@ -205,14 +222,29 @@ export async function requestBlob(
   init?: RequestInit,
   onProgress?: (loaded: number, total: number | null) => void
 ) {
-  const response = await fetch(`${apiBaseUrl}${path}`, {
-    ...init,
-    headers: {
-      ...(init?.headers ?? {})
-    },
-    credentials: "include",
-    cache: "no-store"
-  });
+  const timeoutCtrl = new AbortController();
+  const timer = setTimeout(
+    () => timeoutCtrl.abort(new Error(`API request timed out: ${path}`)),
+    60_000
+  );
+  const abortHandler = () => timeoutCtrl.abort();
+  init?.signal?.addEventListener("abort", abortHandler, { once: true });
+
+  let response: Response;
+  try {
+    response = await fetch(`${apiBaseUrl}${path}`, {
+      ...init,
+      signal: timeoutCtrl.signal,
+      headers: {
+        ...(init?.headers ?? {})
+      },
+      credentials: "include",
+      cache: "no-store"
+    });
+  } finally {
+    clearTimeout(timer);
+    init?.signal?.removeEventListener("abort", abortHandler);
+  }
 
   if (!response.ok) {
     const rawErrorBody = await response.text();
@@ -621,7 +653,7 @@ export async function downloadDirectTrack(input: DirectAudioDownloadInput): Prom
       for (const directUrl of candidates) {
         if (input.signal?.aborted) throw new Error("Download aborted");
         try {
-          const res = await invokeTauri<{
+          const invokePromise = invokeTauri<{
             dataBase64: string;
             contentType: string;
             contentLength: number;
@@ -630,6 +662,17 @@ export async function downloadDirectTrack(input: DirectAudioDownloadInput): Prom
             headers: input.headers,
             concurrentParts: 1
           });
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          const timeoutPromise = new Promise<never>((_, reject) => {
+            timer = setTimeout(() => reject(new Error(`本地直连下载超时: ${directUrl}`)), 50_000);
+            input.signal?.addEventListener("abort", () => reject(new Error("Download aborted")), { once: true });
+          });
+          let res: { dataBase64: string; contentType: string; contentLength: number } | undefined;
+          try {
+            res = await Promise.race([invokePromise, timeoutPromise]);
+          } finally {
+            clearTimeout(timer);
+          }
           if (res && res.dataBase64) {
             const rawBlob = base64ToBlob(res.dataBase64, res.contentType || resolved.mimeType || "audio/mpeg");
             const contentType = await resolveDownloadedAudioMimeType(

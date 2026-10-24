@@ -17,7 +17,8 @@ pub async fn download_direct_native(
     _concurrent_parts: Option<usize>,
 ) -> Result<NativeDownloadResponse, String> {
     let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(120))
+        .connect_timeout(Duration::from_secs(10))
+        .timeout(Duration::from_secs(45))
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
@@ -26,7 +27,7 @@ pub async fn download_direct_native(
     if let Some(ref h) = headers {
         for (k, v) in h {
             if let (Ok(hn), Ok(hv)) = (
-                reqwest::header::HeaderName::from_bytes(k.as_bytes()),
+                k.parse::<reqwest::header::HeaderName>(),
                 reqwest::header::HeaderValue::from_str(v),
             ) {
                 req = req.header(hn, hv);
@@ -54,4 +55,23 @@ pub async fn download_direct_native(
         content_type,
         content_length: bytes.len(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_custom_headers_including_mixed_case() {
+        let mut map = HashMap::new();
+        map.insert("Referer".to_string(), "https://www.bilibili.com/".to_string());
+        map.insert("User-Agent".to_string(), "TestAgent/1.0".to_string());
+
+        for (k, v) in &map {
+            let hn = k.parse::<reqwest::header::HeaderName>();
+            assert!(hn.is_ok(), "HeaderName parse failed for key: {k}");
+            let hv = reqwest::header::HeaderValue::from_str(v);
+            assert!(hv.is_ok(), "HeaderValue parse failed for val: {v}");
+        }
+    }
 }
