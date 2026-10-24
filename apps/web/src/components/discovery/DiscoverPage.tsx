@@ -381,7 +381,19 @@ export function DiscoverPage() {
     try {
       const full = playlist.provider === "netease"
         ? await soqaroApi.getNeteasePlaylist(playlist.providerPlaylistId)
-        : await soqaroApi.getQqMusicPlaylist(playlist.providerPlaylistId);
+        : playlist.provider === "qqmusic"
+          ? await soqaroApi.getQqMusicPlaylist(playlist.providerPlaylistId)
+          : await soqaroApi.getBilibiliVideoParts(playlist.providerPlaylistId).then((parts) => ({
+              provider: "bilibili" as const,
+              providerPlaylistId: parts.bvid,
+              title: parts.title,
+              description: parts.rawTitle,
+              artworkUrl: parts.artworkUrl,
+              creatorName: parts.artist,
+              tags: ["bilibili"],
+              trackCount: parts.parts.length,
+              tracks: parts.parts
+            }));
       if (controller.signal.aborted || detailRequestVersionRef.current !== version) return;
       setDetail({
         summary: playlist,
@@ -406,7 +418,11 @@ export function DiscoverPage() {
         if (!playlist.providerPlaylistId.startsWith("soqaro-curated:")) {
           const full = playlist.provider === "netease"
             ? await soqaroApi.getNeteasePlaylist(playlist.providerPlaylistId)
-            : await soqaroApi.getQqMusicPlaylist(playlist.providerPlaylistId);
+            : playlist.provider === "qqmusic"
+              ? await soqaroApi.getQqMusicPlaylist(playlist.providerPlaylistId)
+              : await soqaroApi.getBilibiliVideoParts(playlist.providerPlaylistId).then((parts) => ({
+                  tracks: parts.parts
+                }));
           tracks = full.tracks;
         }
       }

@@ -1,4 +1,4 @@
-﻿import { Injectable, Logger, NotFoundException, Optional } from "@nestjs/common";
+import { Injectable, Logger, NotFoundException, Optional } from "@nestjs/common";
 import type { BilibiliSearchResponse, BilibiliTrackCandidate, BilibiliVideoDetail, ProviderLyrics } from "@soqaro/shared";
 import { NeteaseApiClient } from "../netease/netease-api.client";
 import { QqMusicApiClient } from "../qqmusic/qqmusic-api.client";
@@ -6,7 +6,7 @@ import { BilibiliApiClient, sortBilibiliAudioUrls } from "./bilibili-api.client"
 import { selectBestSubtitle, convertBilibiliSubtitlesToLrc, isValidLyricSubtitle } from "./bilibili-subtitle";
 import { cleanBilibiliTitle } from "./bilibili-title-cleaner";
 import { CrossPlatformLyricMatcher } from "./bilibili-lyric-matcher";
-import { mapFavoriteItemToCandidate, mapRankingItemToCandidate, mapSearchItemToCandidate } from "./bilibili.mappers";
+import { mapFavoriteItemToCandidate, mapRankingItemToCandidate, mapSearchItemToCandidate, normalizeBilibiliPicUrl } from "./bilibili.mappers";
 
 export function extractBilibiliMediaId(input: string): string {
   const trimmed = input.trim();
@@ -41,9 +41,9 @@ export class BilibiliService {
     return {
       bvid: data.bvid,
       title: data.title,
-      pic: data.pic ? (data.pic.startsWith("//") ? `https:${data.pic}` : data.pic) : null,
+      pic: normalizeBilibiliPicUrl(data.pic),
       ownerName: data.owner?.name ?? "未知UP主",
-      ownerFace: data.owner?.face ? (data.owner.face.startsWith("//") ? `https:${data.owner.face}` : data.owner.face) : null,
+      ownerFace: normalizeBilibiliPicUrl(data.owner?.face),
       duration: data.duration,
       pages: (data.pages ?? []).map((page) => ({
         cid: page.cid,

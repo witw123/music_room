@@ -18,9 +18,19 @@ async function storage(op: string, path = "", extra: Record<string, unknown> = {
   const request = { op, path, ...extra };
   try {
     if (isTauriRuntime()) {
-      const invoke = (window as unknown as {
-        __TAURI__?: { core?: { invoke?: (command: string, args: unknown) => Promise<StorageReply> } };
-      }).__TAURI__?.core?.invoke;
+      const win = window as unknown as {
+        __TAURI__?: {
+          core?: { invoke?: (command: string, args?: unknown) => Promise<StorageReply> };
+          invoke?: (command: string, args?: unknown) => Promise<StorageReply>;
+        };
+        __TAURI_INTERNALS__?: {
+          invoke?: (command: string, args?: unknown) => Promise<StorageReply>;
+        };
+      };
+      const invoke =
+        win.__TAURI__?.core?.invoke ??
+        win.__TAURI__?.invoke ??
+        win.__TAURI_INTERNALS__?.invoke;
       if (!invoke) throw new Error("桌面存储接口不可用，请更新客户端。");
       return await invoke("local_storage", { request });
     }

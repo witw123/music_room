@@ -1,13 +1,22 @@
-﻿import type { BilibiliTrackCandidate } from "@soqaro/shared";
+import type { BilibiliTrackCandidate } from "@soqaro/shared";
 import type { BilibiliFavoriteItem, BilibiliRankingItem, BilibiliSearchItem } from "./bilibili-api.client";
 import { cleanBilibiliTitle } from "./bilibili-title-cleaner";
+
+export function normalizeBilibiliPicUrl(rawUrl?: string | null): string | null {
+  if (!rawUrl) return null;
+  const trimmed = rawUrl.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith("//")) return `https:${trimmed}`;
+  if (trimmed.startsWith("http://")) return `https://${trimmed.slice(7)}`;
+  return trimmed;
+}
 
 /** 搜索结果条目 → 曲库候选（含分 P 数量智能推断）。 */
 export function mapSearchItemToCandidate(item: BilibiliSearchItem): BilibiliTrackCandidate {
   const cleanTitle = (item.title || "").replace(/<[^>]+>/g, "").trim();
   const cleanAuthor = (item.author || "").replace(/<[^>]+>/g, "").trim();
   const durationMs = parseDurationToMs(item.duration);
-  const pic = item.pic ? (item.pic.startsWith("//") ? `https:${item.pic}` : item.pic) : null;
+  const pic = normalizeBilibiliPicUrl(item.pic);
 
   const cleaned = cleanBilibiliTitle(cleanTitle, cleanAuthor);
   const title = cleaned.songTitle || cleanTitle;
@@ -39,7 +48,7 @@ export function mapSearchItemToCandidate(item: BilibiliSearchItem): BilibiliTrac
 }
 
 export function mapFavoriteItemToCandidate(item: BilibiliFavoriteItem): BilibiliTrackCandidate {
-  const pic = item.cover ? (item.cover.startsWith("//") ? `https:${item.cover}` : item.cover) : null;
+  const pic = normalizeBilibiliPicUrl(item.cover);
   return {
     provider: "bilibili",
     providerTrackId: item.bvid,
@@ -55,7 +64,7 @@ export function mapFavoriteItemToCandidate(item: BilibiliFavoriteItem): Bilibili
 }
 
 export function mapRankingItemToCandidate(item: BilibiliRankingItem): BilibiliTrackCandidate {
-  const pic = item.pic ? (item.pic.startsWith("//") ? `https:${item.pic}` : item.pic) : null;
+  const pic = normalizeBilibiliPicUrl(item.pic);
   return {
     provider: "bilibili",
     providerTrackId: item.bvid,

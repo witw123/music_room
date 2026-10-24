@@ -340,7 +340,12 @@ export function PlaylistsWorkspacePage({
           try {
             const detail = source.provider === "netease"
               ? await soqaroApi.getNeteasePlaylist(source.playlistId)
-              : await soqaroApi.getQqMusicPlaylist(source.playlistId);
+              : source.provider === "qqmusic"
+                ? await soqaroApi.getQqMusicPlaylist(source.playlistId)
+                : await soqaroApi.getBilibiliVideoParts(source.playlistId).then((parts) => ({
+                    artworkUrl: parts.artworkUrl,
+                    tracks: parts.parts
+                  }));
             artworkUrls = uniqueArtworkUrls([
               detail.artworkUrl,
               ...detail.tracks.map((track) => track.artworkUrl),

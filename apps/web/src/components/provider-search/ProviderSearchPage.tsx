@@ -361,10 +361,12 @@ export function ProviderSearchPage({
       skipKeywordResetRef.current = false;
       return;
     }
-    searchRequestRef.current += 1;
-    setResults([]);
-    setPending((current) => current === "search" ? null : current);
-    if (!keywords.trim()) setHasSearched(false);
+    if (!keywords.trim()) {
+      searchRequestRef.current += 1;
+      setResults([]);
+      setPending((current) => current === "search" ? null : current);
+      setHasSearched(false);
+    }
   }, [keywords]);
 
   useEffect(() => {
@@ -807,6 +809,7 @@ export function ProviderSearchPage({
           setSearchSuggestionsOpen(true);
         }}
         onSubmit={(query) => {
+          skipKeywordResetRef.current = true;
           setSearchSuggestionsOpen(false);
           void searchTracksForQuery(query);
         }}

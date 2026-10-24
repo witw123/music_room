@@ -18,6 +18,7 @@ import { isBilibiliCollection, bilibiliTrackToPlaylistSummary } from "@/features
 import { importTaskStore, useVisibleImportTasks } from "@/features/upload/import-task-store";
 import { useActiveSession } from "@/features/session/use-session-identity";
 import { useProviderAccount } from "@/features/providers/use-provider-account";
+import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
 
 type Provider = "netease" | "qqmusic" | "bilibili";
 export type ProviderTrack = NeteaseTrackCandidate | QqMusicTrackCandidate | BilibiliTrackCandidate;
@@ -247,7 +248,8 @@ export function RoomProviderTrackSearch({
   );
 
   const searchTracks = useCallback(async (query: string) => {
-    if (!query) return;
+    const trimmed = query.trim();
+    if (!trimmed) return;
     const requestId = ++searchRequestRef.current;
     setPending("search");
     setErrorMessage(null);
@@ -255,7 +257,7 @@ export function RoomProviderTrackSearch({
     setBilibiliPartDetail(null);
     try {
       if (provider === "bilibili") {
-        const response = await soqaroApi.searchBilibiliTracks(query, { pageSize: 15 });
+        const response = await soqaroApi.searchBilibiliTracks(trimmed, { pageSize: 15 });
         if (searchRequestRef.current !== requestId) return;
         const collections: ProviderPlaylistSummary[] = [];
         const singles: BilibiliTrackCandidate[] = [];
@@ -272,8 +274,8 @@ export function RoomProviderTrackSearch({
       } else {
         setBilibiliCollections([]);
         const response = provider === "netease"
-          ? await soqaroApi.searchNeteaseTracks(query)
-          : await soqaroApi.searchQqMusicTracks(query);
+          ? await soqaroApi.searchNeteaseTracks(trimmed)
+          : await soqaroApi.searchQqMusicTracks(trimmed);
         if (searchRequestRef.current !== requestId) return;
         setResults(response.items);
         void enrichProviderSearchResults(provider, response.items)
@@ -293,12 +295,14 @@ export function RoomProviderTrackSearch({
       skipKeywordResetRef.current = false;
       return;
     }
-    searchRequestRef.current += 1;
-    setResults([]);
-    setBilibiliCollections([]);
-    setBilibiliPartDetail(null);
-    setMessage(null);
-    setPending((current) => current === "search" ? null : current);
+    if (!keywords.trim()) {
+      searchRequestRef.current += 1;
+      setResults([]);
+      setBilibiliCollections([]);
+      setBilibiliPartDetail(null);
+      setMessage(null);
+      setPending((current) => (current === "search" ? null : current));
+    }
   }, [keywords]);
 
   const handleOpenBilibiliParts = useCallback(async (track: ProviderTrack) => {
@@ -483,6 +487,7 @@ export function RoomProviderTrackSearch({
           setSearchSuggestionsOpen(true);
         }}
         onSubmit={(query) => {
+          skipKeywordResetRef.current = true;
           setSearchSuggestionsOpen(false);
           void searchTracks(query);
         }}
@@ -649,7 +654,7 @@ export function RoomProviderTrackSearch({
                         <div className="relative aspect-square w-full overflow-hidden rounded-lg bg-surface border border-surface-border/40">
                           {item.artworkUrl ? (
                             <img
-                              src={item.artworkUrl}
+                              src={getArtworkSourceUrl(item.artworkUrl)}
                               alt=""
                               referrerPolicy="no-referrer"
                               className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
@@ -719,7 +724,7 @@ export function RoomProviderTrackSearch({
             return <article key={`${track.provider}:${track.providerTrackId}`} className="flex min-w-0 items-center gap-2.5 px-2.5 py-2 transition-colors hover:bg-surface-hover/60">
               {track.artworkUrl ? (
                 <img loading="lazy"
-                  src={track.artworkUrl}
+                  src={getArtworkSourceUrl(track.artworkUrl)}
                   referrerPolicy="no-referrer"
                   alt=""
                   className="h-9 w-9 shrink-0 rounded-md border border-surface-border/60 object-cover shadow-xs"

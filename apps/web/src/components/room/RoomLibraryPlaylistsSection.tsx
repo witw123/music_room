@@ -107,8 +107,10 @@ async function fetchSourceTracks(source: RoomPlaylistSource): Promise<ProviderTr
     }
     const detail = source.provider === "netease"
       ? await soqaroApi.getNeteasePlaylist(source.playlistId)
-      : await soqaroApi.getQqMusicPlaylist(source.playlistId);
-    return detail.tracks;
+      : source.provider === "qqmusic"
+        ? await soqaroApi.getQqMusicPlaylist(source.playlistId)
+        : null;
+    return detail?.tracks ?? [];
   } catch {
     return [];
   }

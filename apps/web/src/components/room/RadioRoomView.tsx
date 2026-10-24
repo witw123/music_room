@@ -23,6 +23,7 @@ import {
 } from "@/components/icons/DiscoverIcons";
 import { useProgressiveRoomLoading } from "./hooks/use-progressive-room-loading";
 import { RoomPanelSkeleton } from "./RoomPanelSkeleton";
+import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
 
 const MembersPanel = dynamic(() => import("./MembersPanel").then((m) => m.MembersPanel), {
   loading: RoomTabPanelPlaceholder
@@ -686,7 +687,7 @@ function RadioAutopilotNextTrackCard({ track }: { track: RadioAutopilotNextTrack
   return (
     <article className="mt-1.5 flex min-w-0 items-center gap-2.5 rounded-lg border border-surface-border bg-surface/60 p-2" data-testid="radio-autopilot-next-track">
       {track.artworkUrl ? (
-        <img loading="lazy" alt="" className="h-10 w-10 shrink-0 rounded-md border border-surface-border object-cover" src={track.artworkUrl} />
+        <img loading="lazy" alt="" className="h-10 w-10 shrink-0 rounded-md border border-surface-border object-cover" src={getArtworkSourceUrl(track.artworkUrl)} />
       ) : (
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-surface-border bg-surface text-xs text-foreground-muted">音乐</span>
       )}

@@ -12,6 +12,7 @@ import { findScrollableContainer, useDragAutoScroll } from "@/features/room/hook
 import { LocalAudioImport } from "./LocalAudioImport";
 import { TrackDistributionBadge } from "./TrackDistributionBadge";
 import { TrackContextMenu, type ContextMenuItem } from "@/components/ui/TrackContextMenu";
+import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
 
 type TrackListSectionProps = {
   roomId?: string | null;
@@ -952,13 +953,14 @@ function TrackListSectionBase({
 export const TrackListSection = memo(TrackListSectionBase);
 
 function TrackArtwork({ artworkUrl, title }: { artworkUrl: string | null; title: string }) {
+  const src = artworkUrl ? getArtworkSourceUrl(artworkUrl) : null;
   return (
     <div
       aria-label={`${title} 封面`}
       className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-md border border-surface-border bg-background text-xs font-semibold text-foreground-muted"
-      style={artworkUrl ? { backgroundImage: `url(${artworkUrl})`, backgroundPosition: "center", backgroundSize: "cover" } : undefined}
+      style={src ? { backgroundImage: `url(${src})`, backgroundPosition: "center", backgroundSize: "cover" } : undefined}
     >
-      {!artworkUrl ? title.slice(0, 1).toUpperCase() : null}
+      {!src ? title.slice(0, 1).toUpperCase() : null}
     </div>
   );
 }

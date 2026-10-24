@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 /* eslint-disable @next/next/no-img-element */
 import React, { useEffect, useState } from "react";
@@ -97,7 +97,7 @@ export async function resolveLegacyNetworkPlaylistArtwork(
 ) {
   const sources = playlist.trackIds
     .map((trackId) => parseProviderTrackSource(trackId))
-    .filter((source): source is { provider: "netease" | "qqmusic"; trackId: string } => !!source)
+    .filter((source): source is { provider: "netease" | "qqmusic" | "bilibili"; trackId: string } => !!source)
     .slice(0, 4);
   if (sources.length === 0) return [];
 
@@ -111,7 +111,20 @@ export async function resolveLegacyNetworkPlaylistArtwork(
         const track =
           source.provider === "netease"
             ? await soqaroApi.getNeteaseTrack(source.trackId)
-            : await soqaroApi.getQqMusicTrack(source.trackId);
+            : source.provider === "qqmusic"
+              ? await soqaroApi.getQqMusicTrack(source.trackId)
+              : await soqaroApi.getBilibiliView(source.trackId.split(":")[0]!).then((v) => ({
+                  provider: "bilibili" as const,
+                  providerTrackId: source.trackId,
+                  bvid: v.bvid,
+                  title: v.title,
+                  artist: v.ownerName,
+                  album: null,
+                  durationMs: v.duration * 1000,
+                  artworkUrl: v.pic,
+                  access: "free" as const,
+                  quality: "exhigh" as const
+                }));
         const resolved = toProviderTrackRecord(track, cached);
         if (resolved.artworkUrl) {
           try {
@@ -131,7 +144,7 @@ export async function resolveLegacyNetworkPlaylistArtwork(
 
 export function parseProviderTrackSource(trackId: string) {
   const [, provider, ...trackIdParts] = trackId.split(":");
-  if (provider !== "netease" && provider !== "qqmusic") return null;
+  if (provider !== "netease" && provider !== "qqmusic" && provider !== "bilibili") return null;
   const resolvedTrackId = trackIdParts.join(":").trim();
   return resolvedTrackId ? { provider, trackId: resolvedTrackId } : null;
 }
