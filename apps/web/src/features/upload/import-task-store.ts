@@ -248,7 +248,7 @@ class ImportTaskStore {
         ...task,
         completedCount,
         overallPercent,
-        currentStagePercent: 100
+        currentStagePercent: completedCount >= task.totalCount ? 100 : 0
       };
       this.tasks.set(taskId, updatedTask);
     }
@@ -280,13 +280,14 @@ class ImportTaskStore {
     const task = this.tasks.get(taskId);
     if (task) {
       const failedCount = task.failedCount + 1;
-      const progressCount = task.completedCount;
+      const progressCount = task.completedCount + failedCount;
       const calculatedPercent = Math.min(100, Math.max(0, Math.round((progressCount / task.totalCount) * 100)));
       const overallPercent = Math.min(100, Math.max(task.overallPercent, calculatedPercent));
       const updatedTask: ImportTaskGroup = {
         ...task,
         failedCount,
-        overallPercent
+        overallPercent,
+        currentStagePercent: (task.completedCount + failedCount) >= task.totalCount ? 100 : 0
       };
       this.tasks.set(taskId, updatedTask);
     }

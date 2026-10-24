@@ -43,8 +43,11 @@ export function inferAudioMimeType(fileName: string): string {
   const extension = fileName.split(".").pop()?.toLowerCase();
   if (extension === "flac") return "audio/flac";
   if (extension === "wav") return "audio/wav";
-  if (extension === "m4a" || extension === "aac") return "audio/mp4";
+  if (extension === "m4a" || extension === "aac" || extension === "alac") return "audio/mp4";
   if (extension === "ogg" || extension === "opus") return "audio/ogg";
+  if (extension === "ape") return "audio/ape";
+  if (extension === "wma") return "audio/x-ms-wma";
+  if (extension === "aif" || extension === "aiff") return "audio/aiff";
   return "audio/mpeg";
 }
 
@@ -55,9 +58,20 @@ export function throwIfAborted(signal?: AbortSignal): void {
 }
 
 export async function readDirectoryTrackMetadata(file: File) {
+  const baseName = file.name.replace(/\.[^/.]+$/, "");
+  let parsedArtist = "本地歌曲";
+  let parsedTitle = baseName;
+  if (baseName.includes(" - ")) {
+    const parts = baseName.split(" - ");
+    if (parts.length >= 2 && parts[0].trim() && parts[1].trim()) {
+      parsedArtist = parts[0].trim();
+      parsedTitle = parts.slice(1).join(" - ").trim();
+    }
+  }
+
   const fallback = {
-    title: file.name.replace(/\.[^/.]+$/, ""),
-    artist: "本地歌曲",
+    title: parsedTitle,
+    artist: parsedArtist,
     album: null as string | null,
     durationMs: 0,
     artworkUrl: null as string | null,
@@ -133,52 +147,57 @@ export async function performSelectedLocalDirectorySync(options?: { signal?: Abo
   const scannedTracks: Array<{ track: LocalPlaylistTrackRecord; fileHash: string; fileName: string; changed: boolean }> = [];
   for (const [index, { file, fileName, lastModified }] of selectedFiles.entries()) {
     throwIfAborted(options?.signal);
-    const previous = existingByFileName.get(fileName);
-    const previousLastModified = previous?.lastModified ?? null;
-    const canReuse =
-      !!previous?.fileHash &&
-      previous.sizeBytes === file.size &&
-      previousLastModified !== null &&
-      previousLastModified === lastModified;
-    const fileHash = canReuse ? previous.fileHash! : await hashAudioBlob(file, options?.signal);
-    const existing = existingByHash.get(fileHash) ?? previous;
-    const metadata = canReuse
-      ? {
-          title: previous.title,
-          artist: previous.artist,
-          album: previous.album,
-          durationMs: previous.durationMs,
-          artworkUrl: previous.artworkUrl,
-          lyrics: previous.lyrics
-        }
-      : await readDirectoryTrackMetadata(file);
-    // IndexedDB returns tracks by updatedAt descending, so earlier scan entries get later timestamps.
-    const now = canReuse ? previous.updatedAt : new Date(scanTimestamp - index).toISOString();
-    scannedTracks.push({
-      track: {
-        id: `local-file:${fileHash}`,
-        title: metadata.title,
-        artist: metadata.artist,
-        album: metadata.album,
-        durationMs: metadata.durationMs,
-        mimeType: file.type || inferAudioMimeType(file.name),
-        sizeBytes: file.size,
-        artworkUrl: metadata.artworkUrl,
-        lyrics: metadata.lyrics,
-        provider: "local_upload" as const,
-        providerTrackId: null,
+    try {
+      const previous = existingByFileName.get(fileName);
+      const previousLastModified = previous?.lastModified ?? null;
+      const canReuse =
+        !!previous?.fileHash &&
+        previous.sizeBytes === file.size &&
+        previousLastModified !== null &&
+        previousLastModified === lastModified;
+      const fileHash = canReuse ? previous.fileHash! : await hashAudioBlob(file, options?.signal);
+      const existing = existingByHash.get(fileHash) ?? previous;
+      const metadata = canReuse
+        ? {
+            title: previous.title,
+            artist: previous.artist,
+            album: previous.album,
+            durationMs: previous.durationMs,
+            artworkUrl: previous.artworkUrl,
+            lyrics: previous.lyrics
+          }
+        : await readDirectoryTrackMetadata(file);
+      // IndexedDB returns tracks by updatedAt descending, so earlier scan entries get later timestamps.
+      const now = canReuse ? previous.updatedAt : new Date(scanTimestamp - index).toISOString();
+      scannedTracks.push({
+        track: {
+          id: `local-file:${fileHash}`,
+          title: metadata.title,
+          artist: metadata.artist,
+          album: metadata.album,
+          durationMs: metadata.durationMs,
+          mimeType: file.type || inferAudioMimeType(file.name),
+          sizeBytes: file.size,
+          artworkUrl: metadata.artworkUrl,
+          lyrics: metadata.lyrics,
+          provider: "local_upload" as const,
+          providerTrackId: null,
+          fileHash,
+          fileName,
+          lastModified,
+          availableOffline: true,
+          source: directoryScanSource,
+          createdAt: existing?.createdAt ?? now,
+          updatedAt: now
+        } satisfies LocalPlaylistTrackRecord,
         fileHash,
         fileName,
-        lastModified,
-        availableOffline: true,
-        source: directoryScanSource,
-        createdAt: existing?.createdAt ?? now,
-        updatedAt: now
-      } satisfies LocalPlaylistTrackRecord,
-      fileHash,
-      fileName,
-      changed: !canReuse || !indexedHashes.has(fileHash)
-    });
+        changed: !canReuse || !indexedHashes.has(fileHash)
+      });
+    } catch (error) {
+      if (options?.signal?.aborted) throw error;
+      // Skip corrupt or unreadable audio file and continue with the rest
+    }
     await yieldIfFrameBudgetExhausted();
   }
 

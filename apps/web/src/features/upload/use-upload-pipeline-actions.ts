@@ -1,4 +1,4 @@
-﻿import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import type {
   BilibiliTrackCandidate,
   GuestSession,
@@ -11,7 +11,6 @@ import type {
 } from "@soqaro/shared";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import {
-  deleteCachedLibraryTrack,
   deleteLocalTrackDataForTracks,
   linkTrackAssets,
   upsertCachedLibraryTrack
@@ -35,7 +34,7 @@ import {
 import { resolveProviderTrackSource } from "@/features/library/provider-track-identity";
 import {
   getConfiguredLocalRepository,
-  saveAudioFileToLocalDirectory
+  saveCachedAudioFileToLocalDirectory
 } from "@/features/library/local-audio-storage";
 import { persistRoomSnapshotToLocalRepository } from "@/features/library/local-room-storage";
 import { hasRoomPermission } from "@/features/room/room-permissions";
@@ -105,6 +104,15 @@ export function useUploadPipelineActions({
       refreshCache?: boolean;
       lyrics?: string | null;
     }) => {
+      const cachedRecord = buildCachedLibraryTrackUpsertRecord({
+        ...input,
+        track: {
+          ...input.track,
+          lyrics: input.lyrics ?? null
+        }
+      });
+      await upsertCachedLibraryTrack(cachedRecord);
+
       const localRepository = await getConfiguredLocalRepository();
       if (localRepository) {
         const providerSource = resolveProviderTrackSource(input.track);
@@ -113,44 +121,22 @@ export function useUploadPipelineActions({
             ? input.track.sourceType
             : "local_upload"
         );
-        const providerTrackId = providerSource?.trackId ?? input.track.sourceRef?.trackId ?? null;
 
-        await saveAudioFileToLocalDirectory({
+        await saveCachedAudioFileToLocalDirectory({
           file: input.file,
           fileHash: input.track.fileHash,
           title: input.track.title,
           mimeType: input.track.mimeType ?? "audio/mpeg",
-          trackId: input.track.id,
-          track: {
-            artist: input.track.artist,
-            album: input.track.album,
-            artworkUrl: input.track.artworkUrl,
-            lyrics: input.lyrics ?? null,
-            translatedLyrics: input.track.translatedLyrics ?? null,
-            romanizedLyrics: input.track.romanizedLyrics ?? null,
-            provider,
-            providerTrackId,
-            loudness: input.track.loudness,
-            durationMs: input.track.durationMs,
-            sizeBytes: input.track.sizeBytes ?? input.file.size,
-            originalAsset: input.track.originalAsset,
-            playbackAsset: input.track.playbackAsset
-          }
-        });
-        await deleteCachedLibraryTrack(input.track.fileHash);
-        if (input.refreshCache !== false) {
-          await refreshCacheLibrary();
-        }
-      } else {
-        const cachedRecord = buildCachedLibraryTrackUpsertRecord({
-          ...input,
-          track: {
-            ...input.track,
-            lyrics: input.lyrics ?? null
-          }
-        });
-        await upsertCachedLibraryTrack(cachedRecord);
+          provider,
+          originalAsset: input.track.originalAsset,
+          playbackAsset: input.track.playbackAsset
+        }).catch(() => null);
       }
+
+      if (input.refreshCache !== false) {
+        await refreshCacheLibrary();
+      }
+
       if (input.refreshCache !== false && roomSnapshot?.room.id === input.roomId) {
         const tracks = roomSnapshot.tracks.some((track) => track.id === input.track.id)
           ? roomSnapshot.tracks
@@ -214,6 +200,16 @@ export function useUploadPipelineActions({
           inFlightUploadHashes: inFlightUploadHashesRef.current,
           createObjectUrl: (file) => URL.createObjectURL(file),
           revokeObjectUrl: (objectUrl) => URL.revokeObjectURL(objectUrl),
+          onTrackStart: (file, index) => {
+            const cachedMetadata = metadataByFileHash?.get(file.name);
+            importTaskStore.updateTaskProgress(taskId, {
+              currentTitle: cachedMetadata?.title ?? file.name,
+              currentStage: "正在校验源文件",
+              currentStagePercent: 0,
+              completedCount: index,
+              activeItemKey: file.name
+            });
+          },
           buildTrackMeta: async (file, objectUrl) => {
             const cachedMetadata = selectedFiles.length === 1 && metadataByFileHash?.size === 1
               ? metadataByFileHash.values().next().value
@@ -297,7 +293,7 @@ export function useUploadPipelineActions({
             soqaroApi.deleteTrack(registerRoomId, trackId),
           deleteLocalTrackData: deleteLocalTrackDataForTracks,
           persistTrackIntoLibrary,
-          onTrackReady: (trackId, upload, registeredTrack) => {
+          onTrackReady: async (trackId, upload, registeredTrack) => {
             setUploadedTracks((current) => ({
               ...current,
               [trackId]: upload
@@ -314,6 +310,8 @@ export function useUploadPipelineActions({
               registeredTrack.title || registeredTrack.id,
               [registeredTrack.fileHash, registeredTrack.id]
             );
+            await syncRoomSnapshot(roomId);
+            void refreshCacheLibrary();
           }
         });
 

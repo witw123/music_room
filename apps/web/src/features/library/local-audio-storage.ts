@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import type { RepositoryDirectoryHandle as FileSystemDirectoryHandle } from "./directory-handle";
 import { hasNativeStorage } from "./native-storage";
@@ -1081,18 +1081,26 @@ async function collectSelectedLocalAudioFiles(
     await yieldIfFrameBudgetExhausted();
     const fileName = parentPath ? `${parentPath}/${entry.name}` : entry.name;
     if (entry.kind === "file") {
-      const file = await entry.getFile();
-      if (isAudioFile(file)) {
-        files.push({ file, fileName, lastModified: file.lastModified });
+      try {
+        const file = await entry.getFile();
+        if (isAudioFile(file)) {
+          files.push({ file, fileName, lastModified: file.lastModified });
+        }
+      } catch {
+        // Skip inaccessible file without failing the whole scan
       }
       continue;
     }
 
-    // Soqaro's managed files are indexed separately.
-    if (!parentPath && entry.name === ".soqaro") {
+    // Skip hidden folders (e.g. .git, .soqaro, .vscode) and system subdirectories
+    if (entry.name.startsWith(".")) {
       continue;
     }
-    await collectSelectedLocalAudioFiles(entry, fileName, files, signal, yieldIfFrameBudgetExhausted);
+    try {
+      await collectSelectedLocalAudioFiles(entry, fileName, files, signal, yieldIfFrameBudgetExhausted);
+    } catch {
+      // Skip inaccessible directory without failing the whole scan
+    }
   }
 }
 

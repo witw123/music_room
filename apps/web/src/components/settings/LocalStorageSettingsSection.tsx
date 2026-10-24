@@ -70,6 +70,7 @@ export function LocalStorageManagementCard() {
     try {
       cancelSelectedLocalDirectorySync();
       await chooseLocalAudioDirectory();
+      await syncSelectedLocalDirectoryTracks().catch(() => null);
       window.location.reload();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "选择本地目录失败，请重试。");

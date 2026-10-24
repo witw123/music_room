@@ -81,6 +81,7 @@ const config: Config = {
         }
       },
       animation: {
+        'spin-slow': 'spin 8s linear infinite',
         'fade-in': 'fadeIn 250ms cubic-bezier(0, 0, 0.2, 1) forwards',
         'slide-up': 'slideUp 250ms cubic-bezier(0, 0, 0.2, 1) forwards',
         'music-bar': 'musicBar 1s ease-in-out infinite',

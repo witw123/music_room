@@ -1,4 +1,4 @@
-﻿import type { TrackMeta } from "@soqaro/shared";
+import type { TrackMeta } from "@soqaro/shared";
 import type { UploadedTrack } from "@/features/library/audio-utils";
 
 type TrackRegistrationDraft = Omit<TrackMeta, "id"> & {
@@ -65,7 +65,8 @@ export async function processSelectedTrackFiles(input: {
   }) => Promise<void>;
   deleteTrack?: (roomId: string, trackId: string) => Promise<unknown>;
   deleteLocalTrackData?: (trackIds: readonly string[]) => Promise<void>;
-  onTrackReady?: (trackId: string, upload: UploadedTrack, track: TrackMeta) => void;
+  onTrackStart?: (file: File, index: number, total: number) => void;
+  onTrackReady?: (trackId: string, upload: UploadedTrack, track: TrackMeta) => Promise<void> | void;
 }) {
   const uploads: Record<string, UploadedTrack> = {};
   const registeredTracks: TrackMeta[] = [];
@@ -83,7 +84,9 @@ export async function processSelectedTrackFiles(input: {
       .map((track) => [track.fileHash, track] as const)
   );
 
-  for (const file of input.files) {
+  for (let fileIndex = 0; fileIndex < input.files.length; fileIndex++) {
+    const file = input.files[fileIndex];
+    input.onTrackStart?.(file, fileIndex, input.files.length);
     const objectUrl = input.createObjectUrl(file);
     let retainObjectUrl = false;
     // Cheap file-identity marker claimed before the expensive decode/encode:
@@ -148,7 +151,7 @@ export async function processSelectedTrackFiles(input: {
       }
       retainObjectUrl = true;
       uploads[registered.id] = upload;
-      input.onTrackReady?.(registered.id, upload, registered);
+      await input.onTrackReady?.(registered.id, upload, registered);
       registeredTracks.push(registered);
       currentTracksByHash.set(registered.fileHash, registered);
     } finally {

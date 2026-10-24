@@ -125,9 +125,9 @@ export function RoomLyricsPanel({
   const canToggleRomanized = romanizedLines.length > 0 && Boolean(onToggleRomanized);
   const lyricScrollPaddingClass = showControls
     ? mobile
-      ? "px-12"
-      : "px-1 pr-12 sm:px-2 sm:pr-14"
-    : "px-1 sm:px-2";
+      ? "pl-2 pr-14"
+      : "pl-2 pr-16 sm:pl-3 sm:pr-20"
+    : "px-2 sm:px-3";
   const panelHeightClass = immersive || mobile
     ? "h-full min-h-0 max-h-none"
     : isSevenLineView
@@ -193,11 +193,11 @@ export function RoomLyricsPanel({
   return (
     <section
       aria-label="歌词"
-      className={`pointer-events-auto relative z-20 mx-auto flex w-full ${immersive || mobile ? "max-w-none" : "max-w-[min(100%,34rem)]"} ${immersive || mobile ? "flex-1 self-stretch" : "flex-none"} flex-col overflow-hidden px-3 ${frozen ? "" : "animate-fade-in"} sm:px-6 ${panelHeightClass} ${className ?? ""}`}
+      className={`pointer-events-auto relative z-20 mx-auto flex w-full ${immersive || mobile ? "max-w-none" : "max-w-[min(100%,34rem)]"} ${immersive || mobile ? "flex-1 self-stretch" : "flex-none"} flex-col overflow-hidden pl-3 pr-0 ${frozen ? "" : "animate-fade-in"} sm:pl-6 sm:pr-0 ${panelHeightClass} ${className ?? ""}`}
       data-testid="room-lyrics-panel"
     >
       {showControls && (canToggleTranslation || canToggleRomanized || Boolean(onOffsetChange)) ? (
-        <div className="absolute right-1 top-1/2 z-10 flex -translate-y-1/2 flex-col items-center gap-1.5 sm:right-2">
+        <div className="absolute right-3.5 top-1/2 z-10 flex -translate-y-1/2 flex-col items-center gap-1.5 sm:right-5">
           {!isChineseLyrics && canToggleTranslation ? (
             <button
               aria-label={showTranslation ? "关闭翻译" : "开启翻译"}

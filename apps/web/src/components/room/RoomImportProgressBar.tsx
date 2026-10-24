@@ -26,15 +26,19 @@ function RoomImportProgressBarBase() {
 
   let label = "";
   if (isRunning) {
+    const stagePercent =
+      typeof activeTask.currentStagePercent === "number" && activeTask.currentStagePercent > 0
+        ? ` ${activeTask.currentStagePercent}%`
+        : "";
+    const stageText = activeTask.currentStage ? ` (${activeTask.currentStage}${stagePercent})` : "";
+
     if (total > 1) {
       const itemTitle = activeTask.currentTitle ? `《${activeTask.currentTitle}》` : "";
-      const stageText = activeTask.currentStage ? ` (${activeTask.currentStage})` : "";
       label = `正在导入 (${current}/${total})：${itemTitle}${stageText}`;
     } else {
       let rawTitle = activeTask.currentTitle || activeTask.title;
       rawTitle = rawTitle.replace(/^导入/, "").replace(/^《|》$/g, "").trim();
       const itemTitle = rawTitle ? `《${rawTitle}》` : "";
-      const stageText = activeTask.currentStage ? ` (${activeTask.currentStage})` : "";
       label = `正在导入：${itemTitle}${stageText}`;
     }
   } else if (isCompleted) {

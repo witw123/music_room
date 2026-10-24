@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
@@ -41,10 +41,13 @@ import {
   updateLocalPlaylist,
   upsertLocalPlaylistTrack,
   type LocalPlaylistRecord,
-  type LocalPlaylistTrackRecord
+  type LocalPlaylistTrackRecord,
+  syncSelectedLocalDirectoryTracks
 } from "@/features/playlist/local-playlist";
 import {
-  getLocalAudioStorageState
+  getLocalAudioStorageState,
+  requestLocalAudioDirectoryPermission,
+  type LocalAudioStorageState
 } from "@/features/library/local-audio-storage";
 import { soqaroApi } from "@/lib/network/soqaro-api";
 import {
@@ -84,6 +87,9 @@ export function PlaylistsWorkspacePage({
   });
   const [localTracks, setLocalTracks] = useState<LocalPlaylistTrackRecord[]>([]);
   const [localPlaylists, setLocalPlaylists] = useState<LocalPlaylistRecord[]>([]);
+  const [localStorageState, setLocalStorageState] = useState<LocalAudioStorageState | null>(null);
+  const [isScanningDirectory, setIsScanningDirectory] = useState(false);
+  const initialSyncTriggeredRef = useRef(false);
   const [networkPlaylists, setNetworkPlaylists] = useState<Playlist[]>([]);
   const [localPlaylistDatabaseIds, setLocalPlaylistDatabaseIds] = useState<Record<string, string>>({});
   const [networkArtworkById, setNetworkArtworkById] = useState<Record<string, string[]>>({});
@@ -108,6 +114,44 @@ export function PlaylistsWorkspacePage({
     pendingFavoriteKey,
     toggleFavorite: toggleFavoriteTrack
   } = useFavoriteTracks(activeUserId);
+
+  const authorizeDirectory = async () => {
+    if (pending) return;
+    setPending(true);
+    setMessage(null);
+    try {
+      const granted = await requestLocalAudioDirectoryPermission();
+      if (!granted) {
+        setMessage("未获得本地目录访问权限。");
+        return;
+      }
+      setIsScanningDirectory(true);
+      const count = await syncSelectedLocalDirectoryTracks();
+      await refresh();
+      setStatusMessage(`已授权并完成扫描，共识别 ${count} 首歌曲。`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "目录授权失败。");
+    } finally {
+      setIsScanningDirectory(false);
+      setPending(false);
+    }
+  };
+
+  const scanDirectory = async () => {
+    if (isScanningDirectory || pending) return;
+    setIsScanningDirectory(true);
+    setMessage(null);
+    setStatusMessage(null);
+    try {
+      const count = await syncSelectedLocalDirectoryTracks();
+      await refresh();
+      setStatusMessage(`本地目录扫描完成，共识别 ${count} 首歌曲。`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "扫描本地目录失败。");
+    } finally {
+      setIsScanningDirectory(false);
+    }
+  };
 
   function togglePlaylistTrackFavorite(track: LocalPlaylistTrackRecord) {
     const candidate = toCachedProviderTrack(track);
@@ -167,12 +211,30 @@ export function PlaylistsWorkspacePage({
           getLocalAudioStorageState(),
           listRoomPlaylistTrackIndex()
         ]);
+        setLocalStorageState(storage);
         mergeLocalPlaylists(restoredPlaylists);
         const playlists = ensureDefaultLocalPlaylist({
-          trackIds: getDefaultLocalPlaylistTrackIds(tracks, new Set(storage.savedFileHashes)),
+          trackIds: getDefaultLocalPlaylistTrackIds(
+            tracks,
+            new Set(storage.savedFileHashes),
+            { allowUnverifiedWhenEmpty: storage.permission !== "granted" }
+          ),
           sourceDirectoryName: storage.directoryName
         });
         applyLocalData(tracks, playlists, roomTracks);
+
+        if (
+          !initialSyncTriggeredRef.current &&
+          storage.directoryName &&
+          storage.permission === "granted" &&
+          storage.savedFileHashes.length === 0
+        ) {
+          initialSyncTriggeredRef.current = true;
+          void syncSelectedLocalDirectoryTracks().then(() => {
+            void refresh();
+          });
+        }
+
         return { tracks, playlists, storage, roomTracks };
       };
 
@@ -213,7 +275,8 @@ export function PlaylistsWorkspacePage({
       const localPlaylistRecords = ensureDefaultLocalPlaylist({
         trackIds: getDefaultLocalPlaylistTrackIds(
           localData.tracks,
-          new Set(localData.storage.savedFileHashes)
+          new Set(localData.storage.savedFileHashes),
+          { allowUnverifiedWhenEmpty: localData.storage.permission !== "granted" }
         ),
         sourceDirectoryName: localData.storage.directoryName
       });
@@ -577,6 +640,10 @@ export function PlaylistsWorkspacePage({
               : selectedPlaylist.kind === "network"
                 ? () => setDeleteTarget({ kind: "network", playlist: selectedPlaylist.playlist })
                 : undefined}
+            onScanDirectory={scanDirectory}
+            isScanning={isScanningDirectory}
+            onAuthorizeDirectory={authorizeDirectory}
+            needsAuthorization={Boolean(localStorageState?.directoryName && localStorageState.permission !== "granted" && !localStorageState.fixedRoot)}
           />
         ) : (
           <>
@@ -584,10 +651,36 @@ export function PlaylistsWorkspacePage({
               <section className="mt-2 flex flex-col gap-3.5" data-testid="local-playlists">
                 <div className="flex items-center justify-between gap-3">
                   <h1 className="text-base sm:text-lg font-semibold tracking-tight text-foreground">本地歌单</h1>
-                  <Button onClick={() => void openCreateDialog("local")} size="sm" variant="outline" type="button" className="h-8 rounded-lg px-2.5 text-xs">
-                    <svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M12 5v14M5 12h14" /></svg>
-                    新建本地歌单
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    {localStorageState?.directoryName && localStorageState.permission !== "granted" && !localStorageState.fixedRoot ? (
+                      <Button
+                        className="h-8 rounded-lg px-2.5 text-xs border border-surface-border"
+                        disabled={pending}
+                        onClick={() => void authorizeDirectory()}
+                        size="sm"
+                        type="button"
+                        variant="outline"
+                      >
+                        重新授权
+                      </Button>
+                    ) : null}
+                    {localStorageState?.directoryName && (localStorageState.permission === "granted" || localStorageState.fixedRoot) ? (
+                      <Button
+                        className="h-8 rounded-lg px-2.5 text-xs border border-surface-border"
+                        disabled={isScanningDirectory}
+                        onClick={() => void scanDirectory()}
+                        size="sm"
+                        type="button"
+                        variant="outline"
+                      >
+                        {isScanningDirectory ? "扫描中…" : "扫描目录"}
+                      </Button>
+                    ) : null}
+                    <Button onClick={() => void openCreateDialog("local")} size="sm" variant="outline" type="button" className="h-8 rounded-lg px-2.5 text-xs border border-surface-border">
+                      <svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M12 5v14M5 12h14" /></svg>
+                      新建本地歌单
+                    </Button>
+                  </div>
                 </div>
                 {localPlaylists.length ? (
                   <div className="grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-3 sm:gap-x-4 sm:gap-y-5 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">

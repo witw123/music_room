@@ -1,4 +1,4 @@
-﻿import type { Dispatch, MutableRefObject, SetStateAction } from "react";
+import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import type {
   GuestSession,
   ProviderTrackCandidate,
@@ -193,7 +193,7 @@ export async function importProviderTracks(input: {
     currentStage: "正在准备获取音频"
   });
 
-  const CHUNK_SIZE = 10;
+  const CHUNK_SIZE = 1;
   const currentBatch: PreparedProviderImport[] = [];
   const currentBatchHeldKeys: string[] = [];
   let totalSuccessfulCount = 0;

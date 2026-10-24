@@ -56,7 +56,7 @@ export {
 } from "./local-playlist-directory-sync";
 
 export const defaultLocalPlaylistId = "local-default";
-const defaultLocalPlaylistTitle = "项目根目录";
+const defaultLocalPlaylistTitle = "本地音乐";
 let localPlaylistPersistencePromise: Promise<void> = Promise.resolve();
 let localPlaylists: LocalPlaylistRecord[] = [];
 
@@ -96,12 +96,17 @@ export function ensureDefaultLocalPlaylist(input: {
   sourceDirectoryName: string | null;
 }) {
   const current = listLocalPlaylists().find((playlist) => playlist.id === defaultLocalPlaylistId);
+  const title = input.sourceDirectoryName || defaultLocalPlaylistTitle;
+  const description = input.sourceDirectoryName
+    ? `${input.sourceDirectoryName}中的本地歌曲`
+    : "本地音乐目录中的歌曲";
+
   if (!current) {
     const now = new Date().toISOString();
     const playlist: LocalPlaylistRecord = {
       id: defaultLocalPlaylistId,
-      title: defaultLocalPlaylistTitle,
-      description: "项目根目录中的本地歌曲",
+      title,
+      description,
       trackIds: [...new Set(input.trackIds)],
       sourceDirectoryId: null,
       sourceDirectoryName: input.sourceDirectoryName,
@@ -121,16 +126,19 @@ export function ensureDefaultLocalPlaylist(input: {
   ];
   const tracksChanged = !sameStringArray(current.trackIds, orderedTrackIds);
   const sourceChanged = current.sourceDirectoryName !== input.sourceDirectoryName;
+  const titleChanged = current.title !== title;
   const updated: LocalPlaylistRecord = {
     ...current,
+    title,
+    description: current.description === "项目根目录中的本地歌曲" ? description : (current.description || description),
     sourceDirectoryId: null,
     trackIds: orderedTrackIds,
     sourceDirectoryName: input.sourceDirectoryName,
-    updatedAt: tracksChanged || sourceChanged
+    updatedAt: tracksChanged || sourceChanged || titleChanged
       ? new Date().toISOString()
       : current.updatedAt
   };
-  if (tracksChanged || sourceChanged) {
+  if (tracksChanged || sourceChanged || titleChanged) {
     writeLocalPlaylists(listLocalPlaylists().map((playlist) => playlist.id === current.id ? updated : playlist));
   }
   return sortLocalPlaylists(listLocalPlaylists());
@@ -138,8 +146,18 @@ export function ensureDefaultLocalPlaylist(input: {
 
 export function getDefaultLocalPlaylistTrackIds(
   tracks: readonly LocalPlaylistTrackRecord[],
-  savedFileHashes: ReadonlySet<string>
+  savedFileHashes: ReadonlySet<string>,
+  options?: { allowUnverifiedWhenEmpty?: boolean }
 ) {
+  if (savedFileHashes.size === 0 && options?.allowUnverifiedWhenEmpty) {
+    return tracks
+      .filter((track) =>
+        track.availableOffline &&
+        !!track.fileHash &&
+        !track.sourceDirectoryId
+      )
+      .map((track) => track.id);
+  }
   return tracks
     .filter((track) =>
       track.availableOffline &&

@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   RepositoryDirectoryHandle as FileSystemDirectoryHandle,
   RepositoryFileHandle as FileSystemFileHandle
 } from "./directory-handle";
@@ -231,7 +231,7 @@ export function isAbortError(error: unknown) {
 }
 
 export function isAudioFile(file: File) {
-  return file.type.startsWith("audio/") || /\.(aac|flac|m4a|mp3|ogg|opus|wav|webm)$/i.test(file.name);
+  return file.type.startsWith("audio/") || /\.(aac|aif|aiff|alac|ape|dsd|dsf|dff|flac|m4a|mka|mp3|ogg|opus|wav|webm|wma)$/i.test(file.name);
 }
 
 export function splitLocalPath(fileName: string) {

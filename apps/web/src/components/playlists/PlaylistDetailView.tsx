@@ -1,8 +1,9 @@
-﻿"use client";
+"use client";
 
 import React, { useEffect, useState } from "react";
 import type { LocalPlaylistTrackRecord } from "@/features/playlist/local-playlist";
 import {
+  defaultLocalPlaylistId,
   providerTrackKey,
   toCachedProviderTrack,
   toProviderTrackRecord
@@ -47,6 +48,10 @@ export function PlaylistDetailView({
   onToggleFavorite,
   onUpdateTracks,
   onMoveTrack,
+  onScanDirectory,
+  isScanning,
+  onAuthorizeDirectory,
+  needsAuthorization,
   pending
 }: {
   localTracks: LocalPlaylistTrackRecord[];
@@ -63,6 +68,10 @@ export function PlaylistDetailView({
   onToggleFavorite: (track: LocalPlaylistTrackRecord) => void;
   onUpdateTracks: (trackIds: string[]) => void;
   onMoveTrack?: (track: LocalPlaylistTrackRecord, anchor: AnchoredDialogAnchor) => void;
+  onScanDirectory?: () => void;
+  isScanning?: boolean;
+  onAuthorizeDirectory?: () => void;
+  needsAuthorization?: boolean;
   pending: boolean;
 }) {
   const isLocal = selection.kind === "local";
@@ -422,6 +431,28 @@ export function PlaylistDetailView({
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-surface-border pb-3">
         <span className="text-xs font-medium text-foreground-muted">{rows.length} 首歌曲</span>
         <div className="flex items-center gap-2">
+          {isLocal && localPlaylist?.id === defaultLocalPlaylistId ? (
+            needsAuthorization && onAuthorizeDirectory ? (
+              <Button
+                className="h-8 gap-1.5 rounded-lg border border-surface-border bg-surface px-3 text-xs font-medium text-foreground hover:bg-surface-hover"
+                onClick={onAuthorizeDirectory}
+                type="button"
+                variant="outline"
+              >
+                重新授权
+              </Button>
+            ) : onScanDirectory ? (
+              <Button
+                className="h-8 gap-1.5 rounded-lg border border-surface-border bg-surface px-3 text-xs font-medium text-foreground hover:bg-surface-hover"
+                disabled={isScanning}
+                onClick={onScanDirectory}
+                type="button"
+                variant="outline"
+              >
+                {isScanning ? "扫描中…" : "扫描目录"}
+              </Button>
+            ) : null
+          ) : null}
           {showBatchDownload ? (
             <Button
               className="h-8 gap-1.5 rounded-lg border border-surface-border bg-surface px-3 text-xs font-medium text-foreground hover:bg-surface-hover"
@@ -605,8 +636,30 @@ export function PlaylistDetailView({
             );
           })
         ) : (
-          <div className="px-6 py-8 text-center text-sm text-foreground-muted">
-            这个歌单还没有歌曲。
+          <div className="flex flex-col items-center justify-center gap-3 px-6 py-12 text-center text-sm text-foreground-muted">
+            <p>这个歌单还没有歌曲。</p>
+            {isLocal && localPlaylist?.id === defaultLocalPlaylistId ? (
+              needsAuthorization && onAuthorizeDirectory ? (
+                <Button
+                  className="h-8 gap-1.5 rounded-lg border border-surface-border bg-surface px-3 text-xs font-medium text-foreground hover:bg-surface-hover"
+                  onClick={onAuthorizeDirectory}
+                  type="button"
+                  variant="outline"
+                >
+                  重新授权本地目录
+                </Button>
+              ) : onScanDirectory ? (
+                <Button
+                  className="h-8 gap-1.5 rounded-lg border border-surface-border bg-surface px-3 text-xs font-medium text-foreground hover:bg-surface-hover"
+                  disabled={isScanning}
+                  onClick={onScanDirectory}
+                  type="button"
+                  variant="outline"
+                >
+                  {isScanning ? "正在扫描…" : "扫描本地目录"}
+                </Button>
+              ) : null
+            ) : null}
           </div>
         )}
       </div>
