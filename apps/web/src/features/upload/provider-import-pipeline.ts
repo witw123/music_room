@@ -52,7 +52,7 @@ export type PrefetchedProviderAudioResult =
   | { ok: true; audio: PrefetchedProviderAudio }
   | { ok: false; error: unknown };
 
-const TRACK_DOWNLOAD_TIMEOUT_MS = 60_000;
+const TRACK_DOWNLOAD_INACTIVITY_TIMEOUT_MS = 35_000;
 
 export async function prefetchProviderAudio(
   candidate: ProviderTrackCandidate,
@@ -61,10 +61,17 @@ export async function prefetchProviderAudio(
   outerSignal?: AbortSignal
 ): Promise<PrefetchedProviderAudio> {
   const timeoutCtrl = new AbortController();
-  const timer = setTimeout(
-    () => timeoutCtrl.abort(new Error(`下载《${candidate.title}》超时，请稍后重试`)),
-    TRACK_DOWNLOAD_TIMEOUT_MS
-  );
+  let inactivityTimer: ReturnType<typeof setTimeout> | undefined;
+
+  const resetInactivityTimer = () => {
+    if (inactivityTimer) clearTimeout(inactivityTimer);
+    inactivityTimer = setTimeout(
+      () => timeoutCtrl.abort(new Error(`下载《${candidate.title}》超时，请稍后重试`)),
+      TRACK_DOWNLOAD_INACTIVITY_TIMEOUT_MS
+    );
+  };
+  resetInactivityTimer();
+
   const abortHandler = () => timeoutCtrl.abort();
   outerSignal?.addEventListener("abort", abortHandler, { once: true });
 
@@ -119,6 +126,7 @@ export async function prefetchProviderAudio(
     }
 
     const handleDownloadProgress = (loaded: number, total: number | null) => {
+      resetInactivityTimer();
       const percent = total && total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : undefined;
       onProgress?.({ loaded, total, percent });
     };
@@ -140,7 +148,7 @@ export async function prefetchProviderAudio(
       assets: null
     };
   } finally {
-    clearTimeout(timer);
+    if (inactivityTimer) clearTimeout(inactivityTimer);
     outerSignal?.removeEventListener("abort", abortHandler);
   }
 }
@@ -442,16 +450,24 @@ export async function importProviderTracks(input: {
           const prefetchPromise = prefetchedAudio.get(index);
           if (!prefetchPromise) throw new Error(`歌曲预取任务不存在：${candidate.title}`);
           const safetyTimeoutPromise = new Promise<PrefetchedProviderAudioResult>((resolve) => {
-            safetyTimer = setTimeout(() => {
-              resolve({
-                ok: false,
-                error: new Error(`连接音频服务器超时：${candidate.title}`)
-              });
-            }, 60_000);
+            const checkSafety = () => {
+              safetyTimer = setTimeout(() => {
+                if (streamBytesStarted) {
+                  // 数据流正在活跃接收，继续等待活跃下载完成
+                  checkSafety();
+                } else {
+                  resolve({
+                    ok: false,
+                    error: new Error(`连接音频服务器超时：${candidate.title}`)
+                  });
+                }
+              }, 45_000);
+            };
+            checkSafety();
           });
           prefetchResult = await Promise.race([prefetchPromise, safetyTimeoutPromise]);
         } finally {
-          clearTimeout(safetyTimer);
+          if (safetyTimer) clearTimeout(safetyTimer);
           clearInterval(downloadTimer);
         }
         prefetchedAudio.delete(index);

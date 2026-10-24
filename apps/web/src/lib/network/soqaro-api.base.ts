@@ -642,12 +642,55 @@ export async function downloadDirectTrack(input: DirectAudioDownloadInput): Prom
       : [resolved.url];
     if (input.signal?.aborted) throw new Error("Download aborted");
 
-    const isNative = isTauriRuntime() || isCapacitorRuntime();
     const candidates = candidateUrls
       .slice(0, DIRECT_CANDIDATE_LIMIT)
-      .map((url) => (isNative ? url : upgradeDirectUrl(url)));
+      .map((url) => upgradeDirectUrl(url));
 
-    // 1. 桌面端 (Tauri)：Rust 原生本地直连下载，完全在用户本地执行，不走服务端
+    // 1. 本地直连并发分段拉取（对网易云等允许 CORS 的 CDN，在用户本地端极速拉取并拥有实时平滑进度）
+    // 过滤掉浏览器/Webview 无法发送自定义 Referer 防盗链请求头的 CDN 域名（如 bilibili / bilivideo）
+    const directProbeableCandidates = candidates.filter((url) => {
+      try {
+        const hostname = new URL(url).hostname.toLowerCase();
+        return (
+          !hostname.endsWith("bilivideo.com") &&
+          !hostname.endsWith("hdslb.com") &&
+          !hostname.endsWith("bilibili.com")
+        );
+      } catch {
+        return false;
+      }
+    });
+
+    const winner = directProbeableCandidates.length > 0
+      ? await resolveFirstHealthyProbe(
+          directProbeableCandidates.map((candidateUrl) => probeDirectCandidate(candidateUrl, input.signal))
+        )
+      : null;
+
+    if (winner) {
+      let blob: Blob | null = null;
+      if (
+        winner.acceptsRanges &&
+        winner.contentLength &&
+        winner.contentLength >= DIRECT_PARALLEL_RANGE_THRESHOLD_BYTES &&
+        winner.contentLength <= DIRECT_PARALLEL_RANGE_MAX_BYTES
+      ) {
+        blob = await downloadDirectBlobInParallelRanges(winner.url, winner.contentLength, input.signal, input.onProgress);
+      }
+      if (!blob && !input.signal?.aborted) {
+        blob = await downloadDirectBlob(winner.url, input.signal, input.onProgress);
+      }
+      if (input.signal?.aborted) throw new Error("Download aborted");
+      if (blob && blob.size > 0) {
+        const contentType = await resolveDownloadedAudioMimeType(
+          blob,
+          winner.contentType ?? resolved.mimeType ?? ""
+        );
+        return { blob, contentType };
+      }
+    }
+
+    // 2. 桌面端 (Tauri)：Rust 原生本地直连下载（用于 B 站等需要注入自定义 Referer 防盗链头的本地下载）
     if (isTauriRuntime()) {
       let lastError: unknown = null;
       for (const directUrl of candidates) {
@@ -664,7 +707,7 @@ export async function downloadDirectTrack(input: DirectAudioDownloadInput): Prom
           });
           let timer: ReturnType<typeof setTimeout> | undefined;
           const timeoutPromise = new Promise<never>((_, reject) => {
-            timer = setTimeout(() => reject(new Error(`本地直连下载超时: ${directUrl}`)), 50_000);
+            timer = setTimeout(() => reject(new Error(`本地直连下载超时: ${directUrl}`)), 30_000);
             input.signal?.addEventListener("abort", () => reject(new Error("Download aborted")), { once: true });
           });
           let res: { dataBase64: string; contentType: string; contentLength: number } | undefined;
@@ -689,12 +732,14 @@ export async function downloadDirectTrack(input: DirectAudioDownloadInput): Prom
           lastError = err;
         }
       }
-      throw lastError instanceof Error
-        ? lastError
-        : new Error(lastError ? String(lastError) : "本地原生下载未成功，请检查网络连接。");
+      if (!input.fallback) {
+        throw lastError instanceof Error
+          ? lastError
+          : new Error(lastError ? String(lastError) : "本地原生下载未成功，请检查网络连接。");
+      }
     }
 
-    // 2. 移动端 (Capacitor Android/iOS)：CapacitorHttp 原生层请求，完全在用户本地执行，不走服务端
+    // 3. 移动端 (Capacitor Android/iOS)：CapacitorHttp 原生层请求
     if (isCapacitorRuntime()) {
       const capHttp = capacitorPlugin("CapacitorHttp");
       if (capHttp && typeof capHttp.request === "function") {
@@ -728,53 +773,11 @@ export async function downloadDirectTrack(input: DirectAudioDownloadInput): Prom
             lastError = err;
           }
         }
-        throw lastError instanceof Error
-          ? lastError
-          : new Error(lastError ? String(lastError) : "移动端本地原生下载未成功，请检查网络连接。");
-      }
-    }
-
-    // 3. 网页端 (Web 浏览器)：直接向 CDN 发起跨域直连探测与多并发分段拉取（如网易云）
-    // 过滤掉浏览器无法发送自定义 Referer 防盗链请求头的 CDN 域名（如 bilibili / bilivideo），避免控制台报 403
-    const browserProbeableCandidates = candidates.filter((url) => {
-      try {
-        const hostname = new URL(url).hostname.toLowerCase();
-        return (
-          !hostname.endsWith("bilivideo.com") &&
-          !hostname.endsWith("hdslb.com") &&
-          !hostname.endsWith("bilibili.com")
-        );
-      } catch {
-        return false;
-      }
-    });
-
-    const winner = browserProbeableCandidates.length > 0
-      ? await resolveFirstHealthyProbe(
-          browserProbeableCandidates.map((candidateUrl) => probeDirectCandidate(candidateUrl, input.signal))
-        )
-      : null;
-
-    if (winner) {
-      let blob: Blob | null = null;
-      if (
-        winner.acceptsRanges &&
-        winner.contentLength &&
-        winner.contentLength >= DIRECT_PARALLEL_RANGE_THRESHOLD_BYTES &&
-        winner.contentLength <= DIRECT_PARALLEL_RANGE_MAX_BYTES
-      ) {
-        blob = await downloadDirectBlobInParallelRanges(winner.url, winner.contentLength, input.signal, input.onProgress);
-      }
-      if (!blob && !input.signal?.aborted) {
-        blob = await downloadDirectBlob(winner.url, input.signal, input.onProgress);
-      }
-      if (input.signal?.aborted) throw new Error("Download aborted");
-      if (blob && blob.size > 0) {
-        const contentType = await resolveDownloadedAudioMimeType(
-          blob,
-          winner.contentType ?? resolved.mimeType ?? ""
-        );
-        return { blob, contentType };
+        if (!input.fallback) {
+          throw lastError instanceof Error
+            ? lastError
+            : new Error(lastError ? String(lastError) : "移动端本地原生下载未成功，请检查网络连接。");
+        }
       }
     }
   } catch (error) {

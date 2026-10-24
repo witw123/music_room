@@ -74,4 +74,18 @@ mod tests {
             assert!(hv.is_ok(), "HeaderValue parse failed for val: {v}");
         }
     }
+
+    #[test]
+    fn test_https_request() {
+        tauri::async_runtime::block_on(async {
+            let res = download_direct_native("https://www.baidu.com".to_string(), None, None).await;
+            match res {
+                Ok(resp) => {
+                    assert!(resp.content_length > 0);
+                    assert!(!resp.data_base64.is_empty());
+                }
+                Err(err) => panic!("HTTPS failed: {}", err),
+            }
+        });
+    }
 }
