@@ -1,4 +1,4 @@
-﻿import {
+import {
   HttpException,
   HttpStatus,
   Injectable
@@ -262,7 +262,7 @@ export class NeteaseService {
 
   async getLyrics(userId: string, trackId: string): Promise<ProviderLyrics> {
     this.assertEnabled();
-    const cookie = await this.getCookie(userId);
+    const cookie = await this.getOptionalCookie(userId);
     const body = await this.callProvider(userId, () => this.api.getLyrics({ trackId, cookie }));
     return {
       provider: "netease",
@@ -322,7 +322,7 @@ export class NeteaseService {
 
   async getRelatedPlaylists(userId: string, trackId: string): Promise<ProviderPlaylistListResponse> {
     this.assertEnabled();
-    const cookie = await this.getCookie(userId);
+    const cookie = await this.getOptionalCookie(userId);
     const body = await this.callProvider(userId, () => this.api.getRelatedPlaylists({ trackId, cookie }));
     const records = Array.isArray(body.playlists) ? body.playlists : [];
     const items = records.map((item) => this.toPlaylistSummary(item)).filter((item): item is ProviderPlaylistSummary => !!item);
@@ -350,7 +350,7 @@ export class NeteaseService {
 
   async getPlaylist(userId: string, playlistId: string): Promise<ProviderPlaylistDetail> {
     this.assertEnabled();
-    const cookie = await this.getCookie(userId);
+    const cookie = await this.getOptionalCookie(userId);
     const body = await this.callProvider(userId, () => this.api.getPlaylist({ playlistId, cookie }));
     const playlist = asRecord(body.playlist);
     if (!playlist) throw this.unavailableError();
@@ -379,7 +379,7 @@ export class NeteaseService {
 
   async getAlbum(userId: string, albumId: string): Promise<ProviderAlbumDetail> {
     this.assertEnabled();
-    const cookie = await this.getCookie(userId);
+    const cookie = await this.getOptionalCookie(userId);
     const body = await this.callProvider(userId, () => this.api.getAlbum({ albumId, cookie }));
     const album = asRecord(body.album) ?? asRecord(body);
     if (!album) throw this.unavailableError();
@@ -410,7 +410,7 @@ export class NeteaseService {
 
   async openAudio(userId: string, trackId: string, quality: string, range?: string) {
     this.assertEnabled();
-    this.assertRateLimit(`audio:${userId}`, 6, 60_000);
+    this.assertRateLimit(`audio:${userId}`, 120, 60_000);
     const parsedQuality = neteaseQualitySchema.safeParse(quality);
     const source = await this.resolveAudioSource(
       userId,
@@ -470,7 +470,7 @@ export class NeteaseService {
     trackId: string,
     quality: NeteaseQuality
   ) {
-    const cookie = await this.getCookie(userId);
+    const cookie = await this.getOptionalCookie(userId);
     const bitrates = this.bitratesForQuality(quality);
     let audio: { url: string; type?: string | null } | null = null;
     for (const candidateBitrate of bitrates) {

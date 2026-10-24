@@ -130,6 +130,12 @@ async function downloadQualityProviderTrack(
   }
   return downloadDirectTrack({
     resolve: () => resolveQualityProviderAudio(provider, trackId, quality, signal),
+    fallback: () =>
+      requestBlob(
+        `${providerTrackPath(provider, trackId)}/audio?quality=${quality}`,
+        { signal },
+        onProgress
+      ),
     headers,
     signal,
     onProgress
@@ -634,6 +640,12 @@ export const soqaroApi = {
   ) =>
     downloadDirectTrack({
       resolve: () => soqaroApi.resolveBilibiliAudio(trackId, signal),
+      fallback: () =>
+        requestBlob(
+          `/v1/providers/bilibili/tracks/${encodeURIComponent(trackId)}/audio`,
+          { signal },
+          onProgress
+        ),
       headers: {
         Referer: "https://www.bilibili.com/",
         "User-Agent":

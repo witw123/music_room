@@ -178,6 +178,28 @@ export async function request<T>(
   return rawBody as T;
 }
 
+const STREAM_READ_CHUNK_TIMEOUT_MS = 15_000;
+
+async function readStreamChunkWithTimeout(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  timeoutMs: number = STREAM_READ_CHUNK_TIMEOUT_MS,
+  outerSignal?: AbortSignal
+): Promise<{ done: boolean; value?: Uint8Array }> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error("网络流数据传输超时")), timeoutMs);
+  });
+  const abortPromise = new Promise<never>((_, reject) => {
+    if (outerSignal?.aborted) return reject(new Error("Download aborted"));
+    outerSignal?.addEventListener("abort", () => reject(new Error("Download aborted")), { once: true });
+  });
+  try {
+    return await Promise.race([reader.read(), timeoutPromise, abortPromise]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function requestBlob(
   path: string,
   init?: RequestInit,
@@ -221,7 +243,7 @@ export async function requestBlob(
     let receivedLength = 0;
     const chunks: Uint8Array[] = [];
     while (true) {
-      const { done, value } = await reader.read();
+      const { done, value } = await readStreamChunkWithTimeout(reader, 30_000, init?.signal as AbortSignal | undefined);
       if (done) break;
       if (value) {
         chunks.push(value);
@@ -482,7 +504,7 @@ async function downloadDirectBlob(
     let receivedLength = 0;
     const chunks: Uint8Array[] = [];
     while (true) {
-      const { done, value } = await reader.read();
+      const { done, value } = await readStreamChunkWithTimeout(reader, STREAM_READ_CHUNK_TIMEOUT_MS, outerSignal);
       if (done) break;
       if (value) {
         chunks.push(value);
@@ -525,7 +547,7 @@ async function downloadDirectBlobInParallelRanges(
             const reader = response.body.getReader();
             const chunks: Uint8Array[] = [];
             while (true) {
-              const { done, value } = await reader.read();
+              const { done, value } = await readStreamChunkWithTimeout(reader, STREAM_READ_CHUNK_TIMEOUT_MS, outerSignal);
               if (done) break;
               if (value) {
                 chunks.push(value);
@@ -588,9 +610,10 @@ export async function downloadDirectTrack(input: DirectAudioDownloadInput): Prom
       : [resolved.url];
     if (input.signal?.aborted) throw new Error("Download aborted");
 
+    const isNative = isTauriRuntime() || isCapacitorRuntime();
     const candidates = candidateUrls
       .slice(0, DIRECT_CANDIDATE_LIMIT)
-      .map(upgradeDirectUrl);
+      .map((url) => (isNative ? url : upgradeDirectUrl(url)));
 
     // 1. 桌面端 (Tauri)：Rust 原生多线程并发直连下载，完全绕过浏览器 CORS 与 Referer 防盗链限制
     if (isTauriRuntime()) {

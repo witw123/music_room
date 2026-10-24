@@ -226,6 +226,49 @@ describe("downloadWithDirectFallback", () => {
     expect(result.contentType).toBe("audio/mp4");
   });
 
+  it("falls back to the server proxy when CDN stream reading stalls", async () => {
+    vi.useFakeTimers();
+    let probeSeen = false;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string) => {
+        if (!probeSeen) {
+          probeSeen = true;
+          return respond(200, null, {
+            "content-type": "audio/mp4",
+            "content-length": "64"
+          });
+        }
+        // Stalled stream
+        const stream = new ReadableStream({
+          start() {
+            // Never pushes chunks
+          }
+        });
+        return new Response(stream, {
+          status: 200,
+          headers: { "content-type": "audio/mp4", "content-length": "64" }
+        });
+      })
+    );
+
+    const pending = downloadWithDirectFallback({
+      resolve: async () => ({
+        url: "https://stalled.example.com/audio.m4s",
+        urls: ["https://stalled.example.com/audio.m4s"],
+        mimeType: "audio/mp4"
+      }),
+      fallback: async () => ({ blob: new Blob([mp4Bytes(32)]), contentType: "audio/mp4" }),
+      onProgress: () => {}
+    });
+
+    await vi.advanceTimersByTimeAsync(20_000);
+    const result = await pending;
+
+    expect(result.blob.size).toBe(32);
+    expect(result.contentType).toBe("audio/mp4");
+  });
+
   it("rejects when the outer signal is aborted", async () => {
     const controller = new AbortController();
     vi.stubGlobal(

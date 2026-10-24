@@ -1,4 +1,4 @@
-﻿import { HttpException, HttpStatus, Injectable } from "@nestjs/common";
+import { HttpException, HttpStatus, Injectable } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import type {
   ProviderAlbumDetail,
@@ -198,7 +198,7 @@ export class QqMusicService {
 
   async getLyrics(userId: string, trackId: string): Promise<ProviderLyrics> {
     this.assertEnabled();
-    const cookie = await this.getCookie(userId);
+    const cookie = await this.getOptionalCookie(userId);
     const body = await this.callProvider(() => this.api.getLyrics({ trackId, cookie }));
     return {
       provider: "qqmusic",
@@ -258,7 +258,7 @@ export class QqMusicService {
 
   async getRelatedPlaylists(userId: string, trackId: string): Promise<ProviderPlaylistListResponse> {
     this.assertEnabled();
-    const cookie = await this.getCookie(userId);
+    const cookie = await this.getOptionalCookie(userId);
     const body = await this.callProvider(() => this.api.getRelatedPlaylists({ trackId, cookie }));
     const items = findFirstArray(body, ["vec_sim_diss", "disslist", "dissList", "list", "playlists"])
       .map((item) => toPlaylistSummary(item))
@@ -295,7 +295,7 @@ export class QqMusicService {
 
   async getPlaylist(userId: string, playlistId: string): Promise<ProviderPlaylistDetail> {
     this.assertEnabled();
-    const cookie = await this.getCookie(userId);
+    const cookie = await this.getOptionalCookie(userId);
     const body = await this.callProvider(() => this.api.getPlaylist({ playlistId, cookie }));
     const playlist = readFirstRecord(body, ["cdlist", "playlist", "playlists", "disslist", "dissList", "list"]);
     if (!playlist) throw this.unavailableError();
@@ -309,7 +309,7 @@ export class QqMusicService {
 
   async getAlbum(userId: string, albumId: string): Promise<ProviderAlbumDetail> {
     this.assertEnabled();
-    const cookie = await this.getCookie(userId);
+    const cookie = await this.getOptionalCookie(userId);
     const body = await this.callProvider(() => this.api.getAlbum({ albumId, cookie }));
     const info = unwrapData(body.info);
     const tracks = readTrackArray(body.songs)
@@ -389,10 +389,12 @@ export class QqMusicService {
   }
 
   async openAudio(userId: string, trackId: string, quality: string, range?: string) {
-    this.assertEnabled(); this.assertRateLimit(`audio:${userId}`, 6);
+    this.assertEnabled(); this.assertRateLimit(`audio:${userId}`, 120);
     const selected = qqMusicQualitySchema.safeParse(quality).success ? quality as QqMusicQuality : this.defaultQuality();
-    const cookie = await this.getCookie(userId);
-    await this.ensureAccountValidated(userId, cookie);
+    const cookie = await this.getOptionalCookie(userId);
+    if (cookie) {
+      await this.ensureAccountValidated(userId, cookie);
+    }
     const qualities = this.qualitiesForQuality(selected);
 
     let sawUnsupported = false;
@@ -441,8 +443,10 @@ export class QqMusicService {
   }
 
   private async resolveAudioSource(userId: string, trackId: string, quality: QqMusicQuality) {
-    const cookie = await this.getCookie(userId);
-    await this.ensureAccountValidated(userId, cookie);
+    const cookie = await this.getOptionalCookie(userId);
+    if (cookie) {
+      await this.ensureAccountValidated(userId, cookie);
+    }
     const qualities = this.qualitiesForQuality(quality);
     for (const candidateQuality of qualities) {
       const result = await this.callProvider(() => this.api.getAudioUrl({ trackId, quality: candidateQuality, cookie }));
@@ -474,6 +478,7 @@ export class QqMusicService {
   }
 
   private async ensureAccountValidated(userId: string, cookie: string) {
+    if (!cookie) return;
     if (typeof this.api.validateCookie !== "function" || typeof this.accounts.getValidationState !== "function") return;
     const state = await this.accounts.getValidationState(userId).catch(() => null);
     if (!state?.qqMusicUserId) {
